@@ -1,38 +1,51 @@
-/* Hoard design tokens — single source of truth */
+/* Hoard design tokens — ported exactly from project/styles.css */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Major+Mono+Display&display=swap');
+
 :root {
-  /* Background scale */
+  /* background scale */
   --void:        #07090a;
   --ink:         #0d1012;
   --ink-2:       #14181b;
-  --ink-3:       #1c2126;
-  --ink-4:       #242b31;
+  --ink-3:       #1c2125;
 
-  /* Paper scale */
+  /* rule lines */
+  --rule:        #23292d;
+  --rule-bright: #3b4348;
+
+  /* paper scale */
   --paper:       #ece8de;
   --paper-dim:   #a9a89e;
   --paper-faint: #6b6f72;
-  --paper-ghost: #3a3f43;
+  --paper-ghost: #3a3e41;
 
-  /* Rule lines */
-  --rule:        #1e2428;
-  --rule-bright: #2e363c;
-
-  /* Accent colours */
+  /* accents */
   --amber:       #d4a017;
-  --amber-dim:   #8a6810;
+  --amber-dim:   #8a6710;
   --green:       #5fc26a;
-  --green-dim:   #3a7a42;
+  --green-dim:   #2f6b35;
   --red:         #e2553a;
-  --red-dim:     #8a3020;
+  --red-dim:     #7c2c1f;
   --blue:        #69a1d4;
-  --blue-dim:    #3a6080;
+  --magenta:     #c265a2;
 
-  /* Typography */
-  --mono:        'JetBrains Mono', 'Fira Mono', 'Consolas', monospace;
-  --sans:        'IBM Plex Sans', 'Inter', system-ui, sans-serif;
-  --display:     'Major Mono Display', var(--mono);
+  /* receipt (paper) variant */
+  --receipt:     #efe9d8;
+  --receipt-2:   #e2dcc9;
+  --receipt-ink: #181613;
 
-  /* Spacing */
+  /* typography */
+  --mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans:    'IBM Plex Sans', system-ui, sans-serif;
+  --display: 'Major Mono Display', 'JetBrains Mono', monospace;
+
+  /* layout */
+  --sidebar-w:   220px;
+  --topbar-h:    48px;
+  --tabbar-h:    56px;
+  --statusbar-h: 28px;
+
+  /* spacing scale (convenience) */
   --sp-1:  4px;
   --sp-2:  8px;
   --sp-3:  12px;
@@ -42,10 +55,4 @@
   --sp-8:  32px;
   --sp-10: 40px;
   --sp-12: 48px;
-
-  /* Layout */
-  --sidebar-w:  200px;
-  --topbar-h:   44px;
-  --tabbar-h:   56px;
-  --statusbar-h: 28px;
 }

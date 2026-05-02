@@ -62,43 +62,48 @@ Breakpoint: `≥ 1024px` → desktop (sidebar + topbar). `< 1024px` → mobile (
 **Deliverables:**
 
 CSS (`apps/web/src/styles/`):
-- [ ] `tokens.css` — all CSS variables (`--void`, `--ink`, `--paper`, `--amber`, `--green`, `--red`, `--blue`, `--mono`, `--sans`, `--display`, etc.)
-- [ ] `global.css` — base reset, body styles, utility classes (`.t-display`, `.t-mono`, `.t-up`, `.t-dim`, `.t-faint`, `.t-ghost`, `.t-amber`, `.t-green`, `.t-red`, `.t-tnum`, `.hoard-noise`, `.thin-scroll`, etc.)
-- [ ] All component-level classes (`.panel`, `.chip`, `.btn`, `.plat`, `.cover-ph`, `.prog`, `.gauge`, `.heat-cell`, `.receipt`, `.barcode`, `.marker`, `.bignum`, `.shelf-label`, `.hr-dot`, `.hr-dash`, `.hr-solid`, `.hr-double`, `.brackets`, `.kv`, `.field`, `.ascii`, `.spark`, `.sidebar`, `.topbar`, `.m-status`, `.m-tabbar`, `.status-sigil`)
+- [x] `tokens.css` — all CSS variables (`--void`, `--ink`, `--paper`, `--amber`, `--green`, `--red`, `--blue`, `--mono`, `--sans`, `--display`, etc.)
+- [x] `global.css` — base reset, body styles, utility classes (`.t-display`, `.t-mono`, `.t-up`, `.t-dim`, `.t-faint`, `.t-ghost`, `.t-amber`, `.t-green`, `.t-red`, `.t-tnum`, `.hoard-noise`, `.thin-scroll`, etc.)
+- [x] All component-level classes (`.panel`, `.chip`, `.btn`, `.plat`, `.cover-ph`, `.prog`, `.gauge`, `.heat-cell`, `.receipt`, `.barcode`, `.marker`, `.bignum`, `.shelf-label`, `.hr-dot`, `.hr-dash`, `.hr-solid`, `.hr-double`, `.brackets`, `.kv`, `.field`, `.ascii`, `.spark`, `.sidebar`, `.topbar`, `.m-status`, `.m-tabbar`, `.status-sigil`)
 
 Primitive components (`apps/web/src/components/primitives/`):
-- [ ] `Icon` — SVG icon system; all icons from `ICON_PATHS`; props: `name`, `size`, `fill`, `stroke`, `sw`, `style`, `className`
-- [ ] `StatusSigil` — dot + label; props: `status` (GameStatus), `label` (bool)
-- [ ] `Plat` — platform badge; props: `code` (PlatformCode), `lg` (bool)
-- [ ] `Cover` — placeholder cover with stripes; props: `w`, `h`, `label`, `year`, `dev`, `bright`
-- [ ] `Hr` — divider; props: `kind` (dot | dash | solid | double)
-- [ ] `Marker` — small-caps section label; props: `children`
-- [ ] `Chip` — filter chip; props: `on`, `tone` (amber | green | red), `solid`
-- [ ] `Btn` — button; props: `variant` (primary | amber | green), `sm`
-- [ ] `KV` — key-value grid; props: `rows: [string, ReactNode][]`
-- [ ] `Gauge` — segmented bar; props: `total`, `filled`, `tone`
-- [ ] `Heatmap` — activity heatmap; props: `weeks`, `days`, `density`
-- [ ] `Barcode` — decorative barcode; props: `code`, `height`
-- [ ] `HypeBars` — 5-segment hype indicator; props: `n`
+- [x] `Icon` — SVG icon system; all icons from `ICON_PATHS`; props: `name`, `size`, `fill`, `stroke`, `sw`, `style`, `className`
+- [x] `StatusSigil` — dot + label; props: `status` (GameStatus), `label` (bool)
+- [x] `Plat` — platform badge; props: `code` (PlatformCode), `lg` (bool)
+- [x] `Cover` — placeholder cover with stripes; props: `w`, `h`, `label`, `year`, `dev`, `bright`
+- [x] `Hr` — divider; props: `kind` (dot | dash | solid | double)
+- [x] `Marker` — small-caps section label; props: `children`
+- [x] `Chip` — filter chip; props: `on`, `tone` (amber | green | red), `solid`
+- [x] `Btn` — button; props: `variant` (primary | amber | green), `sm`
+- [x] `KV` — key-value grid; props: `rows: [string, ReactNode][]`
+- [x] `Gauge` — segmented bar; props: `total`, `filled`, `tone`
+- [x] `Heatmap` — activity heatmap; props: `weeks`, `days`, `density`
+- [x] `Barcode` — decorative barcode; props: `code`, `height`
+- [x] `HypeBars` — 5-segment hype indicator; props: `n`
 
 Layout components (`apps/web/src/components/layout/`):
-- [ ] `Sidebar` — desktop nav; props: `active` (screen name)
-- [ ] `TopBar` — desktop topbar; props: `crumbs`, `right`
-- [ ] `MobileFrame` — mobile shell container
-- [ ] `MobileTabBar` — bottom tab nav; props: `active`
-- [ ] `MobileHeader` — mobile screen header; props: `title`, `sub`, `back`, `right`
+- [x] `Sidebar` — desktop nav; props: `active` (screen name)
+- [x] `TopBar` — desktop topbar; props: `crumbs`, `right`
+- [x] `MobileFrame` — mobile shell container
+- [x] `MobileTabBar` — bottom tab nav; props: `active`
+- [x] `MobileHeader` — mobile screen header; props: `title`, `sub`, `back`, `right`
 
 **Success Criteria:**
-- [ ] Every component renders without errors at its default props
-- [ ] All components are fully typed — no `any`, props interfaces exported
+- [x] Every component renders without errors at its default props
+- [x] All components are fully typed — no `any`, props interfaces exported
 - [ ] Utility classes produce the correct visual output (verified against design CSS)
 - [ ] Fonts load correctly (JetBrains Mono, IBM Plex Sans, Major Mono Display via Google Fonts)
-- [ ] `npm run typecheck` still passes
+- [x] `npm run typecheck` still passes
 
 **Testing:**
-- [ ] Vitest: smoke render test for every component (renders without throwing)
-- [ ] TypeScript strict mode: zero `any`, all props explicitly typed
+- [x] Vitest: smoke render test for every component (renders without throwing) — 40/40 passing
+- [x] TypeScript strict mode: zero `any`, all props explicitly typed
 - [ ] Visual check: render each component against the design source
+
+**Decisions:**
+- `STATUS_CONFIG` constant extracted to `constants.ts` (separate from `StatusSigil.tsx`) to satisfy the `react-refresh/only-export-components` ESLint rule — components and non-component exports must not share a file.
+- `Cover` component extended with a `src` prop: renders a real `<img>` when provided, falls back to the striped placeholder. This is needed now so Phase 2 screens can pass `null` without a code change in Phase 5.
+- `MobileTabBar` has 4 tabs (Dash, Library, Soon, Me) matching the design — "Stats" tab omitted since that screen is deferred to v2.
 
 ---
 
@@ -381,7 +386,7 @@ Frontend hardening:
 | Phase | Status | Notes |
 |---|---|---|
 | 0 — Infra Setup | Done | Repo at github.com/Raybur92/hoard; initial migration applied to Supabase |
-| 1 — Design System | Not started | |
+| 1 — Design System | Done | 18 components, 40 tests passing; visual check pending browser run |
 | 2 — Static Screens | Not started | |
 | 3 — Backend API | Not started | |
 | 4 — Auth & Platform Sync | Not started | Blocked: Settings screen design pending |
