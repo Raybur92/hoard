@@ -138,6 +138,8 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-See `docs/PLAN.md` → Section 10 (Phase Status table) for live status.
+**Active: Phase 2 — Frontend Shell (Static Screens + Routing)**
+
+See `docs/PLAN.md` → Phase Status table for full live status.
 
 **Settings screen (Phase 4):** blocked until design is delivered by the owner.
