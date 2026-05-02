@@ -41,11 +41,11 @@ Breakpoint: `≥ 1024px` → desktop (sidebar + topbar). `< 1024px` → mobile (
 - [x] `.env.example` files in `apps/web` and `apps/api`
 
 **Success Criteria:**
-- `GET /health` returns 200 from the Railway production URL
-- Frontend Vercel URL renders without console errors
-- `npx prisma migrate deploy` runs cleanly against Supabase
-- `npm run typecheck` passes in all packages with no errors
-- `npm run lint` passes with no errors
+- [ ] `GET /health` returns 200 from the Railway production URL
+- [ ] Frontend Vercel URL renders without console errors
+- [x] `npx prisma migrate deploy` runs cleanly against Supabase
+- [x] `npm run typecheck` passes in all packages with no errors
+- [x] `npm run lint` passes with no errors
 
 **Testing:**
 - Manual smoke test of `/health` endpoint
@@ -89,11 +89,11 @@ Layout components (`apps/web/src/components/layout/`):
 - [ ] `MobileHeader` — mobile screen header; props: `title`, `sub`, `back`, `right`
 
 **Success Criteria:**
-- Every component renders without errors at its default props
-- All components are fully typed — no `any`, props interfaces exported
-- Utility classes produce the correct visual output (verified against design CSS)
-- Fonts load correctly (JetBrains Mono, IBM Plex Sans, Major Mono Display via Google Fonts)
-- `npm run typecheck` still passes
+- [ ] Every component renders without errors at its default props
+- [ ] All components are fully typed — no `any`, props interfaces exported
+- [ ] Utility classes produce the correct visual output (verified against design CSS)
+- [ ] Fonts load correctly (JetBrains Mono, IBM Plex Sans, Major Mono Display via Google Fonts)
+- [ ] `npm run typecheck` still passes
 
 **Testing:**
 - Vitest: smoke render test for every component (renders without throwing)
@@ -119,13 +119,13 @@ Layout components (`apps/web/src/components/layout/`):
 - [ ] Base service worker registered (no caching logic yet — Phase 6)
 
 **Success Criteria:**
-- All four routes render without console errors or React warnings
-- Visual output matches each artboard in the design files (checked by side-by-side comparison)
-- Sidebar active state updates correctly per route
-- Mobile tab bar active state updates correctly per route
-- Responsive switch at 1024px works correctly (desktop vs mobile layout)
-- `npm run typecheck` passes
-- No prop type errors
+- [ ] All four routes render without console errors or React warnings
+- [ ] Visual output matches each artboard in the design files (checked by side-by-side comparison)
+- [ ] Sidebar active state updates correctly per route
+- [ ] Mobile tab bar active state updates correctly per route
+- [ ] Responsive switch at 1024px works correctly (desktop vs mobile layout)
+- [ ] `npm run typecheck` passes
+- [ ] No prop type errors
 
 **Testing:**
 - Playwright E2E: visit `/`, `/library`, `/upcoming`, `/game/1` — assert page title and one key element per screen
@@ -163,12 +163,12 @@ Frontend API client (`apps/web/src/lib/api.ts`):
 - [ ] Error states: simple error message when API fails
 
 **Success Criteria:**
-- `GET /api/dashboard` returns all fields required to render `DashboardDesktop` with no undefined values
-- `GET /api/games?status=Backlog` returns only backlog items
-- `PATCH /api/games/:id` with `{ status: "Playing" }` persists the change and returns updated record
-- All routes return proper HTTP codes: 200 (ok), 400 (bad input), 401 (unauthenticated), 404 (not found), 500 (server error)
-- Frontend screens render identically with live data as they did with mock data (same game titles in the seed)
-- `prisma migrate deploy` runs cleanly with no manual intervention
+- [ ] `GET /api/dashboard` returns all fields required to render `DashboardDesktop` with no undefined values
+- [ ] `GET /api/games?status=Backlog` returns only backlog items
+- [ ] `PATCH /api/games/:id` with `{ status: "Playing" }` persists the change and returns updated record
+- [ ] All routes return proper HTTP codes: 200 (ok), 400 (bad input), 401 (unauthenticated), 404 (not found), 500 (server error)
+- [ ] Frontend screens render identically with live data as they did with mock data (same game titles in the seed)
+- [ ] `prisma migrate deploy` runs cleanly with no manual intervention
 
 **Testing:**
 - Jest + Supertest integration tests:
@@ -217,17 +217,17 @@ Settings screen (frontend):
 - [ ] Account section: change email/password, connected auth providers, danger zone (delete account)
 
 **Success Criteria:**
-- Email/password login returns a JWT cookie; subsequent requests to protected routes succeed
-- Google OAuth flow completes and creates/logs in a user
-- Steam OpenID flow completes and creates/logs in a user (same account used for library sync)
-- Steam library sync completes and at least 1 game appears in the user's library
-- PSN sync with a valid NPSSO token imports games; the inline NPSSO instructions in Settings are clear enough for a non-technical user to follow without external help
-- Xbox sync with a valid OpenXBL key imports games
-- GOG OAuth flow completes and imports games
-- Manual add: IGDB search returns results; selecting a game with `platformLabel: "Nintendo"` creates a `UserGame` with no linked sync platform
-- Sidebar shows correct sync status (ok / stale) and last sync time
-- Games owned on multiple platforms are stored as a single `UserGame` with per-platform playtime
-- Logging out clears the session; protected routes return 401 afterward
+- [ ] Email/password login returns a JWT cookie; subsequent requests to protected routes succeed
+- [ ] Google OAuth flow completes and creates/logs in a user
+- [ ] Steam OpenID flow completes and creates/logs in a user (same account used for library sync)
+- [ ] Steam library sync completes and at least 1 game appears in the user's library
+- [ ] PSN sync with a valid NPSSO token imports games; the inline NPSSO instructions in Settings are clear enough for a non-technical user to follow without external help
+- [ ] Xbox sync with a valid OpenXBL key imports games
+- [ ] GOG OAuth flow completes and imports games
+- [ ] Manual add: IGDB search returns results; selecting a game with `platformLabel: "Nintendo"` creates a `UserGame` with no linked sync platform
+- [ ] Sidebar shows correct sync status (ok / stale) and last sync time
+- [ ] Games owned on multiple platforms are stored as a single `UserGame` with per-platform playtime
+- [ ] Logging out clears the session; protected routes return 401 afterward
 
 **Testing:**
 - Unit tests for each platform adapter using mocked HTTP responses (nock or msw)
@@ -268,12 +268,12 @@ Frontend updates:
 - [ ] Upcoming feed on Dashboard and Upcoming screen uses IGDB data
 
 **Success Criteria:**
-- IGDB search returns results in < 500ms (cache hit) and < 2s (cache miss)
-- Real cover art renders on game cards (IGDB image URL loaded without CORS errors)
-- HLTB data appears on the game detail view for any game in the top-100 most-played list
-- If HLTB fails for a game, the detail view shows "—" in the HLTB block, no error visible
-- Upcoming releases feed matches IGDB data (correct dates, correct platforms)
-- No IGDB rate limit errors in normal use (≤ 4 req/s enforced)
+- [ ] IGDB search returns results in < 500ms (cache hit) and < 2s (cache miss)
+- [ ] Real cover art renders on game cards (IGDB image URL loaded without CORS errors)
+- [ ] HLTB data appears on the game detail view for any game in the top-100 most-played list
+- [ ] If HLTB fails for a game, the detail view shows "—" in the HLTB block, no error visible
+- [ ] Upcoming releases feed matches IGDB data (correct dates, correct platforms)
+- [ ] No IGDB rate limit errors in normal use (≤ 4 req/s enforced)
 
 **Testing:**
 - Unit tests for IGDB client: mock Twitch token fetch, mock IGDB API responses
@@ -313,14 +313,14 @@ Frontend hardening:
 - [ ] `meta` tags: `theme-color`, `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`
 
 **Success Criteria:**
-- App installs successfully on Chrome (desktop) and Safari (iOS)
-- Dashboard and Library render from cache when network is offline
-- Lighthouse PWA score ≥ 90
-- Lighthouse Performance score ≥ 80 on desktop
-- API request with missing required field returns `400 { error: "..." }` with a descriptive message
-- API request with no auth cookie returns `401`
-- Injecting 1000 requests/min hits the rate limiter and returns `429`
-- No unhandled promise rejections in production logs after 24h of use
+- [ ] App installs successfully on Chrome (desktop) and Safari (iOS)
+- [ ] Dashboard and Library render from cache when network is offline
+- [ ] Lighthouse PWA score ≥ 90
+- [ ] Lighthouse Performance score ≥ 80 on desktop
+- [ ] API request with missing required field returns `400 { error: "..." }` with a descriptive message
+- [ ] API request with no auth cookie returns `401`
+- [ ] Injecting 1000 requests/min hits the rate limiter and returns `429`
+- [ ] No unhandled promise rejections in production logs after 24h of use
 
 **Testing:**
 - Playwright: simulate offline (`page.route('**/*', r => r.abort())`) — assert Dashboard renders cached content
