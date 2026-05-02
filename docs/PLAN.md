@@ -34,7 +34,7 @@ Breakpoint: `≥ 1024px` → desktop (sidebar + topbar). `< 1024px` → mobile (
 - [x] Monorepo initialized with npm workspaces
 - [x] `apps/web`: Vite + React + TypeScript, blank app, configured for Vercel
 - [x] `apps/api`: Express + TypeScript, `GET /health → { status: 'ok', ts: Date }`, configured for Railway
-- [x] `packages/db`: Prisma initialized, schema defined, pending Supabase connection + first migration
+- [x] `packages/db`: Prisma initialized, schema defined, migration `20260502105153_init` applied to Supabase
 - [x] `packages/types`: shared `GameStatus`, `PlatformCode`, `UserGame`, `Game` interfaces
 - [x] Environment variables documented in `docs/ENV.md`
 - [x] GitHub Actions CI: lint + typecheck on every PR
@@ -380,7 +380,7 @@ Frontend hardening:
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0 — Infra Setup | Done | Repo at github.com/Raybur92/hoard; Prisma schema written, first migration pending Supabase credentials |
+| 0 — Infra Setup | Done | Repo at github.com/Raybur92/hoard; initial migration applied to Supabase |
 | 1 — Design System | Not started | |
 | 2 — Static Screens | Not started | |
 | 3 — Backend API | Not started | |

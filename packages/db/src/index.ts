@@ -1,7 +1,10 @@
-// Stub — prisma generate must run before PrismaClient can be imported.
-// After running `npm run db:generate` in packages/db, replace this with:
-//   import { PrismaClient } from '@prisma/client';
-//   export const prisma = new PrismaClient();
-//   export * from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
-export const _placeholder = true;
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+
+export const prisma =
+  globalForPrisma.prisma ?? new PrismaClient({ log: ['error', 'warn'] });
+
+if (process.env['NODE_ENV'] !== 'production') globalForPrisma.prisma = prisma;
+
+export * from '@prisma/client';
