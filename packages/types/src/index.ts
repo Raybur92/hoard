@@ -79,6 +79,7 @@ export interface WishlistRelease {
   userId: string;
   hype: number | null;
   synopsis: string | null;
+  coverUrl: string | null;
 }
 
 export interface PlatformStat {

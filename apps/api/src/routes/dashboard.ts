@@ -136,12 +136,14 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
   const nowPlaying = userGames.filter(ug => ug.status === 'Playing').slice(0, 3);
 
   // Backlog pick: game with shortest HLTB mainStory
+  // backlogItems is sorted shortest-HLTB first so backlogItems[0] === backlogPick
   const backlogGames = userGames.filter(ug => ug.status === 'Backlog');
-  const withHltb = backlogGames.filter(ug => ug.hltb?.mainStory != null);
-  const pick =
-    withHltb.sort((a, b) => (a.hltb!.mainStory ?? 0) - (b.hltb!.mainStory ?? 0))[0] ??
-    backlogGames[0] ??
-    null;
+  const sortedBacklog = [
+    ...backlogGames.filter(ug => ug.hltb?.mainStory != null)
+      .sort((a, b) => (a.hltb!.mainStory ?? 0) - (b.hltb!.mainStory ?? 0)),
+    ...backlogGames.filter(ug => ug.hltb?.mainStory == null),
+  ];
+  const pick = sortedBacklog[0] ?? null;
 
   const mappedPlatforms: Platform[] = platforms.map(p => ({
     id: p.id,
@@ -164,6 +166,7 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
     userId: w.userId,
     hype: w.hype,
     synopsis: w.synopsis,
+    coverUrl: w.coverUrl ?? null,
   }));
 
   const body: DashboardResponse = {
@@ -171,7 +174,7 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
     nowPlaying,
     wishlistCountdown,
     backlogPick: pick ?? null,
-    backlogItems: backlogGames,
+    backlogItems: sortedBacklog,
     platforms: mappedPlatforms,
   };
 

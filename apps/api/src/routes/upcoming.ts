@@ -10,6 +10,7 @@ function mapRelease(w: {
   id: string; igdbId: number; title: string; developer: string | null;
   releaseDate: Date | null; releaseDateCategory: string; platforms: string[];
   genres: string[]; userId: string; hype: number | null; synopsis: string | null;
+  coverUrl: string | null;
 }): WishlistRelease {
   return {
     id: w.id,
@@ -23,6 +24,7 @@ function mapRelease(w: {
     userId: w.userId,
     hype: w.hype,
     synopsis: w.synopsis,
+    coverUrl: w.coverUrl,
   };
 }
 
@@ -91,6 +93,7 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, async (req: Request, res:
       releaseDateCategory: 'TBA',
       platforms: [],
       genres: igdbGame.genres,
+      coverUrl: igdbGame.coverUrl,
     },
   });
 

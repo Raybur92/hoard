@@ -123,6 +123,7 @@ model WishlistRelease {
   userId              String
   hype                Int?
   synopsis            String?
+  coverUrl            String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

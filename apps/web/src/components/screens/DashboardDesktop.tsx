@@ -162,6 +162,7 @@ export function DashboardDesktop() {
                 <div className="panel" style={{ padding: 20, display: 'grid', gridTemplateColumns: '120px 1fr', gap: 22 }}>
                   <Cover
                     w={120} h={160}
+                    src={np.game.coverUrl}
                     label={(np.game.title.split(' ')[0] ?? '').toUpperCase()}
                     dev={np.game.developer?.split(' ')[0] ?? '—'}
                     year={shortYear(np.game.releaseYear)}
@@ -290,7 +291,7 @@ export function DashboardDesktop() {
                     <Btn sm onClick={shufflePick}>shuffle</Btn>
                   </div>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <Cover w={40} h={54} label={(displayPick.game.title.split(' ')[0] ?? '').toUpperCase()} />
+                    <Cover w={40} h={54} src={displayPick.game.coverUrl} label={(displayPick.game.title.split(' ')[0] ?? '').toUpperCase()} />
                     <div>
                       <div style={{ fontSize: 13, color: 'var(--paper)', lineHeight: 1.2 }}>{displayPick.game.title}</div>
                       <div className="t-faint" style={{ fontSize: 10, marginTop: 3 }}>
@@ -346,7 +347,7 @@ function WishlistCountdown({ items }: { items: WishlistRelease[] }) {
         const platCodes = w.platforms.map(toPlatCode);
         return (
           <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Cover w="100%" h={170} label={w.title.toUpperCase()} dev={w.developer ?? '—'} bright={urgent} />
+            <Cover w="100%" h={170} src={w.coverUrl} label={w.title.toUpperCase()} dev={w.developer ?? '—'} bright={urgent} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span className="t-tnum" style={{ fontSize: 11, color: urgent ? 'var(--amber)' : 'var(--paper-dim)' }}>
                 {formatReleaseDate(w.releaseDate)}
