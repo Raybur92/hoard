@@ -368,9 +368,9 @@ Frontend updates (`apps/web/`):
 
 These items were identified during Phase 5 end-to-end testing. They are not blocking Phase 6 but represent real UX holes that should be resolved first.
 
-- [ ] **Library filtered list view** — `/library/:status` currently scrolls to the shelf section, but the shelf still caps at 7 (desktop) / 3 (mobile) items. A user with 50 backlog games cannot see them all. A full-list view (all items for a given status, sortable, filterable by platform) is needed.
-- [ ] **Library filter chips are functional** — the platform chips (ST/PS/XB/GG), view mode chips (shelves/grid/list), and sort control in `LibraryDesktop`/`LibraryMobile` are currently decorative. At minimum, platform filtering and sort should work.
-- [ ] **Dashboard backlog picker verified with live data** — built against mock data in Phase 2; needs a manual end-to-end check with real seeded data.
+- [x] **Library filtered list view** — `/library/:status` renders a full wrapping grid of all items for that status (desktop: 130px cards; mobile: 84px cards). Back button returns to `/library`. Empty state shows a "no titles yet" message. Platform filter + sort apply within the filtered view.
+- [x] **Library filter chips are functional** — platform chips (ST/PS/XB/GG) filter items across all shelves and the filtered list view. Sort cycles through last played → title → playtime on click.
+- [ ] **Dashboard backlog picker verified with live data** — manual check needed with real seeded data.
 
 ---
 
@@ -477,6 +477,6 @@ Frontend hardening:
 | 3 — Backend API | Done | All routes, seed, API client, 8 screens on live data; 28 E2E tests passing |
 | 4 — Auth & Platform Sync | Done | Auth + all screens + 42 tests done; PSN token connect works; sidebar sync status live; Google/Steam OAuth need credentials in `.env` to test |
 | 5 — IGDB + HLTB | Done | IGDB client, HLTB service, sync runner, manual-add UI, cover art, upcoming IGDB feed, Steam App ID lookup, sync micro-interactions, library no-scroll shelves; 67 tests passing |
-| 6 — PWA + Hardening | Not started | Known pre-Phase-6 gaps: filter chips in Library are decorative, no per-status full-list view beyond the 7-item shelf cap, PSN/Xbox/GOG sync are stubs |
+| 6 — PWA + Hardening | Not started | Pre-Phase-6 gaps resolved: library filtered list view done, filter chips wired. Dashboard backlog picker needs manual verification. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.

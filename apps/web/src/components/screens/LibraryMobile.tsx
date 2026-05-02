@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
@@ -104,16 +104,17 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
   );
 }
 
+type SortBy = 'lastPlayed' | 'title' | 'playtime';
+const SORT_CYCLE: SortBy[] = ['lastPlayed', 'title', 'playtime'];
+const SORT_LABELS: Record<SortBy, string> = { lastPlayed: 'last played', title: 'title', playtime: 'playtime' };
+
 export function LibraryMobile() {
+  const navigate = useNavigate();
   const { data, loading, refetch } = useGames({ limit: 100 });
   const [showAddModal, setShowAddModal] = useState(false);
+  const [platFilter, setPlatFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<SortBy>('lastPlayed');
   const { status: statusParam } = useParams<{ status?: string }>();
-
-  useEffect(() => {
-    if (!statusParam || loading) return;
-    const el = document.getElementById(`shelf-${statusParam}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [statusParam, loading]);
 
   const grouped = new Map<GameStatus, UserGameDetail[]>();
   if (data) {
@@ -124,8 +125,18 @@ export function LibraryMobile() {
     }
   }
 
+  function applyFilters(games: UserGameDetail[]): UserGameDetail[] {
+    let result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    if (sortBy === 'title') return [...result].sort((a, b) => a.game.title.localeCompare(b.game.title));
+    if (sortBy === 'playtime') return [...result].sort((a, b) => {
+      const total = (ug: UserGameDetail) => Object.values(ug.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0);
+      return total(b) - total(a);
+    });
+    return [...result].sort((a, b) => (b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : 0) - (a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0));
+  }
+
   const shelves: ShelfDisplay[] = SHELF_CONFIG.map(cfg => {
-    const items = grouped.get(cfg.status) ?? [];
+    const items = applyFilters(grouped.get(cfg.status) ?? []);
     return { ...cfg, count: items.length, items: items.map(toGameDisplay) };
   });
 
@@ -134,6 +145,54 @@ export function LibraryMobile() {
       <MobileFrame>
         <MobileHeader title="shelves" sub="// loading..." />
         <div style={{ flex: 1 }} />
+        <MobileTabBar />
+      </MobileFrame>
+    );
+  }
+
+  if (statusParam) {
+    const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
+    const items = applyFilters(grouped.get(statusParam as GameStatus) ?? []).map(toGameDisplay);
+    const isBacklog = statusParam === 'Backlog';
+    const title = (cfg?.name ?? statusParam).toLowerCase();
+    return (
+      <MobileFrame>
+        <MobileHeader
+          title={title}
+          sub={`// ${items.length} titles`}
+          back
+          onBack={() => navigate('/library')}
+          right={<Btn sm variant="primary" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
+        />
+        {showAddModal && (
+          <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
+        )}
+        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 20px' }}>
+          {items.length === 0 ? (
+            <span className="t-mono t-faint" style={{ fontSize: 11 }}>// no titles in this shelf yet</span>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {items.map(g => (
+                <div key={g.id} style={{ width: 84, flex: '0 0 auto', cursor: 'pointer' }} onClick={() => navigate(`/game/${g.id}`)}>
+                  <div style={{ position: 'relative' }}>
+                    <Cover w={84} h={112} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
+                    <div style={{ position: 'absolute', top: 4, right: 4 }}><Plat code={g.platformCode} /></div>
+                    {g.progress > 0 && (
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: 'rgba(0,0,0,0.3)' }}>
+                        <div style={{ height: '100%', width: `${g.progress}%`, background: g.progress === 100 ? 'var(--paper)' : 'var(--green)' }} />
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
+                  <div style={{ fontSize: 9, color: 'var(--paper-faint)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                    <span>{g.playtime}</span>
+                    {isBacklog && g.hltbHours != null && <span style={{ color: 'var(--paper-dim)' }}>~{g.hltbHours}h</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <MobileTabBar />
       </MobileFrame>
     );
@@ -153,12 +212,14 @@ export function LibraryMobile() {
         />
       )}
       <div style={{ padding: '10px 16px 0', display: 'flex', gap: 6, overflowX: 'auto' }}>
-        <Chip on>all</Chip>
-        <Chip><Plat code="ST" /></Chip>
-        <Chip><Plat code="PS" /></Chip>
-        <Chip><Plat code="XB" /></Chip>
-        <Chip><Plat code="GG" /></Chip>
-        <Chip><Icon name="arrowD" size={10} style={{ marginRight: 4 }} />last played</Chip>
+        <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
+        <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')}><Plat code="ST" /></Chip>
+        <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')}><Plat code="PS" /></Chip>
+        <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')}><Plat code="XB" /></Chip>
+        <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')}><Plat code="GG" /></Chip>
+        <Chip onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}>
+          <Icon name="arrowD" size={10} style={{ marginRight: 4 }} />{SORT_LABELS[sortBy]}
+        </Chip>
       </div>
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', marginTop: 6 }}>
         {shelves.map((s, i) => (

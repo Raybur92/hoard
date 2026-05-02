@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
@@ -131,16 +131,18 @@ function Shelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
   );
 }
 
+type SortBy = 'lastPlayed' | 'title' | 'playtime';
+
+const SORT_LABELS: Record<SortBy, string> = { lastPlayed: 'last played', title: 'title', playtime: 'playtime' };
+const SORT_CYCLE: SortBy[] = ['lastPlayed', 'title', 'playtime'];
+
 export function LibraryDesktop() {
+  const navigate = useNavigate();
   const { data, loading, refetch } = useGames({ limit: 100 });
   const [showAddModal, setShowAddModal] = useState(false);
+  const [platFilter, setPlatFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<SortBy>('lastPlayed');
   const { status: statusParam } = useParams<{ status?: string }>();
-
-  useEffect(() => {
-    if (!statusParam || loading) return;
-    const el = document.getElementById(`shelf-${statusParam}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [statusParam, loading]);
 
   const grouped = new Map<GameStatus, UserGameDetail[]>();
   if (data) {
@@ -151,14 +153,24 @@ export function LibraryDesktop() {
     }
   }
 
-  const shelves: ShelfDisplay[] = SHELF_CONFIG.map(cfg => {
-    const items = grouped.get(cfg.status) ?? [];
-    return { ...cfg, count: items.length, items: items.map(toGameDisplay) };
-  });
+  function applyFilters(games: UserGameDetail[]): UserGameDetail[] {
+    let result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    if (sortBy === 'title') return [...result].sort((a, b) => a.game.title.localeCompare(b.game.title));
+    if (sortBy === 'playtime') return [...result].sort((a, b) => {
+      const total = (ug: UserGameDetail) => Object.values(ug.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0);
+      return total(b) - total(a);
+    });
+    return [...result].sort((a, b) => (b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : 0) - (a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0));
+  }
 
   const shelfCounts: Record<string, number> = Object.fromEntries(
-    shelves.map(s => [s.status, s.count])
+    SHELF_CONFIG.map(cfg => [cfg.status, (grouped.get(cfg.status) ?? []).length])
   );
+
+  const shelves: ShelfDisplay[] = SHELF_CONFIG.map(cfg => {
+    const items = applyFilters(grouped.get(cfg.status) ?? []);
+    return { ...cfg, count: items.length, items: items.map(toGameDisplay) };
+  });
 
   if (loading || !data) {
     return (
@@ -166,6 +178,45 @@ export function LibraryDesktop() {
         <Sidebar />
         <div className="app-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span className="t-mono t-faint" style={{ fontSize: 12 }}>// loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (statusParam) {
+    const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
+    const items = applyFilters(grouped.get(statusParam as GameStatus) ?? []).map(toGameDisplay);
+    const isBacklog = statusParam === 'Backlog';
+    const accent = cfg?.tone === 'green' ? 'var(--green)' : cfg?.tone === 'amber' ? 'var(--amber)' : cfg?.tone === 'red' ? 'var(--red)' : 'var(--paper)';
+    return (
+      <div className="app-shell hoard-noise">
+        <Sidebar shelfCounts={shelfCounts} />
+        <div className="app-main">
+          <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam).toLowerCase()]} />
+          <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Btn sm onClick={() => navigate('/library')}>
+              <Icon name="back" size={10} /> shelves
+            </Btn>
+            <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
+            <span className="t-up" style={{ fontSize: 11, color: accent }}>{cfg?.name ?? statusParam}</span>
+            <span className="t-mono t-faint" style={{ fontSize: 11 }}>· {items.length} titles</span>
+            <span style={{ flex: 1 }} />
+            <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
+              <Icon name="plus" size={10} /> add game
+            </Btn>
+          </div>
+          {showAddModal && (
+            <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
+          )}
+          <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px' }}>
+            {items.length === 0 ? (
+              <span className="t-mono t-faint" style={{ fontSize: 12 }}>// no titles in this shelf yet</span>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                {items.map(g => <ShelfItem key={g.id} g={g} isBacklog={isBacklog} />)}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -194,14 +245,18 @@ export function LibraryDesktop() {
           <Chip>list</Chip>
           <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
           <span className="t-up t-faint" style={{ fontSize: 10 }}>plat</span>
-          <Chip on>all</Chip>
-          <Chip><Plat code="ST" /></Chip>
-          <Chip><Plat code="PS" /></Chip>
-          <Chip><Plat code="XB" /></Chip>
-          <Chip><Plat code="GG" /></Chip>
+          <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
+          <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')}><Plat code="ST" /></Chip>
+          <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')}><Plat code="PS" /></Chip>
+          <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')}><Plat code="XB" /></Chip>
+          <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')}><Plat code="GG" /></Chip>
           <span style={{ flex: 1 }} />
-          <span className="t-mono t-faint" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            sort: last played <Icon name="arrowD" size={10} />
+          <span
+            className="t-mono t-faint"
+            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+            onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}
+          >
+            sort: {SORT_LABELS[sortBy]} <Icon name="arrowD" size={10} />
           </span>
           <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
             <Icon name="plus" size={10} /> add game
