@@ -63,6 +63,11 @@ These are non-negotiable. Do not deviate without explicit instruction.
 6. **Nintendo and Epic are manual-only.** No OAuth, no sync endpoints for these platforms. Games are added via IGDB search with a `platformLabel` string. Do not build scrapers.
 7. **Never test against the production database.** Integration tests use the `hoard-test` Supabase project exclusively. The test DB is seeded fresh per run.
 8. **HLTB failures must be silent.** If `howlongtobeat` throws or returns nothing, store `null` and show "—" in the UI. Never surface an error to the user for HLTB.
+9. **Keep docs current after every phase.** When a phase completes (or any meaningful chunk of work lands), update `docs/PLAN.md` before closing the session:
+   - Check off all completed deliverables with `[x]`
+   - Update the Phase Status table
+   - Record any design decisions made during the phase — what was decided, why, and any trade-offs — directly in the relevant phase section under a `**Decisions:**` block
+   - If a decision affects the overall architecture or is permanent for v1, mirror it in `AGENT.md` under Key Decisions
 
 ---
 
