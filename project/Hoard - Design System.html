@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Hoard — Design System</title>
+<meta name="viewport" content="width=1280" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Major+Mono+Display&display=swap');
+
+:root{
+  --void:#07090a; --ink:#0d1012; --ink-2:#14181b; --ink-3:#1c2125;
+  --rule:#23292d; --rule-bright:#3b4348;
+  --paper:#ece8de; --paper-dim:#a9a89e; --paper-faint:#6b6f72; --paper-ghost:#3a3e41;
+  --amber:#d4a017; --amber-dim:#8a6710;
+  --green:#5fc26a; --green-dim:#2f6b35;
+  --red:#e2553a; --red-dim:#7c2c1f;
+  --blue:#69a1d4; --magenta:#c265a2;
+  --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans:'IBM Plex Sans', system-ui, sans-serif;
+  --display:'Major Mono Display', monospace;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--void); color:var(--paper);
+  font-family:var(--mono);
+  font-feature-settings:'tnum','zero';
+  -webkit-font-smoothing:antialiased;
+  font-size:13px; line-height:1.55;
+}
+
+/* page noise */
+body::before{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:1;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px);
+  mix-blend-mode:overlay; opacity:.7;
+}
+
+a{color:inherit;text-decoration:none}
+hr{border:0;height:1px;background:var(--rule);margin:0}
+
+.page{
+  max-width:1180px;
+  margin:0 auto;
+  padding:64px 48px 120px;
+  position:relative; z-index:2;
+}
+
+/* ── header ────────────────────────────────────────────────────────────── */
+.masthead{
+  display:grid;
+  grid-template-columns:1fr auto;
+  align-items:end;
+  gap:32px;
+  padding-bottom:28px;
+  border-bottom:1px solid var(--rule);
+  margin-bottom:48px;
+}
+.masthead h1{
+  font-family:var(--display);
+  font-weight:400;
+  font-size:64px;
+  letter-spacing:-0.02em;
+  line-height:1;
+  margin:0 0 8px;
+  color:var(--paper);
+}
+.masthead .lede{ color:var(--paper-dim); font-size:13px; max-width:560px; line-height:1.6; }
+.masthead .meta{
+  font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--paper-faint);
+  display:flex; flex-direction:column; gap:6px; align-items:flex-end;
+  text-align:right;
+}
+.masthead .meta b{color:var(--paper-dim); font-weight:400}
+
+.toc{
+  display:grid; grid-template-columns:repeat(6,1fr); gap:1px;
+  background:var(--rule); border:1px solid var(--rule); margin-bottom:64px;
+}
+.toc a{
+  background:var(--ink); padding:14px 12px;
+  display:flex; flex-direction:column; gap:4px;
+  font-size:11px; color:var(--paper-dim);
+  transition:background .12s;
+}
+.toc a:hover{ background:var(--ink-2); color:var(--paper); }
+.toc a b{ font-family:var(--mono); font-size:9px; letter-spacing:.16em; color:var(--paper-faint); font-weight:500; }
+
+/* ── section ───────────────────────────────────────────────────────────── */
+section{ margin:0 0 96px; scroll-margin-top:24px; }
+.sec-hdr{ display:flex; align-items:baseline; gap:16px; margin-bottom:28px; }
+.sec-hdr .num{
+  font-family:var(--mono); font-size:11px; letter-spacing:.18em;
+  color:var(--paper-faint); text-transform:uppercase;
+}
+.sec-hdr h2{
+  font-family:var(--mono); font-weight:500;
+  font-size:28px; letter-spacing:-0.01em; color:var(--paper);
+  margin:0;
+}
+.sec-hdr .rule{
+  flex:1; height:1px; align-self:end; margin-bottom:10px;
+  background-image:linear-gradient(90deg,var(--rule) 50%,transparent 50%);
+  background-size:8px 1px;
+}
+
+.intro{ color:var(--paper-dim); max-width:780px; line-height:1.7; margin-bottom:32px; }
+.intro b{color:var(--paper); font-weight:500}
+
+/* marker */
+.marker{
+  display:inline-block;
+  font-family:var(--mono);
+  font-size:11px; letter-spacing:.04em;
+  color:var(--paper-faint);
+  margin-bottom:12px;
+}
+.marker::before{ content:''; }
+
+/* ── token grids ───────────────────────────────────────────────────────── */
+.swatches{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  background:var(--rule); border:1px solid var(--rule);
+}
+.sw{
+  background:var(--ink);
+  padding:18px 18px 16px;
+  display:flex; flex-direction:column; gap:10px;
+}
+.sw .chip{
+  width:100%; height:96px;
+  border:1px solid var(--rule);
+  position:relative;
+}
+.sw .chip.bordered{ border:1px solid var(--rule-bright); }
+.sw .name{ font-size:13px; color:var(--paper); }
+.sw .name b{ color:var(--paper); font-weight:500 }
+.sw .hex{ font-size:10px; color:var(--paper-faint); letter-spacing:.06em; text-transform:uppercase; }
+.sw .role{ font-size:10px; color:var(--paper-dim); line-height:1.5; }
+
+/* ── component card ────────────────────────────────────────────────────── */
+.cards{
+  display:grid; grid-template-columns:1fr 1fr; gap:1px;
+  background:var(--rule); border:1px solid var(--rule);
+}
+.card{
+  background:var(--ink);
+  padding:24px;
+  display:flex; flex-direction:column; gap:16px;
+  min-height:200px;
+}
+.card.full{ grid-column:1 / -1; }
+.card-hdr{ display:flex; justify-content:space-between; align-items:baseline; }
+.card-hdr h3{
+  margin:0; font-family:var(--mono); font-weight:500; font-size:14px; color:var(--paper);
+  letter-spacing:.02em;
+}
+.card-hdr .tag{
+  font-size:9px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--paper-faint);
+  border:1px solid var(--rule); padding:2px 8px;
+}
+.card-body{
+  display:flex; gap:24px; flex-wrap:wrap; align-items:center;
+  padding:18px;
+  border:1px dashed var(--rule);
+  background:var(--void);
+  min-height:80px;
+}
+.card-body.col{ flex-direction:column; align-items:stretch; }
+.card-notes{ color:var(--paper-dim); font-size:12px; line-height:1.6; }
+.card-notes code{
+  font-family:var(--mono); font-size:11px;
+  background:var(--ink-2); border:1px solid var(--rule);
+  padding:1px 6px; color:var(--paper);
+}
+.card-notes ul{ margin:6px 0 0 0; padding-left:18px; }
+.card-notes li{ margin-bottom:4px; }
+.card-notes li::marker{ color:var(--paper-faint); }
+
+/* ── live recipes (subset of Hoard styles) ─────────────────────────────── */
+.t-up{ text-transform:uppercase; letter-spacing:.08em }
+.t-tnum{ font-feature-settings:'tnum','zero'; font-variant-numeric:tabular-nums; }
+.t-mono{ font-family:var(--mono) }
+.t-faint{ color:var(--paper-faint) }
+.t-dim{ color:var(--paper-dim) }
+.t-amber{ color:var(--amber) }
+.t-green{ color:var(--green) }
+.t-red{ color:var(--red) }
+.t-blue{ color:var(--blue) }
+
+/* chip */
+.h-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  height:24px; padding:0 10px;
+  font-family:var(--mono); font-size:10px;
+  text-transform:uppercase; letter-spacing:.08em;
+  color:var(--paper-dim);
+  border:1px solid var(--rule);
+  background:var(--ink);
+  white-space:nowrap;
+}
+.h-chip.on{ color:var(--paper); border-color:var(--paper); background:var(--ink-2); }
+.h-chip.amber{ color:var(--amber); border-color:var(--amber-dim); }
+.h-chip.green{ color:var(--green); border-color:var(--green-dim); }
+.h-chip.red{ color:var(--red); border-color:var(--red-dim); }
+.h-chip.blue{ color:var(--blue); border-color:#2c4d6b; }
+.h-chip.solid{ background:var(--paper); color:var(--void); border-color:var(--paper); }
+.h-chip.solid.amber{ background:var(--amber); color:var(--void); border-color:var(--amber); }
+
+/* btn */
+.h-btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  gap:6px;
+  height:30px; padding:0 14px;
+  font-family:var(--mono); font-size:11px;
+  text-transform:uppercase; letter-spacing:.1em;
+  background:transparent; color:var(--paper);
+  border:1px solid var(--rule-bright);
+  cursor:pointer; user-select:none;
+}
+.h-btn:hover{ background:var(--ink-2); border-color:var(--paper); }
+.h-btn.primary{ background:var(--paper); color:var(--void); border-color:var(--paper); }
+.h-btn.primary:hover{ background:var(--amber); border-color:var(--amber); }
+.h-btn.amber{ color:var(--amber); border-color:var(--amber-dim); }
+.h-btn.amber:hover{ background:var(--amber); color:var(--void); border-color:var(--amber); }
+.h-btn.green{ color:var(--green); border-color:var(--green-dim); }
+.h-btn.green:hover{ background:var(--green); color:var(--void); border-color:var(--green); }
+.h-btn.danger{ color:var(--red); border-color:var(--red-dim); }
+.h-btn.danger:hover{ background:var(--red); color:var(--void); border-color:var(--red); }
+.h-btn.sm{ height:24px; padding:0 10px; font-size:10px; }
+
+/* progress + gauge */
+.h-prog{ height:4px; background:var(--ink-2); border:1px solid var(--rule); position:relative; }
+.h-prog > i{ display:block; height:100%; background:var(--paper); }
+.h-prog.green > i{ background:var(--green); }
+.h-prog.amber > i{ background:var(--amber); }
+.h-prog.red > i{ background:var(--red); }
+.h-gauge{ display:flex; gap:2px; }
+.h-gauge .seg{ flex:1; height:8px; background:var(--ink-2); border:1px solid var(--rule); }
+.h-gauge .seg.on{ background:var(--paper); border-color:var(--paper); }
+.h-gauge .seg.green{ background:var(--green); border-color:var(--green); }
+.h-gauge .seg.amber{ background:var(--amber); border-color:var(--amber); }
+
+/* status sigil */
+.sigil{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:var(--mono); font-size:11px; letter-spacing:.04em;
+  color:var(--paper-dim);
+}
+.sigil .dot{
+  display:inline-block; width:8px; height:8px;
+  background:var(--paper-faint); border-radius:0;
+}
+.sigil .br{
+  font-family:var(--mono); color:var(--paper-faint); letter-spacing:.1em; font-size:11px;
+}
+.sigil .lbl{ text-transform:uppercase; letter-spacing:.1em; }
+
+/* status table */
+.status-tbl{
+  border:1px solid var(--rule);
+  border-collapse:collapse;
+  width:100%;
+  font-family:var(--mono); font-size:12px;
+}
+.status-tbl th, .status-tbl td{
+  border:1px solid var(--rule);
+  padding:14px 16px; text-align:left;
+  vertical-align:middle;
+}
+.status-tbl th{
+  background:var(--ink-2);
+  font-weight:500; font-size:9px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--paper-faint);
+}
+.status-tbl td{ background:var(--ink); }
+.status-tbl td.lbl{ color:var(--paper); }
+.status-tbl td .sw{
+  display:inline-block; width:14px; height:14px;
+  vertical-align:-3px; margin-right:8px;
+  border:1px solid var(--rule-bright);
+}
+.status-tbl td .br{ color:var(--paper-faint); font-family:var(--mono); }
+.status-tbl td.notes{ color:var(--paper-dim); font-size:11.5px; line-height:1.5; }
+
+/* type specimen */
+.type-grid{
+  display:grid; grid-template-columns:170px 1fr; gap:1px;
+  background:var(--rule); border:1px solid var(--rule);
+}
+.type-grid .lbl, .type-grid .smp{
+  background:var(--ink); padding:18px 22px;
+}
+.type-grid .lbl{
+  font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--paper-faint);
+  display:flex; flex-direction:column; gap:4px;
+  border-right:0;
+}
+.type-grid .lbl b{ color:var(--paper); font-weight:500; font-size:12px; letter-spacing:.06em; }
+.type-grid .smp{ color:var(--paper); display:flex; align-items:center; }
+
+.t-display-1{ font-family:var(--display); font-size:56px; font-weight:400; letter-spacing:-.01em; }
+.t-display-2{ font-family:var(--display); font-size:36px; font-weight:400; letter-spacing:-.005em; }
+.t-h1{ font-family:var(--mono); font-size:32px; font-weight:500; letter-spacing:-.01em; color:var(--paper); }
+.t-h2{ font-family:var(--mono); font-size:22px; font-weight:500; letter-spacing:-.005em; color:var(--paper); }
+.t-h3{ font-family:var(--mono); font-size:16px; font-weight:500; color:var(--paper); }
+.t-body{ font-family:var(--sans); font-size:14px; line-height:1.65; color:var(--paper-dim); max-width:520px; }
+.t-mono-md{ font-family:var(--mono); font-size:13px; color:var(--paper); }
+.t-cap{ font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--paper-faint); }
+.t-num-xl{ font-family:var(--mono); font-feature-settings:'tnum','zero'; font-variant-numeric:tabular-nums; font-size:42px; color:var(--paper); }
+
+/* spacing scale */
+.scale{ display:flex; gap:24px; align-items:flex-end; }
+.scale .step{
+  display:flex; flex-direction:column; gap:8px; align-items:center;
+  font-family:var(--mono); font-size:10px; color:var(--paper-faint);
+  letter-spacing:.06em;
+}
+.scale .step b{ color:var(--paper-dim); font-weight:400; }
+.scale .step .bar{ background:var(--paper-dim); width:32px; }
+
+/* shadow demo */
+.shadow-card{
+  width:100%; height:90px;
+  background:var(--ink-2); border:1px solid var(--rule);
+}
+.shadow-1{ box-shadow:0 1px 0 rgba(0,0,0,.4); }
+.shadow-2{ box-shadow:0 8px 24px -8px rgba(0,0,0,.6); }
+.shadow-3{ box-shadow:0 24px 60px -12px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04); }
+
+/* dos & donts */
+.dodont{
+  display:grid; grid-template-columns:1fr 1fr; gap:1px;
+  background:var(--rule); border:1px solid var(--rule);
+}
+.dodont .col{
+  background:var(--ink); padding:24px;
+}
+.dodont .col h4{
+  margin:0 0 16px; font-family:var(--mono); font-size:11px; letter-spacing:.18em;
+  text-transform:uppercase;
+  display:flex; align-items:center; gap:10px;
+}
+.dodont .do h4{ color:var(--green); }
+.dodont .dont h4{ color:var(--red); }
+.dodont .col h4::before{
+  display:inline-block; width:14px; height:14px; line-height:14px; text-align:center;
+  font-size:10px; border:1px solid currentColor;
+}
+.dodont .do h4::before{ content:'✓'; }
+.dodont .dont h4::before{ content:'✕'; }
+.dodont ul{ margin:0; padding-left:18px; color:var(--paper-dim); font-size:12.5px; line-height:1.7; }
+.dodont li::marker{ color:var(--paper-faint); }
+
+/* audit issues */
+.issue{
+  border:1px solid var(--rule);
+  margin-bottom:1px;
+  background:var(--ink);
+  display:grid;
+  grid-template-columns:80px 1fr 1fr;
+  gap:0;
+}
+.issue + .issue{ border-top:0; }
+.issue .sev{
+  background:var(--ink-2);
+  padding:18px 14px;
+  font-family:var(--mono); font-size:9px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--amber);
+  border-right:1px solid var(--rule);
+  display:flex; flex-direction:column; gap:6px;
+}
+.issue .sev.high{ color:var(--red); }
+.issue .sev.low{ color:var(--paper-faint); }
+.issue .sev b{ color:var(--paper); font-weight:500; font-size:10px; letter-spacing:.04em; text-transform:none; }
+.issue .desc{
+  padding:18px 22px;
+  border-right:1px solid var(--rule);
+}
+.issue .desc h4{
+  margin:0 0 8px; font-family:var(--mono); font-size:13px; color:var(--paper); font-weight:500;
+}
+.issue .desc p{
+  margin:0; color:var(--paper-dim); font-size:12px; line-height:1.6;
+}
+.issue .desc code{
+  font-family:var(--mono); font-size:11px;
+  background:var(--ink-2); border:1px solid var(--rule);
+  padding:1px 6px; color:var(--paper);
+}
+.issue .fix{
+  padding:18px 22px;
+  background:var(--ink-2);
+}
+.issue .fix .lbl{
+  font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:var(--green);
+  margin-bottom:8px;
+}
+.issue .fix p{
+  margin:0; color:var(--paper-dim); font-size:12px; line-height:1.6;
+}
+.issue .fix code{
+  font-family:var(--mono); font-size:11px;
+  background:var(--ink); border:1px solid var(--rule);
+  padding:1px 6px; color:var(--green);
+}
+
+/* footer */
+.foot{
+  margin-top:96px;
+  padding:32px 0 0;
+  border-top:1px solid var(--rule);
+  display:flex; justify-content:space-between;
+  font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--paper-faint);
+}
+
+/* sample frame */
+.sample{
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 4px),
+    var(--ink);
+  border:1px solid var(--rule);
+  padding:18px;
+}
+.row{ display:flex; align-items:center; gap:12px; }
+
+/* receipt sample */
+.receipt-mini{
+  background:#f5efe1; color:#1c1a14;
+  padding:14px 16px; width:240px;
+  font-family:var(--mono); font-size:10.5px; line-height:1.55;
+  position:relative;
+  box-shadow:0 14px 30px -10px rgba(0,0,0,.6);
+}
+.receipt-mini::before, .receipt-mini::after{
+  content:''; position:absolute; left:0; right:0; height:6px;
+  background-image:radial-gradient(circle at 4px 3px, var(--void) 3px, transparent 3px);
+  background-size:10px 6px; background-repeat:repeat-x;
+}
+.receipt-mini::before{ top:-6px; }
+.receipt-mini::after{ bottom:-6px; transform:scaleY(-1); }
+.receipt-mini .center{ text-align:center; }
+.receipt-mini .rule{ height:1px; background:#1c1a14; margin:8px 0; opacity:.4; }
+.receipt-mini .row-r{ display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="masthead">
+    <div>
+      <h1>hoard / ds</h1>
+      <div class="lede">
+        the visual + interaction system that keeps every Hoard surface readable as the same product. terminal-mono spine, paper warm text, four collector accents, and one rule per status.
+      </div>
+    </div>
+    <div class="meta">
+      <div><b>VERSION</b> 0.7</div>
+      <div><b>UPDATED</b> 2026-05-02</div>
+      <div><b>OWNER</b> andrea · design</div>
+      <div><b>STATUS</b> living doc</div>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <a href="#foundations"><b>01</b>foundations</a>
+    <a href="#color"><b>02</b>color &amp; status</a>
+    <a href="#type"><b>03</b>typography</a>
+    <a href="#components"><b>04</b>components</a>
+    <a href="#patterns"><b>05</b>patterns</a>
+    <a href="#audit"><b>06</b>audit</a>
+  </nav>
+
+  <!-- ─────────────────────────────────────── 01 foundations -->
+  <section id="foundations">
+    <div class="sec-hdr">
+      <span class="num">01</span><h2>foundations</h2><span class="rule"></span>
+    </div>
+    <p class="intro">
+      Hoard is a <b>collector's terminal</b>. The visual system mirrors a librarian's worktable — graph-paper voids, hairline rules, archival labels, the occasional thermal-receipt. Build with restraint: dark backgrounds, mono type, single-pixel borders. Color is reserved for status and emphasis.
+    </p>
+
+    <span class="marker">// space &amp; rhythm</span>
+    <div class="sample" style="margin-bottom:24px">
+      <div class="scale">
+        <div class="step"><div class="bar" style="height:4px"></div><b>4</b></div>
+        <div class="step"><div class="bar" style="height:8px"></div><b>8</b></div>
+        <div class="step"><div class="bar" style="height:12px"></div><b>12</b></div>
+        <div class="step"><div class="bar" style="height:16px"></div><b>16</b></div>
+        <div class="step"><div class="bar" style="height:20px"></div><b>20</b></div>
+        <div class="step"><div class="bar" style="height:24px"></div><b>24</b></div>
+        <div class="step"><div class="bar" style="height:32px"></div><b>32</b></div>
+        <div class="step"><div class="bar" style="height:48px"></div><b>48</b></div>
+        <div class="step"><div class="bar" style="height:64px"></div><b>64</b></div>
+        <div class="step"><div class="bar" style="height:96px"></div><b>96</b></div>
+      </div>
+    </div>
+    <p class="intro" style="margin-bottom:32px">
+      Multiples of <b>4px</b>. Card padding <b>20–24</b>, section gap <b>28–48</b>. Hairlines are always <code style="font-family:var(--mono);background:var(--ink-2);border:1px solid var(--rule);padding:1px 6px">1px solid var(--rule)</code> — never thicker, never lighter unless emphasizing focus (<code style="font-family:var(--mono);background:var(--ink-2);border:1px solid var(--rule);padding:1px 6px">--rule-bright</code>).
+    </p>
+
+    <span class="marker">// elevation — used sparingly</span>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);">
+      <div style="background:var(--ink);padding:24px">
+        <div class="shadow-card shadow-1"></div>
+        <div style="margin-top:14px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-faint)">FLAT · panels, cards</div>
+        <div style="font-size:11.5px;color:var(--paper-dim);margin-top:6px">no shadow. hairline border carries the edge.</div>
+      </div>
+      <div style="background:var(--ink);padding:24px">
+        <div class="shadow-card shadow-2"></div>
+        <div style="margin-top:14px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-faint)">LIFT · popovers, tooltips</div>
+        <div style="font-size:11.5px;color:var(--paper-dim);margin-top:6px">soft drop. only when something hovers above content.</div>
+      </div>
+      <div style="background:var(--ink);padding:24px">
+        <div class="shadow-card shadow-3"></div>
+        <div style="margin-top:14px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-faint)">RECEIPT · single use</div>
+        <div style="font-size:11.5px;color:var(--paper-dim);margin-top:6px">deep shadow + outline. reserved for the share-receipt artifact.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────── 02 color & status -->
+  <section id="color">
+    <div class="sec-hdr">
+      <span class="num">02</span><h2>color &amp; status</h2><span class="rule"></span>
+    </div>
+    <p class="intro">
+      Two neutral families and four accent ramps. <b>Each accent has one job.</b> Don't reach for amber to mean "playing" — use green. Don't reach for red to mean "wishlist heat" — use amber. Status colors are a contract; charts and emphasis are <i>derived</i> from those contracts.
+    </p>
+
+    <span class="marker">// neutrals · ink &amp; paper</span>
+    <div class="swatches" style="margin-bottom:32px">
+      <div class="sw"><div class="chip" style="background:var(--void)"></div><div class="name">void <b style="color:var(--paper-faint)">/ page</b></div><div class="hex">#07090A</div><div class="role">global background. behind every screen.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--ink)"></div><div class="name">ink <b style="color:var(--paper-faint)">/ surface</b></div><div class="hex">#0D1012</div><div class="role">cards, panels, sidebar fill.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--ink-2)"></div><div class="name">ink-2 <b style="color:var(--paper-faint)">/ raised</b></div><div class="hex">#14181B</div><div class="role">selected row, footer of a panel, meter track.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--ink-3)"></div><div class="name">ink-3 <b style="color:var(--paper-faint)">/ hover</b></div><div class="hex">#1C2125</div><div class="role">hover bg only. don't paint static surfaces with this.</div></div>
+
+      <div class="sw"><div class="chip bordered" style="background:var(--rule)"></div><div class="name">rule <b style="color:var(--paper-faint)">/ hairline</b></div><div class="hex">#23292D</div><div class="role">every 1px border, every divider.</div></div>
+      <div class="sw"><div class="chip bordered" style="background:var(--rule-bright)"></div><div class="name">rule-bright <b style="color:var(--paper-faint)">/ focus border</b></div><div class="hex">#3B4348</div><div class="role">button outline, focused field, emphasis.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--paper-ghost)"></div><div class="name">paper-ghost <b style="color:var(--paper-faint)">/ disabled</b></div><div class="hex">#3A3E41</div><div class="role">struck-through &amp; placeholder text.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--paper-faint)"></div><div class="name">paper-faint <b style="color:var(--paper-faint)">/ caption</b></div><div class="hex">#6B6F72</div><div class="role">labels, timestamps, supporting copy.</div></div>
+
+      <div class="sw"><div class="chip" style="background:var(--paper-dim)"></div><div class="name">paper-dim <b style="color:var(--paper-faint)">/ secondary text</b></div><div class="hex">#A9A89E</div><div class="role">body, descriptions, button text in resting state.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--paper)"></div><div class="name">paper <b style="color:var(--paper-faint)">/ primary text</b></div><div class="hex">#ECE8DE</div><div class="role">headlines, numbers that matter, "Completed" status.</div></div>
+      <div class="sw" style="grid-column:span 2">
+        <div style="display:flex;flex-direction:column;gap:6px;height:96px;justify-content:center;padding:0 10px;border:1px dashed var(--rule)">
+          <div class="t-cap" style="color:var(--paper-faint)">CONTRAST RULE</div>
+          <div style="font-size:11.5px;color:var(--paper-dim);line-height:1.5">primary on void <b style="color:var(--paper)">12.6 : 1</b> &nbsp;·&nbsp; dim on ink <b style="color:var(--paper)">5.9 : 1</b> &nbsp;·&nbsp; faint on ink <b style="color:var(--paper)">3.1 : 1</b> (caps + spacing only)</div>
+        </div>
+        <div></div>
+      </div>
+    </div>
+
+    <span class="marker">// accents · the four collector colors</span>
+    <div class="swatches" style="margin-bottom:40px">
+      <div class="sw"><div class="chip" style="background:var(--amber);border-color:var(--amber)"></div><div class="name">amber <b style="color:var(--paper-faint)">/ wishlist · highlight</b></div><div class="hex">#D4A017</div><div class="role">wishlist status, "you" emphasis, deal/heat indicators. use sparingly — it draws the eye fastest.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--green);border-color:var(--green)"></div><div class="name">green <b style="color:var(--paper-faint)">/ playing · live</b></div><div class="hex">#5FC26A</div><div class="role">currently playing, prompt cursors, success, completion meters.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--red);border-color:var(--red)"></div><div class="name">red <b style="color:var(--paper-faint)">/ dropped · warning</b></div><div class="hex">#E2553A</div><div class="role">dropped status, destructive action, delete/reset confirmations.</div></div>
+      <div class="sw"><div class="chip" style="background:var(--blue);border-color:var(--blue)"></div><div class="name">blue <b style="color:var(--paper-faint)">/ on hold · info</b></div><div class="hex">#69A1D4</div><div class="role">on-hold status, neutral metadata callouts. never primary action.</div></div>
+    </div>
+
+    <span class="marker">// the status contract — single source of truth</span>
+    <table class="status-tbl">
+      <thead>
+        <tr>
+          <th>status</th>
+          <th>color</th>
+          <th>token</th>
+          <th>sigil</th>
+          <th>usage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl"><span class="sw" style="background:var(--green)"></span>Playing</td>
+          <td><span class="t-green">#5FC26A</span></td>
+          <td><code>--green</code></td>
+          <td><span class="br">[●]</span></td>
+          <td class="notes">active engagement. dot in sidebar, meter fill, "now playing" card border.</td>
+        </tr>
+        <tr>
+          <td class="lbl"><span class="sw" style="background:var(--paper-faint)"></span>Backlog</td>
+          <td><span class="t-faint">#6B6F72</span></td>
+          <td><code>--paper-faint</code></td>
+          <td><span class="br">[ ]</span></td>
+          <td class="notes">default / idle. <b style="color:var(--paper)">no accent color.</b> backlog is the absence of action — neutral grey.</td>
+        </tr>
+        <tr>
+          <td class="lbl"><span class="sw" style="background:var(--paper)"></span>Completed</td>
+          <td style="color:var(--paper)">#ECE8DE</td>
+          <td><code>--paper</code></td>
+          <td><span class="br">[x]</span></td>
+          <td class="notes">finished. uses primary paper white — the brightest neutral, not an accent. completion is achievement, not status.</td>
+        </tr>
+        <tr>
+          <td class="lbl"><span class="sw" style="background:var(--blue)"></span>On Hold</td>
+          <td><span class="t-blue">#69A1D4</span></td>
+          <td><code>--blue</code></td>
+          <td><span class="br">[~]</span></td>
+          <td class="notes">paused. cool, calm — distinguishable from active.</td>
+        </tr>
+        <tr>
+          <td class="lbl"><span class="sw" style="background:var(--red)"></span>Dropped</td>
+          <td><span class="t-red">#E2553A</span></td>
+          <td><code>--red</code></td>
+          <td><span class="br">[/]</span></td>
+          <td class="notes">abandoned. the only status with red.</td>
+        </tr>
+        <tr>
+          <td class="lbl"><span class="sw" style="background:var(--amber)"></span>Wishlist</td>
+          <td><span class="t-amber">#D4A017</span></td>
+          <td><code>--amber</code></td>
+          <td><span class="br">[?]</span></td>
+          <td class="notes">aspirational. star icon ⭑ + amber border. diamond shape on dot variants.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:24px;padding:18px 22px;border:1px dashed var(--rule-bright);background:var(--ink);font-size:12.5px;color:var(--paper-dim);line-height:1.7;">
+      <b style="color:var(--paper);font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;">Rule</b><br/>
+      A status's color is its <i>identity</i>. When showing a stat <i>about</i> a status (e.g. "286 in Backlog · 66.8%"), use that status's color — not whatever feels visually nice. The Backlog tile in the dashboard should not be amber just because backlogs feel "warning-y" — backlog is grey, period. Use amber only on the <i>delta</i> ("+3 this week") or the wishlist count.
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────── 03 typography -->
+  <section id="type">
+    <div class="sec-hdr">
+      <span class="num">03</span><h2>typography</h2><span class="rule"></span>
+    </div>
+    <p class="intro">
+      Three families, one job each. <b>JetBrains Mono</b> is the spine — every UI label, number, button, chip, and most headlines. <b>IBM Plex Sans</b> is the prose voice for descriptions &amp; synopses where reading flow matters. <b>Major Mono Display</b> is the brand voice — title screens, the wordmark, hero numerals on receipts.
+    </p>
+
+    <div class="type-grid">
+      <div class="lbl"><b>display</b><span>Major Mono · 56/–.01em</span></div>
+      <div class="smp"><span class="t-display-1">hoard.</span></div>
+
+      <div class="lbl"><b>display 2</b><span>Major Mono · 36</span></div>
+      <div class="smp"><span class="t-display-2">backlog</span></div>
+
+      <div class="lbl"><b>headline 1</b><span>JBM 500 · 32/–.01em</span></div>
+      <div class="smp"><span class="t-h1">286 games waiting</span></div>
+
+      <div class="lbl"><b>headline 2</b><span>JBM 500 · 22</span></div>
+      <div class="smp"><span class="t-h2">// shelves &amp; status</span></div>
+
+      <div class="lbl"><b>headline 3</b><span>JBM 500 · 16</span></div>
+      <div class="smp"><span class="t-h3">Hollow Knight: Silksong</span></div>
+
+      <div class="lbl"><b>numeric · xl</b><span>JBM tnum · 42</span></div>
+      <div class="smp"><span class="t-num-xl">12.1<span style="color:var(--paper-faint);font-size:24px;">%</span></span></div>
+
+      <div class="lbl"><b>body · prose</b><span>Plex Sans · 14/1.65</span></div>
+      <div class="smp"><p class="t-body" style="margin:0">A vast realm shattered by the Elden Ring. Sprose runs Plex Sans wherever a reader settles in — synopses, notes, anything that wants paragraph rhythm.</p></div>
+
+      <div class="lbl"><b>body · mono</b><span>JBM 400 · 13</span></div>
+      <div class="smp"><span class="t-mono-md">$ 1,247.3 hours played · 12.1% completed · ~$3,420 estimated spend</span></div>
+
+      <div class="lbl"><b>caption</b><span>JBM 500 · 10/.14em up</span></div>
+      <div class="smp"><span class="t-cap">// last sync 4m ago · ref# HRD-0042</span></div>
+    </div>
+
+    <div style="margin-top:24px;padding:18px 22px;border:1px dashed var(--rule);background:var(--ink);font-size:12.5px;color:var(--paper-dim);line-height:1.7;max-width:780px">
+      <b style="color:var(--paper);font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;">Numerals</b><br/>
+      always tabular &amp; lining. set <code style="font-family:var(--mono);background:var(--ink-2);border:1px solid var(--rule);padding:1px 6px;color:var(--paper)">font-feature-settings: 'tnum', 'zero'</code> on the body and add the <code style="font-family:var(--mono);background:var(--ink-2);border:1px solid var(--rule);padding:1px 6px;color:var(--paper)">.t-tnum</code> class for numeric runs. lining + tabular keeps stat grids honest.
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────── 04 components -->
+  <section id="components">
+    <div class="sec-hdr">
+      <span class="num">04</span><h2>components</h2><span class="rule"></span>
+    </div>
+    <p class="intro">
+      Every component is built from <b>hairline + uppercase mono + tabular numerals</b>. Variants exist for the four status accents — but the <i>structure</i> never changes. A green button is a default button with a green ring. Don't fork.
+    </p>
+
+    <div class="cards">
+
+      <!-- chip -->
+      <div class="card">
+        <div class="card-hdr"><h3>chip</h3><span class="tag">tag · status · filter</span></div>
+        <div class="card-body">
+          <span class="h-chip">all</span>
+          <span class="h-chip on">on hover</span>
+          <span class="h-chip green">● playing</span>
+          <span class="h-chip amber">★ wishlist</span>
+          <span class="h-chip red">/ dropped</span>
+          <span class="h-chip blue">~ on hold</span>
+          <span class="h-chip solid">PRIMARY</span>
+          <span class="h-chip solid amber">FEATURED</span>
+        </div>
+        <div class="card-notes">
+          24px tall, 10px caps, 1px border. tone variants tint <i>border</i> + <i>color</i>; <code>solid</code> swaps to <code>--paper</code> bg.
+          <ul>
+            <li>filter chips → unfilled (<code>.h-chip</code>)</li>
+            <li>active filter → <code>.on</code> (white border)</li>
+            <li>status badge → tone matches the status table</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- button -->
+      <div class="card">
+        <div class="card-hdr"><h3>button</h3><span class="tag">action</span></div>
+        <div class="card-body">
+          <button class="h-btn">default</button>
+          <button class="h-btn primary">primary</button>
+          <button class="h-btn amber">amber</button>
+          <button class="h-btn green">green</button>
+          <button class="h-btn danger">danger</button>
+          <button class="h-btn sm">sm</button>
+        </div>
+        <div class="card-notes">
+          30px (sm 24px). uppercase 11px / .1em letter-spacing.
+          <ul>
+            <li><code>primary</code> for the single most important action on a screen — never two on the same view</li>
+            <li><code>amber</code>/<code>green</code> for status-tinted side actions (e.g. wishlist)</li>
+            <li><code>danger</code> for destructive: drop, delete, reset</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- panel -->
+      <div class="card">
+        <div class="card-hdr"><h3>panel</h3><span class="tag">surface</span></div>
+        <div class="card-body col">
+          <div style="border:1px solid var(--rule);background:var(--ink);padding:14px;">.panel — flat ink card</div>
+          <div style="border:1px solid var(--rule);background:var(--ink-2);padding:14px;">.panel.raised — ink-2 (selected/footer)</div>
+          <div style="border:1px dashed var(--rule-bright);background:var(--ink-2);padding:14px;color:var(--paper-dim);">.panel + dashed border — note &amp; placeholder</div>
+        </div>
+        <div class="card-notes">
+          1px hairline. no shadow. nest panels by varying the fill (<code>--ink</code> → <code>--ink-2</code>), never by adding a second border.
+        </div>
+      </div>
+
+      <!-- progress -->
+      <div class="card">
+        <div class="card-hdr"><h3>progress &amp; gauge</h3><span class="tag">measure</span></div>
+        <div class="card-body col">
+          <div class="h-prog"><i style="width:34%"></i></div>
+          <div class="h-prog green"><i style="width:62%"></i></div>
+          <div class="h-prog amber"><i style="width:88%"></i></div>
+          <div class="h-prog red"><i style="width:14%"></i></div>
+          <div class="h-gauge">
+            <div class="seg on"></div><div class="seg on"></div><div class="seg green"></div><div class="seg green"></div><div class="seg amber"></div><div class="seg"></div><div class="seg"></div><div class="seg"></div>
+          </div>
+        </div>
+        <div class="card-notes">
+          <code>.h-prog</code> for percentages; <code>.h-gauge</code> for discrete counts (hype, achievements). Fill color = the status it describes. Never use a fancy gradient.
+        </div>
+      </div>
+
+      <!-- marker -->
+      <div class="card">
+        <div class="card-hdr"><h3>section marker</h3><span class="tag">label</span></div>
+        <div class="card-body col">
+          <span class="marker" style="margin:0">// shelves &amp; status</span>
+          <span class="marker" style="margin:0">// last sync 4m ago</span>
+          <span class="marker" style="margin:0">// wishlist · dropping soon</span>
+        </div>
+        <div class="card-notes">
+          <code>// lowercase · slash-prefix</code> — the comment voice that makes Hoard feel like a worktable.
+          11px JBM, paper-faint. always lowercase, no period, no emoji.
+        </div>
+      </div>
+
+      <!-- sigil -->
+      <div class="card">
+        <div class="card-hdr"><h3>status sigil</h3><span class="tag">inline</span></div>
+        <div class="card-body col">
+          <span class="sigil"><span class="dot" style="background:var(--green)"></span><span class="br">[●]</span><span class="lbl t-green">PLAYING</span></span>
+          <span class="sigil"><span class="dot"></span><span class="br">[ ]</span><span class="lbl">BACKLOG</span></span>
+          <span class="sigil"><span class="dot" style="background:var(--paper)"></span><span class="br">[x]</span><span class="lbl" style="color:var(--paper)">COMPLETED</span></span>
+          <span class="sigil"><span class="dot" style="background:var(--blue)"></span><span class="br">[~]</span><span class="lbl t-blue">ON HOLD</span></span>
+          <span class="sigil"><span class="dot" style="background:var(--red)"></span><span class="br">[/]</span><span class="lbl t-red">DROPPED</span></span>
+          <span class="sigil"><span class="dot" style="background:var(--amber);transform:rotate(45deg);width:6px;height:6px"></span><span class="br">[?]</span><span class="lbl t-amber">WISHLIST</span></span>
+        </div>
+        <div class="card-notes">
+          dot · ascii bracket · uppercase label. tertiary expression of status — used in lists, sidebars, and the receipt.
+        </div>
+      </div>
+
+      <!-- rules -->
+      <div class="card full">
+        <div class="card-hdr"><h3>rules &amp; dividers</h3><span class="tag">structure</span></div>
+        <div class="card-body col">
+          <div style="height:1px;background:var(--rule)"></div>
+          <div style="font-size:10px;color:var(--paper-faint);letter-spacing:.14em;text-transform:uppercase">solid · default divider</div>
+
+          <div style="height:1px;background-image:linear-gradient(90deg,var(--rule) 50%,transparent 50%);background-size:4px 1px"></div>
+          <div style="font-size:10px;color:var(--paper-faint);letter-spacing:.14em;text-transform:uppercase">dot · soft section break</div>
+
+          <div style="height:1px;background-image:linear-gradient(90deg,var(--rule-bright) 50%,transparent 50%);background-size:8px 1px"></div>
+          <div style="font-size:10px;color:var(--paper-faint);letter-spacing:.14em;text-transform:uppercase">dash · between major regions</div>
+
+          <div style="height:4px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)"></div>
+          <div style="font-size:10px;color:var(--paper-faint);letter-spacing:.14em;text-transform:uppercase">double · top of receipt / footer</div>
+
+          <pre style="margin:0;font-family:var(--mono);font-size:11px;color:var(--paper-dim);letter-spacing:0">─────────────────────  · / · ───── 　STATUS ──────────  · / ·  ─────────────────────</pre>
+          <div style="font-size:10px;color:var(--paper-faint);letter-spacing:.14em;text-transform:uppercase">ascii · printable receipts only</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────── 05 patterns -->
+  <section id="patterns">
+    <div class="sec-hdr">
+      <span class="num">05</span><h2>patterns</h2><span class="rule"></span>
+    </div>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-hdr"><h3>stat tile</h3><span class="tag">grid · 4-up / 8-up</span></div>
+        <div class="card-body col">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);width:100%">
+            <div style="background:var(--ink);padding:14px;display:grid;grid-template-rows:24px 32px 14px;row-gap:4px;">
+              <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint)">TOTAL OWNED</div>
+              <div style="font-size:24px;color:var(--paper);font-family:var(--mono)" class="t-tnum">428</div>
+              <div style="font-size:9px;color:var(--paper-faint)">+3 this week</div>
+            </div>
+            <div style="background:var(--ink);padding:14px;display:grid;grid-template-rows:24px 32px 14px;row-gap:4px;">
+              <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint)">PLAYING</div>
+              <div style="font-size:24px;color:var(--green);font-family:var(--mono)" class="t-tnum">18</div>
+              <div style="font-size:9px;color:var(--paper-faint)">active</div>
+            </div>
+            <div style="background:var(--ink);padding:14px;display:grid;grid-template-rows:24px 32px 14px;row-gap:4px;">
+              <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint)">COMPLETED</div>
+              <div style="font-size:24px;color:var(--paper);font-family:var(--mono)" class="t-tnum">52</div>
+              <div style="font-size:9px;color:var(--paper-faint)">12.1%</div>
+            </div>
+            <div style="background:var(--ink);padding:14px;display:grid;grid-template-rows:24px 32px 14px;row-gap:4px;border-top:2px solid var(--amber)">
+              <div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint)">YOUR PLAYTIME</div>
+              <div style="font-size:24px;color:var(--amber);font-family:var(--mono)" class="t-tnum">4.2h</div>
+              <div style="font-size:9px;color:var(--paper-faint)">across PS · ST</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-notes">
+          fixed 3-row grid (<code>24/32/14</code>) so labels, numbers, and sub-captions align across all cells regardless of label wrap. emphasis cell gets a 2px accent border-top — never a fill.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr"><h3>receipt artifact</h3><span class="tag">share · print</span></div>
+        <div class="card-body" style="background:#0a0c0d;justify-content:center;padding:32px 18px">
+          <div class="receipt-mini">
+            <div class="center" style="font-family:var(--display);font-size:18px;letter-spacing:.05em">hoard</div>
+            <div class="center t-cap" style="color:#1c1a14;opacity:.7;font-size:9px;margin-top:2px">=== GAME · RECORD ===</div>
+            <div class="rule"></div>
+            <div class="row-r"><span>STATUS</span><span style="opacity:.5">────</span><span>BACKLOG</span></div>
+            <div class="row-r"><span>RATING</span><span style="opacity:.5">────</span><span>—/★★★★★</span></div>
+            <div class="row-r"><span>HOURS</span><span style="opacity:.5">────</span><span>4.2h</span></div>
+            <div class="rule"></div>
+            <div class="center" style="font-size:9px;letter-spacing:.14em">THANK YOU FOR HOARDING</div>
+          </div>
+        </div>
+        <div class="card-notes">
+          paper #f5efe1 / ink #1c1a14 — inverted from the app. mono only, dotted leader rules, perforated edges. one per detail screen — don't sprinkle receipt motifs elsewhere.
+        </div>
+      </div>
+
+      <div class="card full">
+        <div class="card-hdr"><h3>composition</h3><span class="tag">canonical layout</span></div>
+        <div class="card-body col">
+          <div style="display:grid;grid-template-columns:220px 1fr 380px;gap:1px;background:var(--rule);border:1px solid var(--rule);min-height:240px">
+            <div style="background:var(--ink);padding:18px;display:flex;flex-direction:column;gap:10px">
+              <div class="t-cap" style="color:var(--paper-faint)">// nav</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--paper)">▸ library</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--paper-dim)">  playing · 18</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--paper-dim)">  backlog · 286</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--paper-dim)">  wishlist · 62</div>
+            </div>
+            <div style="background:var(--ink);padding:18px;display:flex;flex-direction:column;gap:14px">
+              <div class="t-cap" style="color:var(--paper-faint)">// content area</div>
+              <div style="font-family:var(--display);font-size:34px;color:var(--paper);letter-spacing:-.01em">backlog.</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <span class="h-chip on">all · 286</span>
+                <span class="h-chip">recent</span>
+                <span class="h-chip">untouched</span>
+              </div>
+              <div style="height:1px;background:var(--rule);margin-top:auto"></div>
+              <div class="t-cap" style="color:var(--paper-faint)">286 records · sorted by added</div>
+            </div>
+            <div style="background:var(--ink-2);padding:18px;display:flex;flex-direction:column;gap:10px">
+              <div class="t-cap" style="color:var(--paper-faint)">// inspector / aside</div>
+              <div style="font-family:var(--mono);font-size:13px;color:var(--paper)">Elden Ring</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--paper-dim)">FromSoftware · 2022</div>
+              <div class="h-prog amber"><i style="width:7%"></i></div>
+              <div class="t-cap" style="color:var(--paper-faint)">7% of main · 55.8h owed</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-notes">
+          three-zone: <b style="color:var(--paper)">nav (ink)</b> · <b style="color:var(--paper)">content (ink, breathing room)</b> · <b style="color:var(--paper)">inspector (ink-2 raised)</b>. use the same three columns on every full-screen surface so users learn the geography once.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────── 06 audit -->
+  <section id="audit">
+    <div class="sec-hdr">
+      <span class="num">06</span><h2>audit · current build</h2><span class="rule"></span>
+    </div>
+    <p class="intro">
+      Inconsistencies found in <code>Hoard.html</code> rev 0.7. Each is mapped to a rule above. Listed by severity. Walk through these in order; <i>fix the contracts before the cosmetics.</i>
+    </p>
+
+    <span class="marker">// findings</span>
+
+    <div>
+      <div class="issue">
+        <div class="sev high">SEV<b>HIGH</b>STATUS&nbsp;CONTRACT</div>
+        <div class="desc">
+          <h4>Backlog tile rendered amber on the dashboard</h4>
+          <p>the <code>BACKLOG · 286 · 66.8%</code> stat tile uses <code>tone='amber'</code>. amber is the wishlist accent. backlog is grey (paper-faint), per the status table. mixing them blurs the contract — users can't tell whether amber means "to play" or "to buy".</p>
+        </div>
+        <div class="fix">
+          <div class="lbl">FIX</div>
+          <p>switch the tile's tone to <code>null</code> (paper). move amber to the wishlist tile only. emphasis on backlog volume → use a 2px <code>--paper</code> top-border, not a color shift.</p>
+        </div>
+      </div>
+
+      <div class="issue">
+        <div class="sev high">SEV<b>HIGH</b>STATUS&nbsp;CONTRACT</div>
+        <div class="desc">
+          <h4>Detail-screen status chip painted with star + amber when status is Backlog</h4>
+          <p>on the receipt detail, the status pill renders <code>★ backlog</code> with <code>tone="amber"</code>. backlog isn't wishlist. the star and the amber both belong to wishlist alone. when the game's actual status is backlog, it should read with a grey dot.</p>
+        </div>
+        <div class="fix">
+          <div class="lbl">FIX</div>
+          <p>read the chip's tone from the status table — drive it from one map. <code>statusToChip(s) → { dot, tone, icon }</code>. never hard-code the icon at the call site.</p>
+        </div>
+      </div>
+
+      <div class="issue">
+        <div class="sev">SEV<b>MED</b>SEMANTIC&nbsp;COLOR</div>
+        <div class="desc">
+          <h4>Completion percentage rendered green</h4>
+          <p><code>12.1% completed</code> appears in green on the dashboard hero. completion's color is <code>--paper</code> (per the status table). green belongs to <i>active</i> playing.</p>
+        </div>
+        <div class="fix">
+          <div class="lbl">FIX</div>
+          <p>set the number to <code>--paper</code>; keep the green only for the <code>$</code> prompt prefix that opens the line.</p>
+        </div>
+      </div>
+
+      <div class="issue">
+        <div class="sev">SEV<b>MED</b>TYPE</div>
+        <div class="desc">
+          <h4>Dollar amounts inconsistently mono'd</h4>
+          <p>"$3,420" on the hero uses Plex digits; "$3.4k" in the stat grid uses JBM tnum. different surfaces, same number, two voices.</p>
+        </div>
+        <div class="fix">
+          <div class="lbl">FIX</div>
+          <p>any number that participates in a stat is JBM + tnum. prose-embedded numbers stay in Plex. wrap currency in <code>&lt;span class="t-mono t-tnum"&gt;</code> when it's a stat.</p>
+        </div>
+      </div>
+
+      <div class="issue">
+        <div class="sev low">SEV<b>LOW</b>SPACING</div>
+        <div class="desc">
+          <h4>Cell heights drift across stat grids</h4>
+          <p>the original 4-up grid let one wrapping label push its number down 6px. fixed in the HLTB grid; replicate the 24/32/14 row template across every stat grid (dashboard, receipt, library shelf headers).</p>
+        </div>
+        <div class="fix">
+          <div class="lbl">FIX</div>
+          <p>extract a shared <code>&lt;StatTile&gt;</code> component using the row template. all numeric grids should mount it.</p>
+        </div>
+      </div>
+
+      <div class="issue">
+        <div class="sev low">SEV<b>LOW</b>RULE&nbsp;USE</div>
+        <div class="desc">
+          <h4>Mixed dotted/dashed/solid rules without rhythm</h4>
+          <p>some sections separate with solid hairlines, some with dotted. the rule above (rules &amp; dividers) defines a hierarchy: solid for default, dot for soft, dash for major regions, double for receipt edges. apply consistently per-screen.</p>
+        </div>
+        <div class="fix">
+          <div class="lbl">FIX</div>
+          <p>pick one divider style per region tier and stick to it. dashboard top-level → dash, intra-card → solid.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────── do/don't -->
+  <section>
+    <div class="sec-hdr">
+      <span class="num">07</span><h2>do · don't</h2><span class="rule"></span>
+    </div>
+    <div class="dodont">
+      <div class="col do">
+        <h4>do</h4>
+        <ul>
+          <li>treat status colors as a contract — one accent per status, everywhere</li>
+          <li>let hairlines do the work; resist adding shadows or fills</li>
+          <li>set numbers in JetBrains Mono with tabular figures</li>
+          <li>use <code>--ink</code> for surfaces and <code>--ink-2</code> only for raised/selected</li>
+          <li>open every section with a <code>// lowercase marker</code></li>
+          <li>reserve the receipt motif for the detail screen</li>
+        </ul>
+      </div>
+      <div class="col dont">
+        <h4>don't</h4>
+        <ul>
+          <li>tint stats in amber to mean "warning" — that's red's job</li>
+          <li>stack green + amber + red in one chart legend; pick the dominant story</li>
+          <li>introduce gradients, drop-shadows, or rounded corners &gt; 0</li>
+          <li>mix Inter / Roboto / system-ui — only JBM, Plex, Major Mono</li>
+          <li>use icons where a sigil <code>[●]</code> or chip would do</li>
+          <li>write Title Case in UI labels — Hoard speaks lowercase</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div>HOARD · DESIGN SYSTEM · v0.7</div>
+    <div>© 2026 · LIVING DOCUMENT</div>
+  </footer>
+</div>
+</body>
+</html>

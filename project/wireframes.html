@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hoard — wireframes</title>
+  <meta name="viewport" content="width=1440" />
+  <style>
+/* Hoard wireframes — sketchy/cozy retro */
+
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;700&family=Kalam:wght@300;400;700&family=Special+Elite&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  --ink: #1a1612;
+  --ink-soft: #4a3f33;
+  --ink-faint: #8a7a66;
+  --paper: #f5efe2;
+  --paper-2: #ede5d3;
+  --rule: #1a1612;
+  --accent: #c8462b;   /* retro red */
+  --accent-2: #2d6a4f; /* mossy green */
+  --accent-3: #d4a017; /* mustard */
+  --hand: 'Kalam', 'Caveat', cursive;
+  --hand-tight: 'Caveat', cursive;
+  --mono: 'JetBrains Mono', 'Special Elite', monospace;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--hand);
+  color: var(--ink);
+  background: var(--paper);
+}
+
+/* === Sketchy primitives === */
+
+/* Sketchy borders use hand-drawn-feel SVG dasharray + slight skew via filter */
+.sk-box {
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: var(--paper);
+  position: relative;
+}
+.sk-box.thick { border-width: 2px; }
+.sk-box.thin  { border-width: 1px; }
+
+/* Wobble: slight rotational asymmetry */
+.wob-1 { transform: rotate(-0.4deg); }
+.wob-2 { transform: rotate(0.5deg); }
+.wob-3 { transform: rotate(-0.2deg); }
+
+/* Hand-drawn divider */
+.sk-rule {
+  height: 0;
+  border-bottom: 1.5px solid var(--ink);
+  position: relative;
+}
+.sk-rule.dashed { border-bottom-style: dashed; }
+
+/* Filled placeholder (image / cover art) — diagonal stripes */
+.sk-img {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 6px,
+      rgba(26,22,18,0.28) 6px 7px
+    ),
+    var(--paper-2);
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.sk-img.dense {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 4px,
+      rgba(26,22,18,0.5) 4px 5px
+    ),
+    var(--paper-2);
+}
+.sk-img > .lbl {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+  background: rgba(245,239,226,0.78);
+  text-transform: uppercase;
+  text-align: center;
+  padding: 2px 4px;
+  line-height: 1.2;
+}
+
+/* Crossed-X for empty / unconnected */
+.sk-x {
+  background:
+    linear-gradient(45deg, transparent 49%, var(--ink) 49% 51%, transparent 51%),
+    linear-gradient(-45deg, transparent 49%, var(--ink) 49% 51%, transparent 51%),
+    var(--paper-2);
+  border: 1.5px solid var(--ink);
+}
+
+/* Pill / chip / tag */
+.sk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 2px;
+  border: 1.2px solid var(--ink);
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--hand);
+  background: var(--paper);
+  white-space: nowrap;
+}
+.sk-pill.solid { background: var(--ink); color: var(--paper); }
+.sk-pill.accent { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+.sk-pill.mute { color: var(--ink-faint); border-color: var(--ink-faint); }
+.sk-pill.tiny { font-size: 9px; padding: 0 6px 1px; }
+
+/* Underline for "tab" or "button" treatment */
+.sk-tab {
+  font-family: var(--hand);
+  font-size: 13px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.sk-tab.active {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 4px;
+}
+
+/* Scribble checkbox */
+.sk-check {
+  width: 14px; height: 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  display: inline-block;
+  position: relative;
+  flex: 0 0 14px;
+}
+.sk-check.on::after {
+  content: '✓';
+  position: absolute;
+  font-size: 14px;
+  font-family: var(--hand);
+  font-weight: 700;
+  top: -6px; left: 1px;
+  color: var(--accent);
+}
+
+/* Phone frame (wireframe-style, not realistic) */
+.sk-phone {
+  width: 280px;
+  border: 2.5px solid var(--ink);
+  border-radius: 28px;
+  background: var(--paper);
+  padding: 8px 6px 10px;
+  position: relative;
+  box-shadow: 6px 8px 0 rgba(26,22,18,0.12);
+}
+.sk-phone::before {
+  /* notch */
+  content: '';
+  position: absolute;
+  top: 6px; left: 50%;
+  transform: translateX(-50%);
+  width: 60px; height: 14px;
+  background: var(--ink);
+  border-radius: 999px;
+}
+.sk-phone-screen {
+  border: 1.2px solid var(--ink);
+  border-radius: 18px;
+  background: var(--paper);
+  height: 560px;
+  margin-top: 22px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sk-phone-screen.dark {
+  background: #1a1612;
+  color: var(--paper);
+}
+.sk-phone-status {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 6px 14px 2px;
+  opacity: 0.8;
+}
+.sk-phone-bottom {
+  height: 4px;
+  width: 90px;
+  background: var(--ink);
+  border-radius: 2px;
+  margin: 2px auto 4px;
+}
+
+/* Tab bar at bottom of phone */
+.sk-tabbar {
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 4px 4px;
+  border-top: 1.2px solid var(--ink);
+  font-family: var(--hand);
+  font-size: 10px;
+}
+.sk-tabbar > div {
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.55;
+}
+.sk-tabbar > div.active { opacity: 1; }
+.sk-tabbar .glyph {
+  width: 18px; height: 18px;
+  border: 1.4px solid currentColor;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+}
+.sk-tabbar > div.active .glyph {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* dark variant of tabbar */
+.dark .sk-tabbar { border-color: var(--paper); }
+.dark .sk-tabbar > div.active .glyph {
+  background: var(--paper); color: var(--ink); border-color: var(--paper);
+}
+
+/* Heading scribble */
+.sk-h {
+  font-family: var(--hand);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.sk-mono { font-family: var(--mono); }
+.sk-faint { color: var(--ink-faint); }
+.sk-tight { line-height: 1.15; }
+
+/* Annotation balloon (post-it style note) */
+.sk-note {
+  background: #fff5b8;
+  border: 1.2px solid var(--ink);
+  padding: 6px 10px;
+  font-family: var(--hand);
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--ink);
+  box-shadow: 2px 3px 0 rgba(26,22,18,0.18);
+  max-width: 220px;
+}
+.sk-note.green { background: #c9e8c2; }
+.sk-note.pink  { background: #ffd5d0; }
+
+/* Arrow pointer */
+.sk-arrow {
+  font-family: var(--hand);
+  font-size: 16px;
+  color: var(--ink);
+  display: inline-block;
+}
+
+/* Section frame caption */
+.var-caption {
+  font-family: var(--hand);
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+.var-caption b { font-weight: 700; }
+.var-caption .num {
+  display: inline-block;
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  padding: 0 7px;
+  margin-right: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--paper);
+}
+
+/* Tab bar (top-of-page nav) */
+.top-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.top-tabs button {
+  font-family: var(--hand);
+  font-size: 18px;
+  font-weight: 500;
+  background: var(--paper);
+  border: 1.8px solid var(--ink);
+  border-radius: 8px;
+  padding: 6px 14px 4px;
+  cursor: pointer;
+  color: var(--ink);
+  position: relative;
+  box-shadow: 2px 3px 0 rgba(26,22,18,0.12);
+  transition: transform .08s;
+}
+.top-tabs button:hover { transform: translate(-1px, -1px); box-shadow: 3px 4px 0 rgba(26,22,18,0.18); }
+.top-tabs button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 rgba(26,22,18,0.12); }
+.top-tabs button.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* paper texture noise via subtle radial */
+.paper-tex::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(26,22,18,0.04) 1px, transparent 1px);
+  background-size: 5px 5px;
+  z-index: 1;
+  opacity: 0.6;
+}
+
+/* search bar mock */
+.sk-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.4px solid var(--ink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-family: var(--hand);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* progress bar (sketchy) */
+.sk-bar {
+  height: 6px;
+  border: 1.2px solid var(--ink);
+  border-radius: 999px;
+  position: relative;
+  overflow: hidden;
+}
+.sk-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+.sk-bar.accent > i { background: var(--accent); }
+.sk-bar.green > i { background: var(--accent-2); }
+
+/* mini stat */
+.sk-stat {
+  border: 1.2px solid var(--ink);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--paper);
+}
+.sk-stat .v {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+}
+.sk-stat .k {
+  font-family: var(--hand);
+  font-size: 10px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ASCII bar */
+.ascii-bar {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0;
+  white-space: pre;
+  line-height: 1.1;
+}
+
+</style>
+  <style>
+    .page { max-width: 1320px; margin: 0 auto; padding: 28px 32px 80px; position: relative; z-index: 2; }
+    .masthead { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; gap: 24px; flex-wrap: wrap; }
+    .masthead h1 { font-family: var(--hand); font-size: 56px; font-weight: 700; margin: 0; line-height: 0.9; letter-spacing: -0.02em; }
+    .masthead .sub { font-family: var(--hand); font-size: 16px; color: var(--ink-soft); max-width: 540px; line-height: 1.35; }
+    .masthead .meta { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); text-align: right; letter-spacing: 0.04em; }
+    .top-tabs { margin-bottom: 28px; }
+    .screen-page { display: none; }
+    .screen-page.active { display: block; }
+    .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; align-items: start; justify-items: center; }
+    .annotations { max-width: 840px; margin: 32px auto 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .legend { max-width: 840px; margin: 36px auto 0; padding: 14px 18px; border: 1.5px dashed var(--ink); border-radius: 8px; background: rgba(255,255,255,0.4); font-family: var(--hand); font-size: 13px; line-height: 1.4; }
+    .legend .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 24px; margin-top: 8px; }
+    .legend code { font-family: var(--mono); font-size: 11px; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; }
+  </style>
+</head>
+<body class="paper-tex">
+  <div class="page">
+    <div class="masthead">
+      <div>
+        <h1>Hoard / wireframes</h1>
+        <div class="sub" style="margin-top: 8px;">
+          Mobile-first, low-fi sketches. 4 screens × 3 variations each. Pick what works, mix &amp; match — some are conventional, some are deliberately weird.
+        </div>
+      </div>
+      <div class="meta">REV 01 · MAY 2026<br/>ROUGH SKETCH · NOT FINAL<br/>SCOPE: dashboard · library · upcoming · detail</div>
+    </div>
+
+    <div class="top-tabs" id="top-tabs">
+      <button data-screen="dashboard" class="active">① dashboard</button>
+      <button data-screen="library">② library</button>
+      <button data-screen="upcoming">③ upcoming</button>
+      <button data-screen="detail">④ game detail</button>
+    </div>
+
+    <section class="screen-page active" data-screen-page="dashboard" data-screen-label="01 Dashboard"><div id="dash-mount"></div></section>
+    <section class="screen-page" data-screen-page="library" data-screen-label="02 Library"><div id="lib-mount"></div></section>
+    <section class="screen-page" data-screen-page="upcoming" data-screen-label="03 Upcoming"><div id="up-mount"></div></section>
+    <section class="screen-page" data-screen-page="detail" data-screen-label="04 Game Detail"><div id="det-mount"></div></section>
+
+    <div class="legend">
+      <b>Legend</b>
+      <div class="grid">
+        <div><span class="sk-pill" style="margin-right:6px">ST</span> Steam · <span class="sk-pill">PS</span> PSN · <span class="sk-pill">XB</span> Xbox · <span class="sk-pill">GG</span> GOG · <span class="sk-pill mute">m</span> manual</div>
+        <div>● status dots — red=playing, gold=wishlist, green=done, gray=backlog/hold, black=dropped</div>
+        <div>striped boxes = cover art / image placeholders</div>
+        <div>tab bar: <code>Lib · Soon · Stats · + · Me</code></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel">
+    /* ===== Primitives ===== */
+    function Phone({ children, dark, label, wob }) {
+      return (
+        <div className={`sk-phone ${wob || ''}`} style={{ position: 'relative' }}>
+          <div className={`sk-phone-screen ${dark ? 'dark' : ''}`}>
+            <div className="sk-phone-status"><span>9:41</span><span>HOARD</span><span>▮▮▮</span></div>
+            {children}
+          </div>
+          <div className="sk-phone-bottom" />
+          {label && <div style={{ position:'absolute', top:-22, left:0, fontFamily:'var(--hand)', fontSize:13, fontWeight:500 }}>{label}</div>}
+        </div>
+      );
+    }
+    function PhoneTopBar({ title, dark, right, back }) {
+      const c = dark ? 'var(--paper)' : 'var(--ink)';
+      return (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 12px 8px', color:c, borderBottom:`1px dashed ${c}` }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center', minWidth:0 }}>
+            {back && <span style={{ fontFamily:'var(--hand)', fontSize:18 }}>‹</span>}
+            <span className="sk-h sk-tight" style={{ fontSize:18 }}>{title}</span>
+          </div>
+          <div style={{ display:'flex', gap:6, alignItems:'center' }}>{right}</div>
+        </div>
+      );
+    }
+    function Glyph({ ch, size=18, dark }) {
+      return <div style={{ width:size, height:size, border:`1.3px solid ${dark?'var(--paper)':'var(--ink)'}`, borderRadius:999, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'var(--hand)', fontSize:size*0.62, lineHeight:1 }}>{ch}</div>;
+    }
+    function TabBar({ active='Library', dark }) {
+      const tabs = [['Lib','▦'],['Soon','✦'],['Stats','◐'],['Add','+'],['Me','○']];
+      return (
+        <div className={`sk-tabbar ${dark?'dark':''}`}>
+          {tabs.map(([t,g])=>(
+            <div key={t} className={active===t?'active':''}>
+              <div className="glyph">{g}</div><span>{t}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    function Cover({ w=56, h=80, label, dense, style }) {
+      return <div className={`sk-img ${dense?'dense':''}`} style={{ width:w, height:h, ...style }}>{label && <div className="lbl">{label}</div>}</div>;
+    }
+    function PlatBadge({ p, dark }) {
+      const map = { ST:'ST', PS:'PS', XB:'XB', GG:'GG', MN:'m' };
+      return <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:18, height:14, border:`1px solid ${dark?'var(--paper)':'var(--ink)'}`, borderRadius:3, fontFamily:'var(--mono)', fontSize:8, fontWeight:600, color:dark?'var(--paper)':'var(--ink)' }}>{map[p]||'m'}</span>;
+    }
+    function StatusDot({ s='Playing' }) {
+      const map = { Playing:'var(--accent)', Backlog:'var(--ink-faint)', Wishlist:'var(--accent-3)', Completed:'var(--accent-2)', Dropped:'#1a1612', 'On Hold':'var(--ink-faint)' };
+      return <span style={{ display:'inline-block', width:8, height:8, borderRadius:999, background:map[s]||'var(--ink)', border:'1px solid var(--ink)', flex:'0 0 8px' }}/>;
+    }
+    function Note({ children, color, style }) {
+      return <div className={`sk-note ${color||''}`} style={style}>{children}</div>;
+    }
+
+    /* ===== Dashboard variations ===== */
+    function DashV1() {
+      return (
+        <Phone label="v1 · Cozy stack" wob="wob-1">
+          <PhoneTopBar title="Hoard" right={<><Glyph ch="◐" /><Glyph ch="○" /></>} />
+          <div style={{ padding:'10px 12px', overflow:'auto', flex:1 }}>
+            <div className="sk-faint" style={{ fontSize:11, fontFamily:'var(--mono)' }}>GOOD EVENING, ANDREA</div>
+            <div className="sk-box" style={{ padding:10, marginTop:8, display:'flex', gap:10 }}>
+              <Cover w={70} h={92} label="HOLLOW KNIGHT" />
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:10, fontFamily:'var(--mono)' }}>NOW PLAYING</div>
+                <div className="sk-h" style={{ fontSize:16, lineHeight:1.1 }}>Hollow Knight: Silksong</div>
+                <div className="sk-faint" style={{ fontSize:11, marginTop:2 }}>Last played 2h ago · 14h logged</div>
+                <div className="sk-bar accent" style={{ marginTop:6 }}><i style={{ width:'38%' }}/></div>
+                <div className="sk-faint" style={{ fontSize:10, marginTop:4 }}>~38% complete</div>
+                <div style={{ display:'flex', gap:4, marginTop:6 }}><span className="sk-pill tiny"><PlatBadge p="ST"/> Steam</span></div>
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6, marginTop:12 }}>
+              <div className="sk-stat"><div className="v">428</div><div className="k">games</div></div>
+              <div className="sk-stat"><div className="v">1.2k</div><div className="k">hrs</div></div>
+              <div className="sk-stat"><div className="v">12%</div><div className="k">done</div></div>
+            </div>
+            <div style={{ marginTop:14 }}>
+              <div className="sk-h" style={{ fontSize:14 }}>Wishlist · dropping soon</div>
+              {[['Pragmata','in 18 days','PS'],['Hades II','1.0 · Sep 25','ST'],['Replaced','TBA · Q4','XB']].map(([t,w,p],i)=>(
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px dashed var(--ink)' }}>
+                  <Cover w={28} h={36} dense />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, lineHeight:1.1 }}>{t}</div>
+                    <div className="sk-faint" style={{ fontSize:10 }}>{w}</div>
+                  </div>
+                  <PlatBadge p={p}/><span className="sk-arrow">›</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <TabBar active="Stats"/>
+        </Phone>
+      );
+    }
+    function DashV2() {
+      return (
+        <Phone label="v2 · Data-nerd" wob="wob-2" dark>
+          <PhoneTopBar dark title="THE.HOARD" right={<><Glyph dark ch="?"/><Glyph dark ch="≡"/></>} />
+          <div style={{ padding:'10px 12px', overflow:'auto', flex:1, color:'var(--paper)' }}>
+            <div style={{ fontFamily:'var(--mono)', fontSize:9, opacity:0.7 }}>// SYNCED 4M AGO &nbsp; 4/4 PLATFORMS OK</div>
+            <div style={{ marginTop:8, fontFamily:'var(--mono)' }}>
+              <div style={{ fontSize:38, fontWeight:600, lineHeight:1 }}>1,247.3</div>
+              <div style={{ fontSize:10, opacity:0.7 }}>HOURS · ALL-TIME</div>
+            </div>
+            <div style={{ marginTop:14, fontFamily:'var(--mono)', fontSize:10 }}>
+              <div style={{ opacity:0.7, marginBottom:4 }}>HRS BY PLATFORM</div>
+              <pre className="ascii-bar" style={{ color:'var(--paper)', margin:0 }}>{`STEAM ████████████████░░░░ 812
+PSN   █████░░░░░░░░░░░░░░░ 241
+XBOX  ██░░░░░░░░░░░░░░░░░░ 102
+GOG   █░░░░░░░░░░░░░░░░░░░  92`}</pre>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginTop:14 }}>
+              {[['428','OWNED'],['52','COMPLETED'],['18','PLAYING'],['286','BACKLOG'],['12.1%','COMPLETION'],['$3.4k','EST. SPEND']].map(([v,k],i)=>(
+                <div key={i} style={{ border:'1px solid var(--paper)', padding:6, borderRadius:4 }}>
+                  <div style={{ fontFamily:'var(--mono)', fontSize:16, fontWeight:600 }}>{v}</div>
+                  <div style={{ fontFamily:'var(--mono)', fontSize:9, opacity:0.65 }}>{k}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop:14, fontFamily:'var(--mono)', fontSize:9, opacity:0.7 }}>ACTIVITY · LAST 8 WKS</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(14,1fr)', gap:2, marginTop:4 }}>
+              {Array.from({ length:56 }).map((_,i)=>{
+                const lvl = [0,0,1,0,2,3,1,0,1,2,4,2,3,0,1,2,3,1,0,2,3,4,2,1,0,1,2,3,2,1,0,3,4,3,2,1,0,1,2,3,2,1,3,4,2,1,0,1,2,3,2,1,3,2,1,0][i]||0;
+                const op = [0.08,0.25,0.45,0.7,0.95][lvl];
+                return <div key={i} style={{ aspectRatio:1, background:`rgba(245,239,226,${op})`, border:'0.5px solid rgba(245,239,226,0.3)', borderRadius:1.5 }}/>;
+              })}
+            </div>
+          </div>
+          <TabBar dark active="Stats"/>
+        </Phone>
+      );
+    }
+    function DashV3() {
+      return (
+        <Phone label="v3 · The Hoard (cozy collector)" wob="wob-3">
+          <PhoneTopBar title="The Hoard" right={<><Glyph ch="✦"/></>} />
+          <div style={{ padding:'12px 12px 0', overflow:'auto', flex:1 }}>
+            <div className="sk-faint" style={{ fontFamily:'var(--hand-tight)', fontSize:22, lineHeight:1, marginBottom:6 }}>“428 games. <br/>so far.”</div>
+            <div className="sk-faint" style={{ fontSize:10, fontFamily:'var(--mono)', marginTop:10 }}>YOUR SHELVES</div>
+            <div style={{ display:'flex', gap:2, padding:'8px 0', borderBottom:'2px solid var(--ink)' }}>
+              {Array.from({ length:14 }).map((_,i)=>(
+                <div key={i} style={{ width:11+(i%4)*2, height:56, background:['var(--accent)','var(--accent-2)','var(--accent-3)','var(--ink)','var(--paper-2)'][i%5], border:'1px solid var(--ink)' }}/>
+              ))}
+              <div style={{ flex:1, height:56, display:'flex', alignItems:'flex-end', justifyContent:'flex-end', fontFamily:'var(--hand)', fontSize:11, paddingBottom:4 }}>+414 ›</div>
+            </div>
+            <div className="sk-h" style={{ fontSize:14, marginTop:14 }}>Tonight, you might play…</div>
+            <div style={{ display:'flex', gap:8, marginTop:6, alignItems:'center' }}>
+              <Cover w={60} h={80} label="OUTER WILDS" />
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13 }}>Outer Wilds</div>
+                <div className="sk-faint" style={{ fontSize:10 }}>backlog · 0h · ~22h to beat</div>
+                <div style={{ display:'flex', gap:4, marginTop:4 }}>
+                  <span className="sk-pill tiny accent">pick this</span>
+                  <span className="sk-pill tiny">shuffle</span>
+                </div>
+              </div>
+            </div>
+            <div className="sk-h" style={{ fontSize:14, marginTop:14 }}>Coming to your hoard</div>
+            <div style={{ display:'flex', gap:6, padding:'6px 0', overflowX:'auto' }}>
+              {['MAY 14','JUN 02','SEP 25','OCT 11','TBA'].map((d,i)=>(
+                <div key={i} style={{ flex:'0 0 auto', textAlign:'center' }}>
+                  <Cover w={48} h={64} dense />
+                  <div className="sk-faint" style={{ fontFamily:'var(--mono)', fontSize:8, marginTop:2 }}>{d}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <TabBar active="Stats"/>
+        </Phone>
+      );
+    }
+
+    /* ===== Library variations ===== */
+    function LibV1() {
+      return (
+        <Phone label="v1 · Cover grid" wob="wob-2">
+          <PhoneTopBar title="Library" right={<><Glyph ch="⌕"/><Glyph ch="≡"/></>} />
+          <div style={{ padding:'8px 12px 0' }}>
+            <div className="sk-search">⌕ search 428 games…</div>
+            <div style={{ display:'flex', gap:4, marginTop:8, flexWrap:'wrap' }}>
+              <span className="sk-pill solid">all</span>
+              <span className="sk-pill">playing 18</span>
+              <span className="sk-pill">backlog 286</span>
+              <span className="sk-pill">done 52</span>
+              <span className="sk-pill mute">+filter</span>
+            </div>
+          </div>
+          <div style={{ flex:1, overflow:'auto', padding:'10px 12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8 }}>
+              {[['HOLLOW KNIGHT','ST','Playing'],['DISCO ELYSIUM','GG','Playing'],['BG3','ST','On Hold'],['ELDEN RING','PS','Backlog'],['STARDEW','ST','Completed'],['CONTROL','XB','Backlog'],['HADES','ST','Completed'],['CYBERPUNK','GG','Dropped'],['DEATH STRANDING','PS','Backlog'],['INSCRYPTION','ST','Completed'],['TUNIC','ST','Backlog'],['NORCO','GG','Wishlist']].map(([t,p,s],i)=>(
+                <div key={i} style={{ position:'relative' }}>
+                  <Cover w="100%" h={92} label={t} />
+                  <div style={{ position:'absolute', top:4, left:4, display:'flex', gap:2 }}><PlatBadge p={p}/></div>
+                  <div style={{ position:'absolute', bottom:4, right:4, background:'var(--paper)', border:'1px solid var(--ink)', width:12, height:12, borderRadius:999, display:'flex', alignItems:'center', justifyContent:'center' }}><StatusDot s={s}/></div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <TabBar active="Lib"/>
+        </Phone>
+      );
+    }
+    function LibV2() {
+      return (
+        <Phone label="v2 · Data-dense list" wob="wob-1">
+          <PhoneTopBar title="Library · 428" right={<><Glyph ch="⇅"/><Glyph ch="⌕"/></>} />
+          <div style={{ padding:'6px 12px 0' }}>
+            <div style={{ display:'flex', gap:6, fontFamily:'var(--mono)', fontSize:10 }}>
+              <span>SORT:</span><span style={{ textDecoration:'underline' }}>last played</span>
+              <span className="sk-faint">title</span><span className="sk-faint">hrs</span><span className="sk-faint">added</span>
+            </div>
+            <div className="sk-rule" style={{ marginTop:6 }}/>
+          </div>
+          <div style={{ flex:1, overflow:'auto' }}>
+            {[['Hollow Knight: Silksong','ST','Playing','14.2h','2h ago'],['Disco Elysium','GG','Playing','22.5h','y’day'],['Baldur\u2019s Gate 3','ST','On Hold','98.0h','3w ago'],['Elden Ring','PS','Backlog','—','never'],['Stardew Valley','ST','Completed','146.8h','2mo'],['Control','XB','Backlog','0.4h','6mo'],['Hades','ST','Completed','62.1h','1y'],['Cyberpunk 2077','GG','Dropped','11.2h','2y'],['Inscryption','ST','Completed','9.6h','1y'],['Tunic','ST','Backlog','—','never'],['Norco','GG','Wishlist','—','—']].map(([t,p,s,h,lp],i)=>(
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', borderBottom:'0.5px solid rgba(26,22,18,0.3)', fontSize:12 }}>
+                <StatusDot s={s}/><Cover w={22} h={28} dense />
+                <div style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t}</div>
+                <PlatBadge p={p}/>
+                <div className="sk-faint sk-mono" style={{ fontSize:10, width:36, textAlign:'right' }}>{h}</div>
+                <div className="sk-faint sk-mono" style={{ fontSize:10, width:38, textAlign:'right' }}>{lp}</div>
+              </div>
+            ))}
+          </div>
+          <TabBar active="Lib"/>
+        </Phone>
+      );
+    }
+    function LibV3() {
+      return (
+        <Phone label="v3 · Shelves by status" wob="wob-3">
+          <PhoneTopBar title="Shelves" right={<><Glyph ch="✎"/></>} />
+          <div style={{ flex:1, overflow:'auto', padding:'8px 0' }}>
+            {[['NOW PLAYING','18',['HOLLOW','DISCO','OUTER','RIM','BLAS']],['BACKLOG','286',['ELDEN','TUNIC','CONTRL','DEATH','SOMA','RDR2','ZELDA']],['DONE','52',['HADES','STARDW','UNDRTL','INSCRYP']],['ON HOLD','9',['BG3','BORDER','HALOW']],['DROPPED','11',['CYBR','DESTNY']],['WISHLIST','62',['NORCO','PRAGM','REPLD','HK2']]].map(([title,count,items],i)=>(
+              <div key={i} style={{ padding:'8px 12px 10px', borderBottom:'1.5px solid var(--ink)' }}>
+                <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
+                  <span className="sk-h" style={{ fontSize:14 }}>{title}</span>
+                  <span className="sk-faint sk-mono" style={{ fontSize:10 }}>{count}</span>
+                  <span style={{ flex:1 }}/><span className="sk-faint" style={{ fontSize:11 }}>see all ›</span>
+                </div>
+                <div style={{ display:'flex', gap:6, marginTop:6, overflowX:'auto' }}>
+                  {items.map((g,j)=>(<Cover key={j} w={54} h={72} label={g} style={{ flex:'0 0 auto' }}/>))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <TabBar active="Lib"/>
+        </Phone>
+      );
+    }
+
+    /* ===== Upcoming variations ===== */
+    function UpV1() {
+      return (
+        <Phone label="v1 · Card feed" wob="wob-1">
+          <PhoneTopBar title="Upcoming" right={<><Glyph ch="⌕"/><Glyph ch="≡"/></>} />
+          <div style={{ padding:'6px 12px 0' }}>
+            <div style={{ display:'flex', gap:4, overflowX:'auto', flexWrap:'wrap' }}>
+              <span className="sk-pill solid">all</span>
+              <span className="sk-pill">PS</span><span className="sk-pill">ST</span><span className="sk-pill">XB</span>
+              <span className="sk-pill mute">+ genre</span>
+            </div>
+          </div>
+          <div style={{ flex:1, overflow:'auto', padding:'10px 12px' }}>
+            {[['Pragmata','MAY 14, 2026','Capcom','PS·ST·XB'],['Hades II 1.0','SEP 25, 2026','Supergiant','ST'],['Replaced','TBA Q4','Sad Cat','XB·ST'],['Silksong DLC','OCT 11','Team Cherry','ST·PS']].map(([t,d,s,p],i)=>(
+              <div key={i} className="sk-box" style={{ padding:8, marginBottom:10 }}>
+                <div style={{ display:'flex', gap:8 }}>
+                  <Cover w={64} h={84} label={t.toUpperCase()} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div className="sk-mono sk-faint" style={{ fontSize:9 }}>{d}</div>
+                    <div className="sk-h" style={{ fontSize:14, lineHeight:1.1 }}>{t}</div>
+                    <div className="sk-faint" style={{ fontSize:10 }}>{s}</div>
+                    <div style={{ display:'flex', gap:4, marginTop:6, flexWrap:'wrap' }}>
+                      {p.split('·').map(x=><PlatBadge key={x} p={x.trim()}/>)}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                  <span className="sk-pill accent">+ wishlist</span>
+                  <span className="sk-pill">remind</span>
+                  <span style={{ flex:1 }}/>
+                  <span className="sk-faint" style={{ fontSize:11 }}>details ›</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <TabBar active="Soon"/>
+        </Phone>
+      );
+    }
+    function UpV2() {
+      return (
+        <Phone label="v2 · Calendar timeline" wob="wob-2">
+          <PhoneTopBar title="Releases" right={<><Glyph ch="◐"/><Glyph ch="⌕"/></>} />
+          <div style={{ padding:'4px 12px', display:'flex', gap:6, fontFamily:'var(--mono)', fontSize:10 }}>
+            {['MAY','JUN','JUL','AUG','SEP','OCT','TBA'].map((m,i)=>(
+              <span key={m} style={{ padding:'2px 6px', background:i===0?'var(--ink)':'transparent', color:i===0?'var(--paper)':'var(--ink)', borderRadius:3 }}>{m}</span>
+            ))}
+          </div>
+          <div className="sk-rule" style={{ margin:'4px 12px' }}/>
+          <div style={{ flex:1, overflow:'auto', padding:'6px 0' }}>
+            {[['MAY','14','THU','Pragmata','PS·ST·XB','★ wishlisted'],['MAY','21','THU','Crimson Desert','PS·ST',''],['JUN','02','TUE','Mina the Hollower','ST·PS',''],['JUN','11','THU','Death Stranding 2','PS','★ wishlisted'],['SEP','25','FRI','Hades II 1.0','ST','★ wishlisted'],['OCT','11','SAT','Silksong DLC','ST·PS',''],['TBA','—','—','Replaced','XB·ST','']].map(([m,d,dow,t,p,w],i)=>(
+              <div key={i} style={{ display:'flex', gap:10, padding:'6px 12px', alignItems:'center' }}>
+                <div style={{ width:36, textAlign:'center' }}>
+                  <div style={{ fontFamily:'var(--mono)', fontSize:9, opacity:0.6 }}>{m}</div>
+                  <div style={{ fontFamily:'var(--hand)', fontWeight:700, fontSize:20, lineHeight:1 }}>{d}</div>
+                  <div style={{ fontFamily:'var(--mono)', fontSize:8, opacity:0.5 }}>{dow}</div>
+                </div>
+                <Cover w={32} h={42} dense />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, lineHeight:1.1 }}>{t}</div>
+                  <div style={{ display:'flex', gap:3, marginTop:3 }}>
+                    {p.split('·').map(x=><PlatBadge key={x} p={x.trim()}/>)}
+                  </div>
+                  {w && <div style={{ fontSize:10, color:'var(--accent-3)', marginTop:2 }}>{w}</div>}
+                </div>
+                <span className="sk-arrow">+</span>
+              </div>
+            ))}
+          </div>
+          <TabBar active="Soon"/>
+        </Phone>
+      );
+    }
+    function UpV3() {
+      return (
+        <Phone label="v3 · Editorial (wild)" wob="wob-3">
+          <PhoneTopBar title="On the horizon" right={<><Glyph ch="✎"/></>} />
+          <div style={{ flex:1, overflow:'auto' }}>
+            <div style={{ position:'relative' }}>
+              <div className="sk-img dense" style={{ width:'100%', height:160, borderLeft:0, borderRight:0, borderTop:0 }}>
+                <div className="lbl">HERO ART · PRAGMATA</div>
+              </div>
+              <div style={{ padding:'8px 12px' }}>
+                <div className="sk-mono" style={{ fontSize:9, color:'var(--accent)' }}>★ FEATURED · MAY 14</div>
+                <div className="sk-h" style={{ fontSize:22, lineHeight:1, margin:'4px 0' }}>Pragmata</div>
+                <div className="sk-faint" style={{ fontSize:12, lineHeight:1.3 }}>Capcom’s long-delayed sci-fi puzzle-shooter finally lands. A man, a girl, the moon.</div>
+                <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                  <span className="sk-pill accent">+ wishlist</span>
+                  <span className="sk-pill">▷ trailer</span>
+                </div>
+              </div>
+            </div>
+            <div className="sk-rule" style={{ margin:'0 12px' }}/>
+            <div style={{ padding:'10px 12px' }}>
+              <div className="sk-h" style={{ fontSize:14 }}>Also this month</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:8 }}>
+                {[['Crimson Desert','MAY 21'],['Mina Hollower','JUN 02'],['DS2','JUN 11'],['Hades II','SEP 25']].map(([t,d],i)=>(
+                  <div key={i}>
+                    <Cover w="100%" h={90} label={t.toUpperCase()} />
+                    <div style={{ fontSize:11, marginTop:3, lineHeight:1.1 }}>{t}</div>
+                    <div className="sk-faint sk-mono" style={{ fontSize:9 }}>{d}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <TabBar active="Soon"/>
+        </Phone>
+      );
+    }
+
+    /* ===== Detail variations ===== */
+    function DetV1() {
+      return (
+        <Phone label="v1 · Hero scroll" wob="wob-1">
+          <PhoneTopBar back title="" right={<><Glyph ch="✎"/><Glyph ch="≡"/></>} />
+          <div style={{ flex:1, overflow:'auto' }}>
+            <div style={{ display:'flex', justifyContent:'center', padding:'4px 0 12px' }}>
+              <Cover w={140} h={186} label="HOLLOW KNIGHT: SILKSONG" />
+            </div>
+            <div style={{ padding:'0 14px' }}>
+              <div className="sk-h" style={{ fontSize:20, lineHeight:1.1, textAlign:'center' }}>Hollow Knight: Silksong</div>
+              <div className="sk-faint" style={{ fontSize:11, textAlign:'center', marginTop:2 }}>Team Cherry · 2025 · Metroidvania</div>
+              <div style={{ display:'flex', gap:6, justifyContent:'center', marginTop:10, flexWrap:'wrap' }}>
+                <span className="sk-pill accent">● Playing</span>
+                <span className="sk-pill">change ▾</span>
+              </div>
+              <div className="sk-box" style={{ padding:8, marginTop:12 }}>
+                <div className="sk-mono sk-faint" style={{ fontSize:9 }}>YOU OWN ON</div>
+                <div style={{ display:'flex', gap:6, marginTop:4, alignItems:'center' }}>
+                  <PlatBadge p="ST"/> <span style={{ fontSize:12 }}>Steam · 14.2h</span>
+                </div>
+                <div style={{ display:'flex', gap:6, marginTop:3, alignItems:'center' }}>
+                  <PlatBadge p="PS"/> <span style={{ fontSize:12 }}>PSN · 2.1h</span>
+                </div>
+              </div>
+              <div style={{ marginTop:12 }}>
+                <div className="sk-h" style={{ fontSize:13 }}>Progress</div>
+                <div className="sk-bar accent" style={{ marginTop:4 }}><i style={{ width:'38%' }}/></div>
+                <div className="sk-faint" style={{ fontSize:10, marginTop:3 }}>16.3h · ~38% · last played 2h ago</div>
+              </div>
+              <div style={{ marginTop:12 }}>
+                <div className="sk-h" style={{ fontSize:13 }}>About</div>
+                <div className="sk-faint" style={{ fontSize:11, lineHeight:1.4, marginTop:4 }}>Lorem ipsum description from IGDB. The sequel-turned-standalone follows Hornet through a haunted kingdom. Placeholder copy stands in here.</div>
+              </div>
+            </div>
+          </div>
+          <TabBar active="Lib"/>
+        </Phone>
+      );
+    }
+    function DetV2() {
+      return (
+        <Phone label="v2 · Index card" wob="wob-2">
+          <PhoneTopBar back title="Detail" right={<><Glyph ch="≡"/></>} />
+          <div style={{ flex:1, overflow:'auto', padding:'8px 12px' }}>
+            <div className="sk-box thick" style={{ padding:10, background:'#fbf8ee', backgroundImage:'repeating-linear-gradient(0deg, transparent 0 21px, rgba(26,22,18,0.18) 21px 22px)' }}>
+              <div style={{ display:'flex', gap:8 }}>
+                <Cover w={64} h={86} label="DISCO ELYSIUM"/>
+                <div style={{ flex:1, paddingTop:2 }}>
+                  <div className="sk-h sk-tight" style={{ fontSize:16 }}>Disco Elysium</div>
+                  <div className="sk-faint" style={{ fontSize:10 }}>ZA/UM · 2019</div>
+                  <div className="sk-faint" style={{ fontSize:10, marginTop:2 }}>RPG · Detective</div>
+                  <div style={{ display:'flex', gap:4, marginTop:6 }}>
+                    <PlatBadge p="GG"/><PlatBadge p="ST"/>
+                  </div>
+                </div>
+              </div>
+              <div className="sk-rule dashed" style={{ margin:'10px 0' }}/>
+              <div style={{ fontFamily:'var(--hand)', fontSize:13 }}>
+                <div>status:&nbsp;<u>● playing</u> &nbsp;<span className="sk-faint" style={{ fontSize:11 }}>(tap to change)</span></div>
+                <div>playtime:&nbsp;<b>22.5h</b> <span className="sk-faint" style={{ fontSize:11 }}>· last 1d ago</span></div>
+                <div>started:&nbsp;mar 14</div>
+                <div>my rating:&nbsp; ★★★★☆</div>
+                <div>tags:&nbsp;<i>weird, talky, harrowing</i></div>
+              </div>
+              <div className="sk-rule dashed" style={{ margin:'10px 0' }}/>
+              <div style={{ fontFamily:'var(--hand)', fontSize:12, lineHeight:1.35 }}>
+                "An open world role playing game. You're a detective with a unique skill system at your disposal..." <span className="sk-faint">— IGDB</span>
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:6, marginTop:12 }}>
+              <span className="sk-pill">log session</span>
+              <span className="sk-pill">add note</span>
+              <span className="sk-pill mute">archive</span>
+            </div>
+          </div>
+          <TabBar active="Lib"/>
+        </Phone>
+      );
+    }
+    function DetV3() {
+      return (
+        <Phone label="v3 · Receipt (wild)" wob="wob-3" dark>
+          <PhoneTopBar dark back title="" right={<><Glyph dark ch="≡"/></>} />
+          <div style={{ flex:1, overflow:'auto', padding:'6px 14px', color:'var(--paper)', fontFamily:'var(--mono)', fontSize:11, lineHeight:1.5 }}>
+            <div style={{ textAlign:'center', marginBottom:4 }}>
+              <div style={{ fontSize:14, letterSpacing:'0.15em' }}>=== HOARD ===</div>
+              <div style={{ opacity:0.6, fontSize:9 }}>game receipt · 2026-05-01</div>
+            </div>
+            <pre style={{ margin:0, fontFamily:'inherit', fontSize:11, whiteSpace:'pre-wrap' }}>{`──────────────────────────────
+TITLE   Elden Ring
+DEV     FromSoftware
+YEAR    2022
+GENRE   Action RPG
+──────────────────────────────
+STATUS    Backlog → [Playing?]
+RATING    — / ★★★★★
+──────────────────────────────
+OWNED ON
+  ST  Steam .......... 0.0 h
+  PS  PSN ............ 4.2 h
+──────────────────────────────
+PLAYTIME ........... 4.2 h
+HLTB main .......... 60h
+% complete .......... ~7%
+last played ........ 11mo ago
+──────────────────────────────`}</pre>
+            <div style={{ display:'flex', justifyContent:'center', gap:12, marginTop:4 }}>
+              <Cover w={70} h={94} label="ELDEN RING" />
+            </div>
+            <pre style={{ margin:'8px 0 0', fontFamily:'inherit', fontSize:11, whiteSpace:'pre-wrap' }}>{`NOTES
+> got walloped by margit.
+> try again w/ str build??
+──────────────────────────────`}</pre>
+            <div style={{ display:'flex', gap:4, justifyContent:'center', marginTop:8, flexWrap:'wrap' }}>
+              <span className="sk-pill accent" style={{ borderColor:'var(--accent)' }}>resume</span>
+              <span className="sk-pill" style={{ color:'var(--paper)', borderColor:'var(--paper)' }}>change status</span>
+              <span className="sk-pill mute" style={{ borderColor:'rgba(245,239,226,0.5)', color:'rgba(245,239,226,0.7)' }}>+ note</span>
+            </div>
+            <div style={{ textAlign:'center', marginTop:10, fontSize:9, opacity:0.5 }}>** thank u for hoarding **</div>
+          </div>
+          <TabBar dark active="Lib"/>
+        </Phone>
+      );
+    }
+
+    /* ===== App ===== */
+    function Annotations({ items }) {
+      return (
+        <div className="annotations">
+          {items.map((it, i) => (
+            <Note key={i} color={it.color} style={{ transform:`rotate(${(i%3-1)*0.6}deg)`, justifySelf: i%2 ? 'end' : 'start' }}>
+              <b>{it.t}</b><br/>{it.b}
+            </Note>
+          ))}
+        </div>
+      );
+    }
+    function Row({ children }) { return <div className="row">{children}</div>; }
+    function Screen({ V1, V2, V3, anno, showAnno }) {
+      return (
+        <>
+          <Row><V1/><V2/><V3/></Row>
+          {showAnno && anno && <Annotations items={anno}/>}
+        </>
+      );
+    }
+
+    function App() {
+      const [showAnno, setShowAnno] = React.useState(true);
+      const [wobble, setWobble] = React.useState(true);
+
+      React.useEffect(() => {
+        document.querySelectorAll('#top-tabs button').forEach(b => {
+          b.onclick = () => {
+            const s = b.dataset.screen;
+            document.querySelectorAll('#top-tabs button').forEach(x => x.classList.toggle('active', x === b));
+            document.querySelectorAll('.screen-page').forEach(p => p.classList.toggle('active', p.dataset.screenPage === s));
+          };
+        });
+      }, []);
+
+      React.useEffect(() => {
+        document.querySelectorAll('.sk-phone').forEach(el => {
+          el.style.transform = wobble ? '' : 'none';
+        });
+      }, [wobble, showAnno]);
+
+      const dashAnno = [
+        { t:'NOW PLAYING hero', b:'Big card pulls them back into a session.', color:'' },
+        { t:'Real terminal energy', b:'Mono + ascii bars feel like a power-user dashboard.', color:'green' },
+        { t:'Wild card', b:'"Tonight you might play..." pick from backlog. Could be the brand.', color:'pink' },
+      ];
+      const libAnno = [
+        { t:'Visual-first', b:'Covers do the work. Status dot in corner.', color:'' },
+        { t:'Pure utility', b:'Sortable cols. Best for big libraries (>500).', color:'green' },
+        { t:'Cozy shelves', b:'Each status is its own horizontal shelf — Goodreads-y.', color:'pink' },
+      ];
+      const upAnno = [
+        { t:'Conventional feed', b:'One card per release. Easy + safe.', color:'' },
+        { t:'Calendar list', b:'Date column anchors everything; great for ★ wishlisted.', color:'green' },
+        { t:'Editorial hero', b:'One featured release each session. Magazine-y, browsable.', color:'pink' },
+      ];
+      const detAnno = [
+        { t:'Standard', b:'Hero cover, status, owns-on, progress, about.', color:'' },
+        { t:'Index card', b:'Notebook metaphor — fits "Hoard" personality.', color:'green' },
+        { t:'Receipt (wild)', b:'Stat sheet as a thermal-printer receipt. Shareable / nostalgic.', color:'pink' },
+      ];
+
+      return (
+        <>
+          {ReactDOM.createPortal(<Screen V1={DashV1} V2={DashV2} V3={DashV3} anno={dashAnno} showAnno={showAnno}/>, document.getElementById('dash-mount'))}
+          {ReactDOM.createPortal(<Screen V1={LibV1} V2={LibV2} V3={LibV3} anno={libAnno} showAnno={showAnno}/>, document.getElementById('lib-mount'))}
+          {ReactDOM.createPortal(<Screen V1={UpV1} V2={UpV2} V3={UpV3} anno={upAnno} showAnno={showAnno}/>, document.getElementById('up-mount'))}
+          {ReactDOM.createPortal(<Screen V1={DetV1} V2={DetV2} V3={DetV3} anno={detAnno} showAnno={showAnno}/>, document.getElementById('det-mount'))}
+
+          {/* Tweaks panel — minimal hand-rolled (host protocol) */}
+          <TweaksMini showAnno={showAnno} setShowAnno={setShowAnno} wobble={wobble} setWobble={setWobble}/>
+        </>
+      );
+    }
+
+    /* Minimal Tweaks panel inline (host protocol) */
+    function TweaksMini({ showAnno, setShowAnno, wobble, setWobble }) {
+      const [active, setActive] = React.useState(false);
+      React.useEffect(() => {
+        const onMsg = (e) => {
+          const d = e.data || {};
+          if (d.type === '__activate_edit_mode') setActive(true);
+          if (d.type === '__deactivate_edit_mode') setActive(false);
+        };
+        window.addEventListener('message', onMsg);
+        window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+        return () => window.removeEventListener('message', onMsg);
+      }, []);
+      if (!active) return null;
+      const close = () => { setActive(false); window.parent.postMessage({ type:'__edit_mode_dismissed' }, '*'); };
+      const row = { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', fontFamily:'var(--hand)', fontSize:13 };
+      return (
+        <div style={{
+          position:'fixed', right:16, bottom:16, zIndex:9999,
+          width:240, background:'var(--paper)', border:'1.5px solid var(--ink)',
+          borderRadius:10, padding:'10px 14px',
+          boxShadow:'4px 5px 0 rgba(26,22,18,0.18)',
+          fontFamily:'var(--hand)',
+        }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px dashed var(--ink)', paddingBottom:6, marginBottom:4 }}>
+            <b style={{ fontSize:14 }}>Tweaks</b>
+            <button onClick={close} style={{ border:'none', background:'transparent', cursor:'pointer', fontSize:16 }}>×</button>
+          </div>
+          <div style={row}>
+            <span>annotations</span>
+            <input type="checkbox" checked={showAnno} onChange={e=>setShowAnno(e.target.checked)}/>
+          </div>
+          <div style={row}>
+            <span>wobble (tilt)</span>
+            <input type="checkbox" checked={wobble} onChange={e=>setWobble(e.target.checked)}/>
+          </div>
+          <div className="sk-faint" style={{ fontSize:11, marginTop:6, lineHeight:1.3 }}>
+            Use the top tabs to switch screens.
+          </div>
+        </div>
+      );
+    }
+
+    const mount = document.createElement('div');
+    document.body.appendChild(mount);
+    ReactDOM.createRoot(mount).render(<App/>);
+  </script>
+</body>
+</html>

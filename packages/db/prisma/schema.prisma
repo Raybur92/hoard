@@ -1,0 +1,132 @@
+// Hoard — Prisma schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GameStatus {
+  Playing
+  Backlog
+  Completed
+  OnHold
+  Dropped
+  Wishlist
+}
+
+enum PlatformCode {
+  ST
+  PS
+  XB
+  GG
+  NT
+  EP
+}
+
+enum SyncStatus {
+  ok
+  syncing
+  error
+  stale
+  manual
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?
+  googleId  String?  @unique
+  steamId   String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  platforms  Platform[]
+  userGames  UserGame[]
+  wishlists  WishlistRelease[]
+}
+
+model Platform {
+  id          String       @id @default(cuid())
+  userId      String
+  code        PlatformCode
+  credentials Json?
+  syncable    Boolean      @default(true)
+  lastSyncAt  DateTime?
+  syncStatus  SyncStatus   @default(manual)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, code])
+}
+
+model Game {
+  id          String   @id @default(cuid())
+  igdbId      Int      @unique
+  title       String
+  developer   String?
+  releaseYear Int?
+  genres      String[]
+  coverUrl    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userGames UserGame[]
+  hltbData  HltbData?
+}
+
+model UserGame {
+  id                 String     @id @default(cuid())
+  userId             String
+  gameId             String
+  status             GameStatus @default(Backlog)
+  playtimeByPlatform Json       @default("{}")
+  lastPlayedAt       DateTime?
+  notes              String?
+  rating             Int?
+  addedAt            DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id])
+
+  @@unique([userId, gameId])
+}
+
+model HltbData {
+  id             String   @id @default(cuid())
+  gameId         String   @unique
+  mainStory      Int?
+  mainExtras     Int?
+  completionist  Int?
+  fetchedAt      DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id])
+}
+
+model WishlistRelease {
+  id                  String   @id @default(cuid())
+  igdbId              Int
+  title               String
+  developer           String?
+  releaseDate         DateTime?
+  releaseDateCategory String   @default("TBA")
+  platforms           String[]
+  genres              String[]
+  userId              String
+  hype                Int?
+  synopsis            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, igdbId])
+}
