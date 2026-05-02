@@ -31,14 +31,14 @@ Breakpoint: `≥ 1024px` → desktop (sidebar + topbar). `< 1024px` → mobile (
 **Goal:** A deployable skeleton. Nothing works end-to-end yet, but the plumbing is in place.
 
 **Deliverables:**
-- [ ] Monorepo initialized with npm workspaces
-- [ ] `apps/web`: Vite + React + TypeScript, blank app, configured for Vercel
-- [ ] `apps/api`: Express + TypeScript, `GET /health → { status: 'ok', ts: Date }`, configured for Railway
-- [ ] `packages/db`: Prisma initialized, connected to Supabase, empty initial migration runs
-- [ ] `packages/types`: shared `GameStatus`, `PlatformCode`, `UserGame`, `Game` interfaces
-- [ ] Environment variables documented in `docs/ENV.md`
-- [ ] GitHub Actions CI: lint + typecheck on every PR
-- [ ] `.env.example` files in `apps/web` and `apps/api`
+- [x] Monorepo initialized with npm workspaces
+- [x] `apps/web`: Vite + React + TypeScript, blank app, configured for Vercel
+- [x] `apps/api`: Express + TypeScript, `GET /health → { status: 'ok', ts: Date }`, configured for Railway
+- [x] `packages/db`: Prisma initialized, schema defined, pending Supabase connection + first migration
+- [x] `packages/types`: shared `GameStatus`, `PlatformCode`, `UserGame`, `Game` interfaces
+- [x] Environment variables documented in `docs/ENV.md`
+- [x] GitHub Actions CI: lint + typecheck on every PR
+- [x] `.env.example` files in `apps/web` and `apps/api`
 
 **Success Criteria:**
 - `GET /health` returns 200 from the Railway production URL
@@ -380,7 +380,7 @@ Frontend hardening:
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0 — Infra Setup | Not started | |
+| 0 — Infra Setup | Done | Repo at github.com/Raybur92/hoard; Prisma schema written, first migration pending Supabase credentials |
 | 1 — Design System | Not started | |
 | 2 — Static Screens | Not started | |
 | 3 — Backend API | Not started | |
