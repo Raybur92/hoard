@@ -13,7 +13,8 @@
     "typecheck": "tsc -b apps/web apps/api packages/types packages/db",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace=apps/web"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

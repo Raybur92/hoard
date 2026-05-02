@@ -54,6 +54,10 @@ export interface UserGame {
   updatedAt: string;
 }
 
+export interface UserGameDetail extends UserGame {
+  hltb: HltbData | null;
+}
+
 export interface HltbData {
   id: string;
   gameId: string;
@@ -77,6 +81,13 @@ export interface WishlistRelease {
   synopsis: string | null;
 }
 
+export interface PlatformStat {
+  code: string;
+  label: string;
+  minutes: number;
+  pct: number;
+}
+
 export interface DashboardStats {
   totalGames: number;
   playingCount: number;
@@ -86,17 +97,41 @@ export interface DashboardStats {
   droppedCount: number;
   wishlistCount: number;
   totalPlaytimeMinutes: number;
-}
-
-export interface BacklogPick {
-  userGame: UserGame;
-  hltb: HltbData | null;
+  completionPct: number;
+  weeklyAdded: number;
+  playtimeByPlatform: PlatformStat[];
+  genres: { name: string; count: number }[];
 }
 
 export interface DashboardResponse {
   stats: DashboardStats;
-  nowPlaying: UserGame[];
-  recentActivity: UserGame[];
+  nowPlaying: UserGameDetail[];
   wishlistCountdown: WishlistRelease[];
-  backlogPick: BacklogPick | null;
+  backlogPick: UserGameDetail | null;
+  backlogItems: UserGameDetail[];
+  platforms: Platform[];
+}
+
+export interface GameListResponse {
+  games: UserGameDetail[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface PatchGameBody {
+  status?: GameStatus;
+  notes?: string | null;
+  rating?: number | null;
+}
+
+export interface StatsResponse {
+  totalGames: number;
+  completedGames: number;
+  completionPct: number;
+  totalPlaytimeMinutes: number;
+  playtimeByPlatform: PlatformStat[];
+  genreBreakdown: { name: string; count: number }[];
+  shelfCounts: Partial<Record<GameStatus, number>>;
 }

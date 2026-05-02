@@ -40,7 +40,8 @@ npx prisma db seed            # seed with mock data
 | Design source of truth | `project/` — HTML/CSS/JS prototypes |
 | Design system CSS | `project/styles.css` → port to `apps/web/src/styles/` |
 | Shared primitives (design) | `project/primitives.jsx` |
-| Screen components (design) | `project/screens-dashboard.jsx`, `screens-library.jsx`, `screens-upcoming.jsx` |
+| Screen components (design, phases 1–4) | `project/Hoard.html` — full hi-fi mockup (dashboard, library, upcoming, game detail, settings, platform connect, PSN guided flow, delete account) |
+| Earlier screen sketches | `project/screens-dashboard.jsx`, `screens-library.jsx`, `screens-upcoming.jsx` |
 | CSS tokens | `apps/web/src/styles/tokens.css` |
 | Global CSS + utilities | `apps/web/src/styles/global.css` |
 | Shared TypeScript types | `packages/types/` |
@@ -59,7 +60,7 @@ These are non-negotiable. Do not deviate without explicit instruction.
 2. **No Tailwind.** The design system is custom CSS variables + utility classes. All tokens live in `tokens.css`. Extend that file, never work around it.
 3. **No `any` in TypeScript.** Strict mode is on. All props and return types must be explicit. All interfaces must be exported from `packages/types`.
 4. **No localStorage for tokens.** JWT lives in HTTP-only cookies only. Never expose auth tokens to JavaScript.
-5. **Settings screen is blocked.** Do not implement `/settings` until the design is delivered. The API routes and backend logic for platform connections can be built, but not the screen.
+5. **Login screen has no design file.** Implement `/login` using design system conventions (same tokens, fonts, and utility classes as every other screen). No external reference — match the terminal aesthetic.
 6. **Nintendo and Epic are manual-only.** No OAuth, no sync endpoints for these platforms. Games are added via IGDB search with a `platformLabel` string. Do not build scrapers.
 7. **Never test against the production database.** Integration tests use the `hoard-test` Supabase project exclusively. The test DB is seeded fresh per run.
 8. **HLTB failures must be silent.** If `howlongtobeat` throws or returns nothing, store `null` and show "—" in the UI. Never surface an error to the user for HLTB.
@@ -139,8 +140,8 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: Phase 2 — Frontend Shell (Static Screens + Routing)**
+**Active: Phase 4 — Auth & Platform Integrations**
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
-**Settings screen (Phase 4):** blocked until design is delivered by the owner.
+**Settings screen (Phase 4):** design is now available in `project/Hoard.html` (sections 05–11). Fully unblocked — implement Account, Platforms, Preferences, PSN guided flow, and Danger Zone screens.

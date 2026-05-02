@@ -94,10 +94,11 @@ hoard/
 ├── project/                  # Design source — HTML/CSS/JS prototypes (read-only)
 │   ├── styles.css            # Design system CSS
 │   ├── primitives.jsx        # Shared React primitives (design reference)
-│   ├── screens-dashboard.jsx
+│   ├── screens-dashboard.jsx # Earlier screen sketches (dashboard, library, upcoming)
 │   ├── screens-library.jsx
 │   ├── screens-upcoming.jsx
-│   └── Hoard.html            # Full hi-fi mockup (includes game detail screen)
+│   └── Hoard.html            # Full hi-fi mockup — ALL screens including settings, platform
+│                             # connect, PSN guided flow, delete account (sections 01–11)
 ├── CLAUDE.md                 # Claude Code operational guide
 ├── AGENT.md                  # This file
 └── package.json              # npm workspaces root
@@ -114,12 +115,12 @@ hoard/
 | `/library/:status` | Library filtered | Same view, filtered to one status shelf |
 | `/upcoming` | Upcoming releases | Featured countdown, timeline, month tabs, agenda list |
 | `/game/:id` | Game detail | Receipt-style record, HLTB block, per-platform playtime, notes |
-| `/settings` | Settings / platforms | Platform cards, connect/disconnect, sync status — **blocked pending design** |
-| `/login` | Auth | Email/password form + Google + Steam login |
+| `/settings` | Settings / platforms | Account, Platforms, Preferences, Danger Zone — design in `project/Hoard.html` sections 05–11 |
+| `/login` | Auth | Email/password + Google + Steam — no design file; implement with design system conventions |
 
 Breakpoint: `≥ 1024px` renders desktop layout (sidebar + topbar). Below renders mobile layout (status bar + tab bar).
 
-Design components exist for all screens in `project/`. `/settings` and `/login` are not yet designed — they will be added before Phase 4 implementation.
+Design components exist for all screens in `project/Hoard.html`. Settings and platform connect screens (sections 05–11) were added and Phase 4 is now fully unblocked. The `/login` screen has no design file — implement using design system conventions.
 
 ---
 
@@ -170,7 +171,7 @@ WishlistRelease
 All of these are closed and final for v1. Do not re-open them.
 
 **1. Settings screen**
-In scope for v1. Design will be delivered before Phase 4 starts. Layout: one card per platform showing connected/disconnected state, last sync time, connect/disconnect action. PSN card has inline NPSSO retrieval instructions — not a link to external docs, actual numbered steps with code-formatted cookie names.
+In scope for v1. Design delivered in `project/Hoard.html` (sections 05–11). Layout: `SettingsNav` sidebar with 8 sections (Account, Platforms, Library, Notifications, Appearance, Privacy, Data export, Danger zone). Platforms section uses a dedicated per-platform page (Variant B — `ConnectDedicatedDesktop`) with tabs (auth / scope / sync / log) and a stats sidebar. PSN NPSSO flow is a 5-step guided walkthrough (`GuidedFlowDesktop`) with a live browser-mock showing the user exactly what to copy.
 
 **2. Nintendo / Epic platforms**
 No sync — no viable public API exists and none is coming. These platforms appear as selectable labels only. Games are added manually: user searches IGDB, picks the game, assigns `platformLabel: "Nintendo"` or `"Epic"`, chooses a status. No CSV import.

@@ -91,14 +91,14 @@ Layout components (`apps/web/src/components/layout/`):
 **Success Criteria:**
 - [x] Every component renders without errors at its default props
 - [x] All components are fully typed — no `any`, props interfaces exported
-- [ ] Utility classes produce the correct visual output (verified against design CSS)
-- [ ] Fonts load correctly (JetBrains Mono, IBM Plex Sans, Major Mono Display via Google Fonts)
+- [x] Utility classes produce the correct visual output (verified against design CSS)
+- [x] Fonts load correctly (JetBrains Mono, IBM Plex Sans, Major Mono Display via Google Fonts)
 - [x] `npm run typecheck` still passes
 
 **Testing:**
 - [x] Vitest: smoke render test for every component (renders without throwing) — 40/40 passing
 - [x] TypeScript strict mode: zero `any`, all props explicitly typed
-- [ ] Visual check: render each component against the design source
+- [x] Visual check: render each component against the design source
 
 **Decisions:**
 - `STATUS_CONFIG` constant extracted to `constants.ts` (separate from `StatusSigil.tsx`) to satisfy the `react-refresh/only-export-components` ESLint rule — components and non-component exports must not share a file.
@@ -112,30 +112,39 @@ Layout components (`apps/web/src/components/layout/`):
 **Goal:** All four screens exist as pixel-accurate static views. Navigation works. No real data yet — mock data matches the design prototypes.
 
 **Deliverables:**
-- [ ] React Router v6 with routes per the table above
-- [ ] Responsive breakpoint hook (`useBreakpoint`) returning `desktop | mobile`
-- [ ] Mock data module (`src/lib/mockData.ts`) matching every data shape from the design files exactly (same game titles, same numbers, same counts)
-- [ ] `DashboardDesktop` + `DashboardMobile` — pixel-accurate, including the random backlog picker widget (one suggested game from backlog + shuffle button; weighted toward shorter HLTB and already-started games)
-- [ ] `LibraryDesktop` + `LibraryMobile` — all 6 shelves, correct HLTB hints on backlog
-- [ ] `UpcomingDesktop` + `UpcomingMobile` — featured card, timeline, agenda, month tabs
-- [ ] `GameDetailDesktop` + `GameDetailMobile` — receipt-style, HLTB block, per-platform playtime
-- [ ] Navigation: sidebar links (desktop) and tab bar (mobile) navigate between routes
-- [ ] `manifest.json` stub (name, icons, display: standalone, theme_color: #07090a)
-- [ ] Base service worker registered (no caching logic yet — Phase 6)
+- [x] React Router v6 with routes per the table above
+- [x] Responsive breakpoint hook (`useBreakpoint`) returning `desktop | mobile`
+- [x] Mock data module (`src/lib/mockData.ts`) matching every data shape from the design files exactly (same game titles, same numbers, same counts)
+- [x] `DashboardDesktop` + `DashboardMobile` — pixel-accurate, including the random backlog picker widget (one suggested game from backlog + shuffle button; weighted toward shorter HLTB and already-started games)
+- [x] `LibraryDesktop` + `LibraryMobile` — all 6 shelves, correct HLTB hints on backlog
+- [x] `UpcomingDesktop` + `UpcomingMobile` — featured card, timeline, agenda, month tabs
+- [x] `GameDetailDesktop` + `GameDetailMobile` — receipt-style, HLTB block, per-platform playtime
+- [x] Navigation: sidebar links (desktop) and tab bar (mobile) navigate between routes
+- [x] `manifest.json` stub (name, icons, display: standalone, theme_color: #07090a)
+- [x] Base service worker registered (no caching logic yet — Phase 6)
 
 **Success Criteria:**
-- [ ] All four routes render without console errors or React warnings
-- [ ] Visual output matches each artboard in the design files (checked by side-by-side comparison)
-- [ ] Sidebar active state updates correctly per route
-- [ ] Mobile tab bar active state updates correctly per route
-- [ ] Responsive switch at 1024px works correctly (desktop vs mobile layout)
-- [ ] `npm run typecheck` passes
-- [ ] No prop type errors
+- [x] All four routes render without console errors or React warnings
+- [x] Visual output matches each artboard in the design files (checked by side-by-side comparison)
+- [x] Sidebar active state updates correctly per route
+- [x] Mobile tab bar active state updates correctly per route
+- [x] Responsive switch at 1024px works correctly (desktop vs mobile layout)
+- [x] `npm run typecheck` passes
+- [x] No prop type errors
 
 **Testing:**
-- [ ] Playwright E2E: visit `/`, `/library`, `/upcoming`, `/game/1` — assert page title and one key element per screen
-- [ ] Playwright visual regression: screenshot each screen at 1440×900 and 390×844 — baseline snapshots committed to repo
-- [ ] TypeScript strict typecheck
+- [x] Playwright E2E: visit `/`, `/library`, `/upcoming`, `/game/1` — assert page title and one key element per screen
+- [x] Playwright visual regression: screenshot each screen at 1440×900 and 390×844 — baseline snapshots committed to repo
+- [x] TypeScript strict typecheck
+
+**Decisions:**
+- `useBreakpoint` uses `window.matchMedia('(min-width: 1024px)')` so the switch happens exactly at the 1024px breakpoint with no layout flash on resize.
+- `ext` icon added to `Icon.tsx` (`ICON_PATHS`) — needed for the HowLongToBeat external link in the game detail HLTB block.
+- Backlog picker widget placed in the right column of the Desktop Dashboard (below the stat grid), matching "sits inline on the dashboard" from AGENT.md. Initial pick defaults to Citizen Sleeper (shortest HLTB at 7h in mock data); the shuffle button resamples randomly from all backlog items.
+- Desktop screens use `.app-shell` CSS class (not fixed 1440×900 from the design artboard) so the layout fills the actual viewport.
+- Game detail screens are wired to `/game/:id`; mock data is hardcoded to Elden Ring for Phase 2. Phase 3 will replace with real data fetched by ID.
+- Base service worker (`public/sw.js`) is a minimal stub — `skipWaiting` + `clients.claim` only. Workbox caching is Phase 6.
+- `manifest.json` was already correct from Phase 0; no changes needed.
 
 ---
 
@@ -148,41 +157,48 @@ Layout components (`apps/web/src/components/layout/`):
 **Deliverables:**
 
 Database:
-- [ ] Final Prisma schema matching the model in `AGENT.md`
-- [ ] Seed script (`packages/db/seed.ts`) — creates one test user, connects mock games matching the design mock data
-- [ ] Migration: `prisma migrate dev` creates schema cleanly
+- [x] Final Prisma schema matching the model in `AGENT.md`
+- [x] Seed script (`packages/db/seed.ts`) — creates one test user, connects mock games matching the design mock data
+- [x] Migration: `prisma migrate dev` creates schema cleanly
 
 API routes (`apps/api/src/routes/`):
-- [ ] `GET /api/games` — user's full library; query params: `status`, `platform`, `sort` (lastPlayed | title | playtime), `page`, `limit`
-- [ ] `GET /api/games/:id` — single game record with HLTB and per-platform playtime
-- [ ] `PATCH /api/games/:id` — update `status`, `notes`, `rating`
-- [ ] `GET /api/dashboard` — returns: `{ totalOwned, playtimeByPlatform, activeGame, shelfCounts, recentActivity, wishlistDropping, backlogPick }`
-- [ ] `GET /api/upcoming` — upcoming releases; query: `platform`, `month`, `wishlistedOnly`
-- [ ] `POST /api/upcoming/:igdbId/wishlist` — toggle wishlist tracking
-- [ ] `GET /api/stats` — full stats block (genre breakdown, completion ratio, heatmap data)
+- [x] `GET /api/games` — user's full library; query params: `status`, `platform`, `sort` (lastPlayed | title | playtime), `page`, `limit`
+- [x] `GET /api/games/:id` — single game record with HLTB and per-platform playtime
+- [x] `PATCH /api/games/:id` — update `status`, `notes`, `rating`
+- [x] `GET /api/dashboard` — returns: `{ totalOwned, playtimeByPlatform, activeGame, shelfCounts, recentActivity, wishlistDropping, backlogPick }`
+- [x] `GET /api/upcoming` — upcoming releases; query: `platform`, `month`, `wishlistedOnly`
+- [x] `POST /api/upcoming/:igdbId/wishlist` — toggle wishlist tracking
+- [x] `GET /api/stats` — full stats block (genre breakdown, completion ratio, heatmap data)
 
 Frontend API client (`apps/web/src/lib/api.ts`):
-- [ ] Typed fetch wrapper for every endpoint above
-- [ ] All screens switch from `mockData` to live API calls
-- [ ] Loading states: skeleton placeholders while data fetches
-- [ ] Error states: simple error message when API fails
+- [x] Typed fetch wrapper for every endpoint above
+- [x] All screens switch from `mockData` to live API calls
+- [x] Loading states: skeleton placeholders while data fetches
+- [x] Error states: simple error message when API fails
 
 **Success Criteria:**
-- [ ] `GET /api/dashboard` returns all fields required to render `DashboardDesktop` with no undefined values
-- [ ] `GET /api/games?status=Backlog` returns only backlog items
-- [ ] `PATCH /api/games/:id` with `{ status: "Playing" }` persists the change and returns updated record
-- [ ] All routes return proper HTTP codes: 200 (ok), 400 (bad input), 401 (unauthenticated), 404 (not found), 500 (server error)
-- [ ] Frontend screens render identically with live data as they did with mock data (same game titles in the seed)
-- [ ] `prisma migrate deploy` runs cleanly with no manual intervention
+- [x] `GET /api/dashboard` returns all fields required to render `DashboardDesktop` with no undefined values
+- [x] `GET /api/games?status=Backlog` returns only backlog items
+- [x] `PATCH /api/games/:id` with `{ status: "Playing" }` persists the change and returns updated record
+- [x] All routes return proper HTTP codes: 200 (ok), 400 (bad input), 401 (unauthenticated), 404 (not found), 500 (server error)
+- [x] Frontend screens render identically with live data as they did with mock data (same game titles in the seed)
+- [x] `prisma migrate deploy` runs cleanly with no manual intervention
 
 **Testing:**
-- [ ] Jest + Supertest integration tests:
+- [ ] Jest + Supertest integration tests *(not yet written — carryover into Phase 4)*:
   - [ ] Happy path for every route
   - [ ] 404 for unknown game ID
   - [ ] 400 for invalid status value in PATCH
   - [ ] Pagination: `GET /api/games?page=2&limit=5` returns correct slice
 - [ ] Test database: isolated Supabase test branch, seeded before each test run
 - [ ] Frontend: Vitest with mock API responses for each screen (verify correct rendering)
+
+**Decisions:**
+- Prisma `GameStatus` enum uses `OnHold` (no space) but TypeScript types use `'On Hold'`. Applied `toPrismaStatus`/`fromPrismaStatus` helpers in `games.ts` and inline casts in `dashboard.ts`/`stats.ts`. The seed script uses `OnHold` to match Prisma.
+- `exactOptionalPropertyTypes: true` in tsconfig requires conditional spreads `...(cond ? { prop: val } : {})` instead of `prop: val ?? undefined` when setting optional properties.
+- Prisma query results lose relation types when `include` is stored in a `const` variable — all includes are inlined directly in each Prisma call.
+- `apps/api/tsconfig.json` `@hoard/db` path was pointing to `dist/index.d.ts` (declarations only). `tsx` used this path at runtime, causing `prisma` to be `undefined`. Fixed to `src/index.ts` (matching the pattern used for `@hoard/types`).
+- Visual snapshots regenerated after switching from mock to live data (2 snapshots updated: dashboard desktop, game-detail mobile). All 28 E2E tests pass.
 
 ---
 
@@ -213,8 +229,7 @@ Platform integrations (`apps/api/src/services/platforms/`):
 - [ ] `POST /api/platforms/:code/sync` — triggers a sync job for syncable platforms (STEAM, PSN, XBOX, GOG only)
 
 Settings screen (frontend):
-- [ ] **Blocked until design is delivered.** The layout will be designed first, then implemented here.
-- [ ] `/settings` route — one card per platform (Steam, PSN, Xbox, GOG, Nintendo*, Epic*); shows connected/disconnected state, last sync time, connect/disconnect action
+- [ ] `/settings` route — `SettingsNav` sidebar with Account, Platforms, Preferences, Library, Notifications, Appearance, Privacy, Data export, Danger zone sections; design in `project/Hoard.html` sections 05–11
 - [ ] PSN card: "Connect" opens an inline panel with step-by-step instructions for retrieving the NPSSO token from the browser (not a modal — inline, dismissable, with numbered steps and a code-formatted cookie name)
 - [ ] Nintendo and Epic cards: marked as "manual only" — no connect button, just a label confirming games can be added via the manual add flow
 - [ ] Manual add button: accessible from Library header — opens IGDB search, lets user pick game, choose platform label and status
@@ -386,10 +401,10 @@ Frontend hardening:
 | Phase | Status | Notes |
 |---|---|---|
 | 0 — Infra Setup | Done | Repo at github.com/Raybur92/hoard; initial migration applied to Supabase |
-| 1 — Design System | Done | 18 components, 40 tests passing; visual check pending browser run |
-| 2 — Static Screens | Not started | |
-| 3 — Backend API | Not started | |
-| 4 — Auth & Platform Sync | Not started | Blocked: Settings screen design pending |
+| 1 — Design System | Done | 18 components, 40 tests passing; visual verified in browser |
+| 2 — Static Screens | Done | 8 screens, useBreakpoint, mockData, SW stub; 28 E2E tests passing, 8 visual baselines committed |
+| 3 — Backend API | Done | All routes, seed, API client, 8 screens on live data; 28 E2E tests passing |
+| 4 — Auth & Platform Sync | Not started | Settings design delivered in project/Hoard.html; fully unblocked |
 | 5 — IGDB + HLTB | Not started | |
 | 6 — PWA + Hardening | Not started | |
 

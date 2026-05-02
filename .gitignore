@@ -34,6 +34,10 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# Playwright
+test-results/
+apps/web/tests/results/
+
 # Prisma
 packages/db/prisma/migrations/*.sql.bak
 

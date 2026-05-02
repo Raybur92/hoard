@@ -1,0 +1,377 @@
+import { useState } from 'react';
+import { Sidebar } from '../layout/Sidebar';
+import { TopBar } from '../layout/TopBar';
+import { Marker } from '../primitives/Marker';
+import { Plat } from '../primitives/Plat';
+import { Cover } from '../primitives/Cover';
+import { Icon } from '../primitives/Icon';
+import { Btn } from '../primitives/Btn';
+import { Heatmap } from '../primitives/Heatmap';
+import { Gauge } from '../primitives/Gauge';
+import { useDashboard } from '../../hooks/useDashboard';
+import { minutesToHours, formatRelative, daysUntil, formatReleaseDate, shortYear, buildAsciiBar } from '../../lib/utils';
+import type { UserGameDetail, PlatformStat, WishlistRelease } from '@hoard/types';
+
+const PLATFORM_NAMES: Record<string, string> = {
+  ST: 'STEAM', PS: 'PSN', XB: 'XBOX', GG: 'GOG', NT: 'NINTENDO', EP: 'EPIC',
+};
+
+function toPlatCode(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('steam')) return 'ST';
+  if (n.includes('ps') || n.includes('playstation')) return 'PS';
+  if (n.includes('xbox')) return 'XB';
+  if (n.includes('gog')) return 'GG';
+  if (n.includes('nintendo')) return 'NT';
+  if (n.includes('epic')) return 'EP';
+  return n.slice(0, 2).toUpperCase();
+}
+
+function asciiChart(platforms: PlatformStat[]): string {
+  return platforms.map(p => {
+    const bar = buildAsciiBar(p.pct, 40);
+    const label = (PLATFORM_NAMES[p.code] ?? p.code).padEnd(5);
+    const hours = (p.minutes / 60).toFixed(1).padStart(7);
+    const pct = `${p.pct.toFixed(1)}%`.padStart(6);
+    return `${label}  ${bar}  ${hours} h  ${pct}`;
+  }).join('\n');
+}
+
+function nowPlayingTitle(title: string) {
+  const idx = title.indexOf(': ');
+  if (idx === -1) return <span>{title}</span>;
+  return (
+    <span>
+      {title.slice(0, idx + 2)}
+      <span style={{ color: 'var(--paper-dim)' }}>{title.slice(idx + 2)}</span>
+    </span>
+  );
+}
+
+export function DashboardDesktop() {
+  const { data, loading, error } = useDashboard();
+  const [pickIdx, setPickIdx] = useState(0);
+
+  if (loading || error || !data) {
+    return (
+      <div className="app-shell hoard-noise">
+        <Sidebar />
+        <div className="app-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span className="t-mono t-faint" style={{ fontSize: 12 }}>
+            {error ? `// error: ${error}` : '// loading...'}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms } = data;
+  const np = nowPlaying[0] ?? null;
+
+  const backlogPool: UserGameDetail[] = backlogItems.length > 0 ? backlogItems : [];
+  const displayPick: UserGameDetail | null = backlogPool[pickIdx] ?? backlogPick;
+
+  function shufflePick() {
+    if (backlogPool.length === 0) return;
+    setPickIdx(Math.floor(Math.random() * backlogPool.length));
+  }
+
+  const shelfCounts = {
+    Playing: stats.playingCount,
+    Backlog: stats.backlogCount,
+    Completed: stats.completedCount,
+    'On Hold': stats.onHoldCount,
+    Dropped: stats.droppedCount,
+    Wishlist: stats.wishlistCount,
+  };
+
+  const npTotalMins = np
+    ? Object.values(np.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0)
+    : 0;
+  const npHltbMain = np?.hltb?.mainStory
+    ? `~${Math.round(np.hltb.mainStory / 60)}h`
+    : '—';
+  const npPlatforms = np
+    ? Object.entries(np.playtimeByPlatform).map(([code, mins]) => ({
+        code,
+        label: (PLATFORM_NAMES[code] ?? code).toLowerCase(),
+        h: minutesToHours(mins ?? 0),
+      }))
+    : [];
+
+  return (
+    <div className="app-shell hoard-noise">
+      <Sidebar shelfCounts={shelfCounts} />
+
+      <div className="app-main">
+        <TopBar
+          crumbs={['hoard', 'dashboard']}
+          syncedAt={platforms[0]?.lastSyncAt ? `synced ${formatRelative(platforms[0].lastSyncAt)}` : null}
+        />
+
+        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 32px' }}>
+
+          {/* hero row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28, alignItems: 'end' }}>
+            <div>
+              <Marker>// good evening, andrea · {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' }).toLowerCase()}</Marker>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginTop: 16 }}>
+                <span className="bignum">{stats.totalGames}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span className="t-up t-faint" style={{ fontSize: 11 }}>games owned</span>
+                  <span className="t-mono t-dim" style={{ fontSize: 12 }}>+{stats.weeklyAdded} this week</span>
+                </div>
+              </div>
+              <div style={{ marginTop: 6, color: 'var(--paper-dim)', fontSize: 13, fontFamily: 'var(--mono)' }}>
+                <span className="t-green">$</span>{' '}
+                {(stats.totalPlaytimeMinutes / 60).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} hours played
+                &nbsp;·&nbsp;{stats.completionPct}% completed
+              </div>
+            </div>
+            <div className="panel" style={{ padding: '14px 18px' }}>
+              <div className="t-up t-faint" style={{ fontSize: 10 }}>system</div>
+              <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 18px', fontSize: 12 }}>
+                {platforms.map(p => (
+                  <>
+                    <div key={`${p.code}-l`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Plat code={p.code} />
+                      <span className="t-dim">{PLATFORM_NAMES[p.code] ?? p.code}</span>
+                    </div>
+                    <div key={`${p.code}-r`} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--paper-faint)' }}>
+                      <span>{p.lastSyncAt ? `synced ${formatRelative(p.lastSyncAt)}` : 'never synced'}</span>
+                      <span style={{ color: p.syncStatus === 'ok' ? 'var(--green)' : p.syncStatus === 'stale' ? 'var(--amber)' : 'var(--red)' }}>
+                        {p.syncStatus}
+                      </span>
+                    </div>
+                  </>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ height: 28 }} />
+
+          {/* main stats block */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20 }}>
+
+            {/* left col */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* now playing */}
+              {np && (
+                <div className="panel" style={{ padding: 20, display: 'grid', gridTemplateColumns: '120px 1fr', gap: 22 }}>
+                  <Cover
+                    w={120} h={160}
+                    label={(np.game.title.split(' ')[0] ?? '').toUpperCase()}
+                    dev={np.game.developer?.split(' ')[0] ?? '—'}
+                    year={shortYear(np.game.releaseYear)}
+                    bright
+                  />
+                  <div>
+                    <Marker>// session active · resumed {np.lastPlayedAt ? formatRelative(np.lastPlayedAt) : '—'}</Marker>
+                    <div style={{ marginTop: 10, fontSize: 28, lineHeight: 1.05, color: 'var(--paper)', letterSpacing: '-0.01em', fontWeight: 500 }}>
+                      {nowPlayingTitle(np.game.title)}
+                    </div>
+                    <div className="t-mono t-dim" style={{ fontSize: 12, marginTop: 4 }}>
+                      {np.game.developer} · {np.game.releaseYear} · {np.game.genres[0] ?? '—'}
+                    </div>
+
+                    <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, max-content)', gap: '4px 28px', fontSize: 12 }}>
+                      <span className="t-up t-faint" style={{ fontSize: 10 }}>played</span>
+                      <span className="t-up t-faint" style={{ fontSize: 10 }}>est. main</span>
+                      <span className="t-up t-faint" style={{ fontSize: 10 }}>progress</span>
+                      <span className="t-up t-faint" style={{ fontSize: 10 }}>last save</span>
+                      <span className="t-tnum" style={{ color: 'var(--paper)' }}>{minutesToHours(npTotalMins)}</span>
+                      <span className="t-tnum t-dim">{npHltbMain}</span>
+                      <span className="t-tnum t-green">—</span>
+                      <span className="t-tnum t-dim">{np.lastPlayedAt ? formatRelative(np.lastPlayedAt) : '—'}</span>
+                    </div>
+
+                    <div style={{ marginTop: 14 }}>
+                      <div className="prog green"><span style={{ width: '0%' }} /></div>
+                    </div>
+
+                    <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <Btn variant="primary"><Icon name="play" size={11} fill={true} /> resume</Btn>
+                      <Btn>log session</Btn>
+                      <Btn>+ note</Btn>
+                      <span style={{ flex: 1 }} />
+                      {npPlatforms.map(({ code, label, h }) => (
+                        <span key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <Plat code={code} lg />
+                          <span className="t-faint" style={{ fontSize: 11 }}>{label} · {h}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* hours by platform */}
+              <div className="panel" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <Marker>// hours by platform · all-time</Marker>
+                  <span className="t-mono t-faint" style={{ fontSize: 10 }}>
+                    {(stats.totalPlaytimeMinutes / 60).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h total
+                  </span>
+                </div>
+                <pre className="ascii t-dim" style={{ marginTop: 12, fontSize: 12, lineHeight: 1.55 }}>
+                  {asciiChart(stats.playtimeByPlatform)}
+                </pre>
+              </div>
+
+              {/* heatmap */}
+              <div className="panel" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+                  <Marker>// activity · last 24 weeks</Marker>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--paper-faint)' }}>
+                    <span>less</span>
+                    <div className="heat-cell" /><div className="heat-cell l1" /><div className="heat-cell l2" />
+                    <div className="heat-cell l3" /><div className="heat-cell l4" /><div className="heat-cell l5" />
+                    <span>more</span>
+                  </div>
+                </div>
+                <Heatmap weeks={24} days={7} density={0.6} />
+              </div>
+            </div>
+
+            {/* right col: stat grid */}
+            <div className="panel" style={{ padding: 20 }}>
+              <Marker>// the hoard · in numbers</Marker>
+              <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--rule)', border: '1px solid var(--rule)' }}>
+                {([
+                  [String(stats.totalGames),     'TOTAL OWNED', `+${stats.weeklyAdded} wk`,           'dim'],
+                  [String(stats.completedCount),  'COMPLETED',   `${stats.completionPct}%`,             'green'],
+                  [String(stats.playingCount),    'PLAYING',     'active',                              'green'],
+                  [String(stats.backlogCount),    'BACKLOG',     `${Math.round((stats.backlogCount / (stats.totalGames || 1)) * 100)}%`, 'amber'],
+                  [String(stats.onHoldCount),     'ON HOLD',     'paused',                              null],
+                  [String(stats.droppedCount),    'DROPPED',     'sunk',                                'red'],
+                  [String(stats.wishlistCount),   'WISHLIST',    `${wishlistCountdown.length} soon`,    'amber'],
+                  [`${(stats.totalPlaytimeMinutes / 60).toFixed(0)}h`, 'TOTAL PLAYED', 'all-time',     'dim'],
+                ] as [string, string, string, string | null][]).map(([v, k, sub, tone], i) => (
+                  <div key={i} style={{ background: 'var(--ink)', padding: '16px 16px 14px' }}>
+                    <div className="t-mono t-tnum" style={{ fontSize: 28, fontWeight: 500, lineHeight: 1, color: tone === 'green' ? 'var(--green)' : tone === 'amber' ? 'var(--amber)' : tone === 'red' ? 'var(--red)' : 'var(--paper)' }}>{v}</div>
+                    <div className="t-up t-faint" style={{ fontSize: 9, marginTop: 8 }}>{k}</div>
+                    <div className="t-mono" style={{ fontSize: 10, color: 'var(--paper-dim)', marginTop: 2 }}>{sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* completion gauge */}
+              <div style={{ marginTop: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                  <span className="t-up t-faint" style={{ fontSize: 10 }}>completion ratio</span>
+                  <span className="t-tnum" style={{ fontSize: 11, color: 'var(--paper-dim)' }}>{stats.completedCount} / {stats.totalGames}</span>
+                </div>
+                <Gauge total={20} filled={Math.round((stats.completedCount / Math.max(stats.totalGames, 1)) * 20)} />
+              </div>
+
+              {/* genre breakdown */}
+              {stats.genres.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <div className="t-up t-faint" style={{ fontSize: 10, marginBottom: 8 }}>top genres</div>
+                  {stats.genres.map(({ name, count }, i) => (
+                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 12 }}>
+                      <span style={{ width: 130, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)' }}>{name}</span>
+                      <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, count * 5)}%`, background: 'var(--paper-dim)' }} />
+                      </div>
+                      <span className="t-tnum t-faint" style={{ fontSize: 11, width: 28, textAlign: 'right' }}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* backlog picker */}
+              {displayPick && (
+                <div style={{ marginTop: 20, borderTop: '1px dashed var(--rule-bright)', paddingTop: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <Marker>// play next · backlog pick</Marker>
+                    <Btn sm onClick={shufflePick}>shuffle</Btn>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <Cover w={40} h={54} label={(displayPick.game.title.split(' ')[0] ?? '').toUpperCase()} />
+                    <div>
+                      <div style={{ fontSize: 13, color: 'var(--paper)', lineHeight: 1.2 }}>{displayPick.game.title}</div>
+                      <div className="t-faint" style={{ fontSize: 10, marginTop: 3 }}>
+                        {displayPick.game.developer} · {displayPick.game.releaseYear}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--paper-faint)', marginTop: 3 }}>
+                        {displayPick.hltb?.mainStory
+                          ? <span>HLTB ~{Math.round(displayPick.hltb.mainStory / 60)}h</span>
+                          : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* wishlist dropping soon */}
+          {wishlistCountdown.length > 0 && (
+            <>
+              <div style={{ height: 28 }} />
+              <div className="panel" style={{ padding: 22 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div>
+                    <Marker>// wishlist · dropping soon</Marker>
+                    <div className="t-display" style={{ fontSize: 22, color: 'var(--paper)', marginTop: 6, letterSpacing: '0.04em' }}>
+                      {wishlistCountdown.length} incoming{' '}
+                      <span className="t-amber" style={{ display: 'inline-flex', verticalAlign: '-0.1em' }}>
+                        <Icon name="star" size={18} fill={true} />
+                      </span>
+                    </div>
+                  </div>
+                  <div className="t-faint" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    see full upcoming feed <Icon name="arrowR" size={11} />
+                  </div>
+                </div>
+                <WishlistCountdown items={wishlistCountdown} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WishlistCountdown({ items }: { items: WishlistRelease[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 16 }}>
+      {items.map((w, i) => {
+        const days = daysUntil(w.releaseDate);
+        const urgent = days < 30;
+        const platCodes = w.platforms.map(toPlatCode);
+        return (
+          <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Cover w="100%" h={170} label={w.title.toUpperCase()} dev={w.developer ?? '—'} bright={urgent} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span className="t-tnum" style={{ fontSize: 11, color: urgent ? 'var(--amber)' : 'var(--paper-dim)' }}>
+                {formatReleaseDate(w.releaseDate)}
+              </span>
+              <span className="t-tnum t-faint" style={{ fontSize: 10 }}>
+                {w.releaseDate ? `T-${days}` : 'TBA'}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--paper)', lineHeight: 1.2 }}>{w.title}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {platCodes.map(code => <Plat key={code} code={code} />)}
+              </div>
+              <span className="t-amber" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Icon name="star" size={11} fill={true} /> tracking
+              </span>
+            </div>
+            <div className="gauge" style={{ marginTop: 2 }}>
+              {Array.from({ length: 12 }).map((_, k) => (
+                <div key={k} className={`seg${k < (items.length - i) ? ' amber' : ''}`} style={{ height: 4 }} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

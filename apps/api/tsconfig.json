@@ -11,11 +11,13 @@
     "rootDir": "src",
     "composite": true,
     "paths": {
-      "@hoard/types": ["../../packages/types/src/index.ts"]
+      "@hoard/types": ["../../packages/types/src/index.ts"],
+      "@hoard/db": ["../../packages/db/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/types" }
+    { "path": "../../packages/types" },
+    { "path": "../../packages/db" }
   ]
 }

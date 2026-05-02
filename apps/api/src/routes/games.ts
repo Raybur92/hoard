@@ -1,0 +1,169 @@
+import { Router, Request, Response } from 'express';
+import { prisma } from '@hoard/db';
+import type { GameStatus as PrismaGameStatus } from '@hoard/db';
+import { z } from 'zod';
+import { requireUser } from '../middleware/user';
+import type { UserGameDetail, GameListResponse, PatchGameBody } from '@hoard/types';
+
+const router = Router();
+
+function toPrismaStatus(s: string): PrismaGameStatus {
+  return (s === 'On Hold' ? 'OnHold' : s) as PrismaGameStatus;
+}
+
+function fromPrismaStatus(s: string): UserGameDetail['status'] {
+  return (s === 'OnHold' ? 'On Hold' : s) as UserGameDetail['status'];
+}
+
+function mapUserGame(ug: {
+  id: string; userId: string; gameId: string; status: string;
+  playtimeByPlatform: unknown; lastPlayedAt: Date | null; notes: string | null;
+  rating: number | null; addedAt: Date; updatedAt: Date;
+  game: {
+    id: string; igdbId: number; title: string; developer: string | null;
+    releaseYear: number | null; genres: string[]; coverUrl: string | null;
+    hltbData: {
+      id: string; gameId: string; mainStory: number | null;
+      mainExtras: number | null; completionist: number | null; fetchedAt: Date;
+    } | null;
+  };
+}): UserGameDetail {
+  return {
+    id: ug.id,
+    userId: ug.userId,
+    gameId: ug.gameId,
+    game: {
+      id: ug.game.id,
+      igdbId: ug.game.igdbId,
+      title: ug.game.title,
+      developer: ug.game.developer,
+      releaseYear: ug.game.releaseYear,
+      genres: ug.game.genres,
+      coverUrl: ug.game.coverUrl,
+    },
+    status: fromPrismaStatus(ug.status),
+    playtimeByPlatform: ug.playtimeByPlatform as UserGameDetail['playtimeByPlatform'],
+    lastPlayedAt: ug.lastPlayedAt?.toISOString() ?? null,
+    notes: ug.notes,
+    rating: ug.rating,
+    addedAt: ug.addedAt.toISOString(),
+    updatedAt: ug.updatedAt.toISOString(),
+    hltb: ug.game.hltbData
+      ? {
+          id: ug.game.hltbData.id,
+          gameId: ug.game.hltbData.gameId,
+          mainStory: ug.game.hltbData.mainStory,
+          mainExtras: ug.game.hltbData.mainExtras,
+          completionist: ug.game.hltbData.completionist,
+          fetchedAt: ug.game.hltbData.fetchedAt.toISOString(),
+        }
+      : null,
+  };
+}
+
+// GET /api/games
+router.get('/games', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const userId = req.userId;
+  const { status, platform, sort = 'lastPlayed', page = '1', limit = '50' } = req.query as Record<string, string | undefined>;
+
+  const pageNum = Math.max(1, parseInt(page ?? '1', 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit ?? '50', 10)));
+
+  const whereBase: { userId: string; status?: PrismaGameStatus } = { userId };
+  if (status) whereBase.status = toPrismaStatus(status);
+
+  const orderBy =
+    sort === 'title'     ? { game: { title: 'asc' as const } } :
+    sort === 'playtime'  ? { updatedAt: 'desc' as const } :
+                           { lastPlayedAt: 'desc' as const };
+
+  const [games, total] = await Promise.all([
+    prisma.userGame.findMany({
+      where: whereBase,
+      include: { game: { include: { hltbData: true } } },
+      orderBy,
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
+    }),
+    prisma.userGame.count({ where: whereBase }),
+  ]);
+
+  let filtered = games.map(mapUserGame);
+
+  if (platform) {
+    filtered = filtered.filter(ug =>
+      platform.toUpperCase() in ug.playtimeByPlatform,
+    );
+  }
+
+  const body: GameListResponse = {
+    games: filtered,
+    total,
+    page: pageNum,
+    limit: limitNum,
+    hasMore: pageNum * limitNum < total,
+  };
+
+  res.json(body);
+});
+
+// GET /api/games/:id
+router.get('/games/:id', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const userId = req.userId;
+
+  const ug = await prisma.userGame.findFirst({
+    where: { id, userId },
+    include: { game: { include: { hltbData: true } } },
+  });
+
+  if (!ug) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  res.json(mapUserGame(ug));
+});
+
+const patchSchema = z.object({
+  status: z.enum(['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist']).optional(),
+  notes: z.string().nullable().optional(),
+  rating: z.number().int().min(1).max(10).nullable().optional(),
+});
+
+// PATCH /api/games/:id
+router.patch('/games/:id', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const userId = req.userId;
+
+  const parsed = patchSchema.safeParse(req.body as PatchGameBody);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const existing = await prisma.userGame.findFirst({ where: { id, userId } });
+  if (!existing) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  const updateData: {
+    status?: PrismaGameStatus;
+    notes?: string | null;
+    rating?: number | null;
+  } = {};
+  if (parsed.data.status !== undefined) updateData.status = toPrismaStatus(parsed.data.status);
+  if (parsed.data.notes !== undefined) updateData.notes = parsed.data.notes;
+  if (parsed.data.rating !== undefined) updateData.rating = parsed.data.rating;
+
+  const updated = await prisma.userGame.update({
+    where: { id },
+    data: updateData,
+    include: { game: { include: { hltbData: true } } },
+  });
+
+  res.json(mapUserGame(updated));
+});
+
+export default router;

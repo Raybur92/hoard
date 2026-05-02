@@ -1,16 +1,26 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useBreakpoint } from './hooks/useBreakpoint';
+import {
+  DashboardDesktop, DashboardMobile,
+  LibraryDesktop, LibraryMobile,
+  UpcomingDesktop, UpcomingMobile,
+  GameDetailDesktop, GameDetailMobile,
+} from './components/screens';
 
 export default function App() {
+  const bp = useBreakpoint();
+  const desktop = bp === 'desktop';
+
   return (
     <Routes>
-      <Route path="/" element={<div>Dashboard — coming in Phase 2</div>} />
-      <Route path="/library" element={<div>Library — coming in Phase 2</div>} />
-      <Route path="/library/:status" element={<div>Library filtered — coming in Phase 2</div>} />
-      <Route path="/upcoming" element={<div>Upcoming — coming in Phase 2</div>} />
-      <Route path="/game/:id" element={<div>Game detail — coming in Phase 2</div>} />
-      <Route path="/settings" element={<div>Settings — coming in Phase 4</div>} />
-      <Route path="/login" element={<div>Login — coming in Phase 4</div>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/"                element={desktop ? <DashboardDesktop /> : <DashboardMobile />} />
+      <Route path="/library"         element={desktop ? <LibraryDesktop />   : <LibraryMobile />} />
+      <Route path="/library/:status" element={desktop ? <LibraryDesktop />   : <LibraryMobile />} />
+      <Route path="/upcoming"        element={desktop ? <UpcomingDesktop />  : <UpcomingMobile />} />
+      <Route path="/game/:id"        element={desktop ? <GameDetailDesktop /> : <GameDetailMobile />} />
+      <Route path="/settings"        element={<div style={{ padding: 40, color: 'var(--paper-faint)', fontFamily: 'var(--mono)' }}>Settings — coming in Phase 4</div>} />
+      <Route path="/login"           element={<div style={{ padding: 40, color: 'var(--paper-faint)', fontFamily: 'var(--mono)' }}>Login — coming in Phase 4</div>} />
+      <Route path="*"                element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
