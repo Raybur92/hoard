@@ -5,8 +5,9 @@ import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
 import { Icon } from '../primitives/Icon';
 import { useUpcoming } from '../../hooks/useUpcoming';
+import { api } from '../../lib/api';
 import { daysUntil, upcomingDateParts, countdownParts } from '../../lib/utils';
-import type { WishlistRelease } from '@hoard/types';
+import type { IgdbUpcomingRelease } from '@hoard/types';
 
 function toPlatCode(name: string): string {
   const n = name.toLowerCase();
@@ -19,13 +20,13 @@ function toPlatCode(name: string): string {
   return n.slice(0, 2).toUpperCase();
 }
 
-interface UpcomingItem extends WishlistRelease {
+interface UpcomingItem extends IgdbUpcomingRelease {
   days: number;
   parts: ReturnType<typeof upcomingDateParts>;
   platStr: string;
 }
 
-function enrichItem(w: WishlistRelease): UpcomingItem {
+function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
   return {
     ...w,
     days: daysUntil(w.releaseDate),
@@ -35,7 +36,14 @@ function enrichItem(w: WishlistRelease): UpcomingItem {
 }
 
 export function UpcomingMobile() {
-  const { data, loading } = useUpcoming();
+  const { data, loading, refetch } = useUpcoming();
+
+  async function handleToggleWishlist(igdbId: number) {
+    try {
+      await api.toggleWishlist(igdbId);
+      void refetch();
+    } catch { /* silent */ }
+  }
 
   if (loading || !data) {
     return (
@@ -58,7 +66,7 @@ export function UpcomingMobile() {
   const monthTabs = Object.entries(monthGroups);
 
   const nextDays = featured?.days ?? 9999;
-  const sub = `// ${items.length} wishlisted · next in ${nextDays < 9999 ? `${nextDays}d` : 'TBA'}`;
+  const sub = `// ${items.length} releasing · next in ${nextDays < 9999 ? `${nextDays}d` : 'TBA'}`;
 
   return (
     <MobileFrame>
@@ -86,12 +94,16 @@ export function UpcomingMobile() {
             <div className="panel" style={{ padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <Marker>// next drop</Marker>
-                <span className="t-amber t-up" style={{ fontSize: 9, letterSpacing: '0.12em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Icon name="star" size={10} fill={true} /> tracking
+                <span
+                  style={{ fontSize: 9, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: featured.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                  onClick={() => void handleToggleWishlist(featured.igdbId)}
+                >
+                  <Icon name="star" size={10} fill={featured.wishlisted} />
+                  {featured.wishlisted ? 'tracking' : '+ wishlist'}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
-                <Cover w={64} h={86} label={featured.title.toUpperCase()} dev={featured.developer ?? ''} bright />
+                <Cover w={64} h={86} src={featured.coverUrl} label={featured.title.toUpperCase()} dev={featured.developer ?? ''} bright />
                 <div style={{ flex: 1 }}>
                   <div className="t-display" style={{ fontSize: 32, color: 'var(--amber)', lineHeight: 0.9 }}>
                     {featured.releaseDate ? `T-${featured.days}` : 'TBA'}
@@ -122,7 +134,7 @@ export function UpcomingMobile() {
         <Marker>// the agenda</Marker>
         <div style={{ marginTop: 10 }}>
           {items.map((g, i) => (
-            <div key={g.id} style={{
+            <div key={g.igdbId} style={{
               display: 'grid',
               gridTemplateColumns: '40px 36px 1fr auto',
               gap: 10,
@@ -136,7 +148,7 @@ export function UpcomingMobile() {
                   {g.parts.day === '—' ? '?' : g.parts.day}
                 </div>
               </div>
-              <Cover w={36} h={48} label={(g.title[0] ?? '').toUpperCase()} bright />
+              <Cover w={36} h={48} src={g.coverUrl} label={(g.title[0] ?? '').toUpperCase()} bright />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, lineHeight: 1.1 }}>{g.title}</div>
                 <div className="t-faint" style={{ fontSize: 9, marginTop: 2 }}>{g.developer} · {g.platStr}</div>
@@ -145,7 +157,12 @@ export function UpcomingMobile() {
                 <div className="t-tnum" style={{ fontSize: 12, color: 'var(--amber)' }}>
                   {g.releaseDate ? `T-${g.days}d` : 'TBA'}
                 </div>
-                <div className="t-amber"><Icon name="star" size={10} fill={true} /></div>
+                <div
+                  style={{ cursor: 'pointer', color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                  onClick={() => void handleToggleWishlist(g.igdbId)}
+                >
+                  <Icon name="star" size={10} fill={g.wishlisted} />
+                </div>
               </div>
             </div>
           ))}

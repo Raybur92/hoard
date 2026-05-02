@@ -4,6 +4,19 @@ import type { GameStatus as PrismaGameStatus } from '@hoard/db';
 import { z } from 'zod';
 import { requireUser } from '../middleware/user';
 import type { UserGameDetail, GameListResponse, PatchGameBody } from '@hoard/types';
+import { fetchHltb } from '../services/hltb';
+
+function triggerHltbBackground(gameId: string, title: string): void {
+  void (async () => {
+    const result = await fetchHltb(title);
+    if (!result) return;
+    await prisma.hltbData.upsert({
+      where: { gameId },
+      update: { mainStory: result.mainStory, mainExtras: result.mainExtras, completionist: result.completionist, fetchedAt: new Date() },
+      create: { gameId, mainStory: result.mainStory, mainExtras: result.mainExtras, completionist: result.completionist },
+    });
+  })();
+}
 
 const router = Router();
 
@@ -162,6 +175,15 @@ router.patch('/games/:id', requireUser, async (req: Request, res: Response): Pro
     data: updateData,
     include: { game: { include: { hltbData: true } } },
   });
+
+  // Trigger background HLTB refresh when a game moves to Playing or Backlog and has no HLTB data yet
+  if (
+    updateData.status &&
+    (updateData.status === 'Playing' || updateData.status === 'Backlog') &&
+    !updated.game.hltbData
+  ) {
+    triggerHltbBackground(updated.game.id, updated.game.title);
+  }
 
   res.json(mapUserGame(updated));
 });

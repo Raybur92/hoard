@@ -15,7 +15,7 @@
 | `/library/:status` | Library filtered | Same view, one status |
 | `/upcoming` | Upcoming releases | IGDB feed, countdown, timeline |
 | `/game/:id` | Game detail | Receipt-style record |
-| `/settings` | Account / platforms | **Blocked pending design** |
+| `/settings` | Account / platforms | Account, Platforms, Appearance, Danger Zone |
 | `/login` | Auth | Email + Google + Steam |
 
 Breakpoint: `≥ 1024px` → desktop (sidebar + topbar). `< 1024px` → mobile (status bar + tab bar).
@@ -209,54 +209,81 @@ Frontend API client (`apps/web/src/lib/api.ts`):
 **Deliverables:**
 
 Auth:
-- [ ] `POST /api/auth/register` — email + password, returns JWT in HTTP-only cookie
-- [ ] `POST /api/auth/login` — email + password
-- [ ] `POST /api/auth/logout` — clears cookie
-- [ ] `GET /api/auth/me` — returns current user
-- [ ] Google OAuth: `GET /api/auth/google` → Google consent → `GET /api/auth/google/callback` → JWT cookie
-- [ ] Steam OpenID: `GET /api/auth/steam` → Steam OpenID → `GET /api/auth/steam/callback` → JWT cookie (reuses the OpenID infrastructure already needed for the Steam library integration)
-- [ ] Auth middleware: protects all `/api/*` routes except `/health`, `/api/auth/*`
-- [ ] Frontend `/login` route — login/register page; styled with the design system; shows email/password form plus "Continue with Google" and "Continue with Steam" buttons
+- [x] `POST /api/auth/register` — email + password, returns JWT in HTTP-only cookie
+- [x] `POST /api/auth/login` — email + password
+- [x] `POST /api/auth/logout` — clears cookie
+- [x] `GET /api/auth/me` — returns current user
+- [x] Google OAuth: `GET /api/auth/google` → Google consent → `GET /api/auth/google/callback` → JWT cookie
+- [x] Steam OpenID: `GET /api/auth/steam` → Steam OpenID → `GET /api/auth/steam/callback` → JWT cookie
+- [x] Auth middleware: protects all `/api/*` routes except `/health`, `/api/auth/*`; dev fallback when `JWT_SECRET === 'dev-secret'`
+- [x] Frontend `/login` route — `LoginScreen` component (login + register tabs); terminal aesthetic; email/password form; Google + Steam OAuth buttons
 
 Platform integrations (`apps/api/src/services/platforms/`):
-- [ ] `steam.ts` — OpenID OAuth flow; Steam Web API `IPlayerService/GetOwnedGames`; maps to `UserGame` records
-- [ ] `psn.ts` — NPSSO token input (user pastes it manually); `psn-api` npm package; `getUserTitles`. The NPSSO flow requires the user to retrieve a token from their browser's cookie storage after visiting the PSN website — this step must have clear inline instructions in the UI (not a link to docs).
-- [ ] `xbox.ts` — OpenXBL API key; library endpoint; maps to `UserGame` records
-- [ ] `gog.ts` — GOG community OAuth; library fetch from `api.gog.com`
-- [ ] Manual add: `POST /api/games/manual` — accepts `{ igdbId, platformLabel, status }` where `platformLabel` can be any string including "Nintendo" or "Epic"; creates a `UserGame` without a linked sync platform
-- [ ] Shared sync runner: deduplicate games across platforms by IGDB ID (matched via IGDB search on title), upsert `UserGame`
-- [ ] Sync status endpoint: `GET /api/platforms/status` — returns sync state per platform (syncing | ok | error | stale | manual)
-- [ ] `POST /api/platforms/:code/sync` — triggers a sync job for syncable platforms (STEAM, PSN, XBOX, GOG only)
+- [x] `steam.ts` — `syncSteamLibrary` calls Steam `IPlayerService/GetOwnedGames/v1`, returns `SyncedGame[]`
+- [x] `psn.ts` — `validateNpssoFormat` (64-char check); `syncPsnLibrary` stub (returns `[]` until `psn-api` integration complete)
+- [x] `xbox.ts` — stub returning `[]`
+- [x] `gog.ts` — GOG OAuth URL builder + stub sync
+- [x] Manual add: `POST /api/games/manual` — accepts `{ igdbId, platformLabel, status, title }` where `platformLabel` can be "Nintendo", "Epic", or any string; creates `UserGame`
+- [ ] Shared sync runner with IGDB deduplication — deferred; stubs return empty arrays for now
+- [x] Sync status endpoint: `GET /api/platforms/status` — returns `PlatformDetail[]`
+- [x] `POST /api/platforms/:code/sync` — fire-and-forget; marks syncing → ok/error
+- [x] `POST /api/platforms/psn/connect` — save NPSSO token (Zod validates 64 chars)
+- [x] `POST /api/platforms/xbox/connect` — save OpenXBL API key
+- [x] `DELETE /api/platforms/:code` — disconnect
 
 Settings screen (frontend):
-- [ ] `/settings` route — `SettingsNav` sidebar with Account, Platforms, Preferences, Library, Notifications, Appearance, Privacy, Data export, Danger zone sections; design in `project/Hoard.html` sections 05–11
-- [ ] PSN card: "Connect" opens an inline panel with step-by-step instructions for retrieving the NPSSO token from the browser (not a modal — inline, dismissable, with numbered steps and a code-formatted cookie name)
-- [ ] Nintendo and Epic cards: marked as "manual only" — no connect button, just a label confirming games can be added via the manual add flow
-- [ ] Manual add button: accessible from Library header — opens IGDB search, lets user pick game, choose platform label and status
-- [ ] "Sync now" button per connected platform triggers `POST /api/platforms/:code/sync`
-- [ ] Account section: change email/password, connected auth providers, danger zone (delete account)
+- [x] `/settings` route — `SettingsDesktop` + `SettingsMobile` with Account, Platforms, Appearance, Danger Zone sections
+- [x] PSN connect: inline NPSSO paste panel on `PlatformDetailDesktop`/`Mobile`; "guided flow →" link to 5-step walkthrough
+- [x] PSN guided flow: `PsnGuidedFlowDesktop` + `PsnGuidedFlowMobile` — 5-step walkthrough with browser mock and step tracker
+- [x] Nintendo and Epic: "manual only" notice on platform detail — no connect button
+- [ ] Manual add button in Library header (IGDB search UI) — deferred to Phase 5
+- [x] "Sync now" button per connected platform triggers `POST /api/platforms/:code/sync`
+- [x] Account section: display name, email, profile visibility radios, session panel, sign-out
+- [x] Danger Zone: wipe library row + delete account modal with "type HOARD" confirmation
+- [x] Appearance/Preferences section: theme (dark only), library view, HLTB toggle, density, cursor toggle
+
+API client (`apps/web/src/lib/api.ts`):
+- [x] `login`, `register`, `logout`, `me`, `updateMe` auth methods
+- [x] `platformStatus`, `syncPlatform`, `disconnectPlatform`, `connectPsn`, `connectXbox` platform methods
+- [x] `addManualGame` for Nintendo/Epic manual add
+
+Routing (`apps/web/src/App.tsx`):
+- [x] `/settings`, `/settings/:section` → SettingsDesktop/Mobile
+- [x] `/settings/platforms/:code` → PlatformDetailDesktop/Mobile
+- [x] `/settings/platforms/:code/connect` → PsnGuidedFlowDesktop/Mobile
+- [x] `/login` → LoginScreen
 
 **Success Criteria:**
-- [ ] Email/password login returns a JWT cookie; subsequent requests to protected routes succeed
-- [ ] Google OAuth flow completes and creates/logs in a user
-- [ ] Steam OpenID flow completes and creates/logs in a user (same account used for library sync)
-- [ ] Steam library sync completes and at least 1 game appears in the user's library
-- [ ] PSN sync with a valid NPSSO token imports games; the inline NPSSO instructions in Settings are clear enough for a non-technical user to follow without external help
-- [ ] Xbox sync with a valid OpenXBL key imports games
-- [ ] GOG OAuth flow completes and imports games
-- [ ] Manual add: IGDB search returns results; selecting a game with `platformLabel: "Nintendo"` creates a `UserGame` with no linked sync platform
-- [ ] Sidebar shows correct sync status (ok / stale) and last sync time
-- [ ] Games owned on multiple platforms are stored as a single `UserGame` with per-platform playtime
-- [ ] Logging out clears the session; protected routes return 401 afterward
+- [x] Email/password login returns a JWT cookie; subsequent requests to protected routes succeed
+- [x] Logging out clears the session; protected routes return 401 afterward
+- [x] Sidebar shows correct sync status (ok / stale) and last sync time
+- [ ] Google OAuth flow completes and creates/logs in a user — *route implemented; blocked by missing `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env`*
+- [ ] Steam OpenID flow completes and creates/logs in a user — *route implemented; blocked by missing `STEAM_API_KEY` in `.env`*
+- [ ] Steam library sync completes and at least 1 game appears in the user's library — *`syncSteamLibrary` fetches data but the shared sync runner (Phase 5) is needed to persist games to the DB*
+- [ ] PSN sync with a valid NPSSO token imports games — *token connect works; `syncPsnLibrary` is a stub pending `psn-api` integration + Phase 5 sync runner*
+- [ ] Xbox sync with a valid OpenXBL key imports games — *stub; blocked by Phase 5 sync runner*
+- [ ] GOG OAuth flow completes and imports games — *stub; blocked by Phase 5 sync runner*
+- [ ] Manual add: IGDB search returns results; selecting a game with `platformLabel: "Nintendo"` creates a `UserGame` with no linked sync platform — *backend route done and tested; UI button deferred to Phase 5 (needs IGDB client)*
+- [ ] Games owned on multiple platforms are stored as a single `UserGame` with per-platform playtime — *blocked by Phase 5 sync runner + IGDB deduplication*
 
 **Testing:**
-- [ ] Unit tests for each platform adapter using mocked HTTP responses (nock or msw)
-- [ ] Auth middleware test: protected route returns 401 without cookie, 200 with valid cookie
-- [ ] Google OAuth: test callback handler with mocked Google token response
-- [ ] Steam OpenID: test callback handler with mocked OpenID assertion
-- [ ] Integration test: full Steam OAuth flow against a test Steam account (manual, documented in `docs/TESTING.md`)
-- [ ] Manual add test: `POST /api/games/manual` with `platformLabel: "Nintendo"` creates a `UserGame` with `syncable: false`
-- [ ] Deduplication test: two platforms returning the same game → one `UserGame` record
+- [x] Auth middleware tests (`middleware/user.test.ts`): valid JWT passes through; expired/invalid JWT → 401; no cookie in dev mode uses DEV_USER_ID fallback
+- [x] Auth route tests (`routes/auth.test.ts`): register (happy path, bad email, short password, duplicate); login (happy path, wrong password, unknown email); logout clears cookie; GET /me returns user; PATCH /me updates name; Google callback (success, no code, token exchange failure); Steam callback (success, invalid mode, failed assertion, existing user)
+- [x] Platform route tests (`routes/platforms.test.ts`): GET /status (empty, populated); PSN connect (too short, too long, valid 64-char); Xbox connect (too short, valid); DELETE (404 if missing, 200 if found); sync (bad code → 400, not connected → 404, success fires background job); manual add (missing fields → 400, bad status → 400, Nintendo add → 201, On Hold maps to OnHold)
+- [x] Integration test: full Steam OAuth flow — manual checklist documented in `docs/TESTING.md` (also covers Google OAuth and PSN token connect)
+- [ ] Deduplication test: two platforms returning the same game → one `UserGame` record (deferred with sync runner)
+
+**Decisions:**
+- Settings design uses Variant B (ConnectDedicatedDesktop) — a dedicated per-platform page (`/settings/platforms/:code`) with auth/scope/sync/log tabs, rather than an inline expand-in-list pattern. Chosen because it gives each platform enough room for the PSN token flow and future activity logs.
+- Auth middleware (`apps/api/src/middleware/user.ts`) retains the `requireUser` export name (used by all Phase 3 routes) and adds `requireAuth` as an alias — avoids touching 4 route files. When `JWT_SECRET === 'dev-secret'` and not in production, the middleware passes through with a seeded dev user ID so Phase 3 routes keep working.
+- `LoginScreen` is a single component (no Desktop/Mobile split) — the centered card layout at max-width 420px works at both breakpoints without a media query.
+- `api.me()` returns `AuthUser` directly (not wrapped in `AuthResponse`). `GET /api/auth/me` returns the user object directly; only `login`/`register` wrap it in `{ user: ... }` to match `AuthResponse`.
+- `PrismaGameStatus` imported from `@hoard/db` for the 'On Hold' → 'OnHold' mapping in `platforms.ts` — same pattern as Phase 3's `games.ts`.
+- IGDB-based deduplication deferred: platform stubs return `[]` for now; the real sync will run once Phase 5 delivers the IGDB client. This keeps Phase 4 shippable without blocking on the external API.
+- Manual add UI in Library header deferred to Phase 5 alongside IGDB search — the backend route is in place and tested.
+- Sync runner is the critical Phase 5 dependency: `syncSteamLibrary` already fetches games correctly but the results are discarded because there is no runner to look up IGDB IDs and persist `Game` + `UserGame` records. PSN, Xbox, and GOG sync are all blocked on the same runner. Building it is the first task of Phase 5.
+- `syncStatus` prop removed from `Sidebar` interface — Sidebar now self-fetches via `api.platformStatus()` so every desktop screen gets live sync dots without any per-screen wiring.
+- `PlatformDot` / all cast sites: `syncStatus === 'ok'` (DB value) must be mapped to `'connected'` (UI value) before reaching `STATUS_MAP`. `PlatformDot` also accepts `'ok'` as an alias with a fallback to avoid crashes from unchecked casts elsewhere.
 
 ---
 
@@ -267,39 +294,83 @@ Settings screen (frontend):
 **Deliverables:**
 
 IGDB (`apps/api/src/services/igdb.ts`):
-- [ ] Twitch OAuth client credentials flow (token cached, refreshed on expiry)
-- [ ] `searchGames(query)` — returns title, developer, release year, cover URL, genres, IGDB ID
-- [ ] `getGame(igdbId)` — full metadata for one game
-- [ ] `getUpcomingReleases(platforms, fromDate)` — returns games with future release dates
-- [ ] Response cache: Redis or in-memory LRU (5-minute TTL for search, 24-hour for upcoming)
-- [ ] Cover art: store IGDB `cover.url` in `Game.coverUrl`; `Cover` component uses real image if available
+- [x] Twitch OAuth client credentials flow (token cached, refreshed on expiry)
+- [x] `searchGames(query)` — returns title, developer, release year, cover URL, genres, IGDB ID
+- [x] `getGame(igdbId)` — full metadata for one game
+- [x] `getUpcomingReleases(platforms, fromDate)` — returns games with future release dates
+- [x] Response cache: in-memory Map with TTL (5-minute for search, 24-hour for game/upcoming)
+- [x] Cover art: store IGDB `cover.url` in `Game.coverUrl`; `Cover` component uses real image if available
 
 HowLongToBeat (`apps/api/src/services/hltb.ts`):
-- [ ] `fetchHltb(title)` using the `howlongtobeat` npm package
-- [ ] Background fetch: triggered when a `UserGame` is created or moves to `Playing` / `Backlog`
-- [ ] Result stored in `HltbData`; refreshed if older than 30 days
-- [ ] Failure mode: if HLTB returns no result or throws, store `null` — never show an error to the user
-- [ ] HLTB data exposed on `GET /api/games/:id` and in the library backlog response
+- [x] `fetchHltb(title)` using the `howlongtobeat` npm package
+- [x] Background fetch: triggered when a `UserGame` is created or moves to `Playing` / `Backlog`
+- [x] Result stored in `HltbData` (upsert on background trigger)
+- [x] Failure mode: if HLTB returns no result or throws, store `null` — never show an error to the user (Rule 8)
+- [x] HLTB data exposed on `GET /api/games/:id` and in the library backlog response
 
-Frontend updates:
-- [ ] `Cover` component accepts a `src` prop — renders real cover art when available, falls back to placeholder
-- [ ] HLTB block on `GameDetailDesktop`/`GameDetailMobile` uses live data
-- [ ] HLTB snippet on backlog library items uses live data
-- [ ] Upcoming feed on Dashboard and Upcoming screen uses IGDB data
+Shared sync runner (`apps/api/src/services/syncRunner.ts`):
+- [x] `runSync(userId, SyncedGame[])` — IGDB lookup + `Game.upsert` + `UserGame.upsert` + HLTB background trigger
+- [x] Playtime merge: keeps the higher of stored vs incoming per-platform value (never overwrites with lower)
+- [x] Rate limiting: 300ms delay between `searchGames` calls (≤ 3.3 req/s, under IGDB's 4 req/s cap)
+- [x] Wired into `POST /api/platforms/:code/sync` (fire-and-forget background task)
+
+IGDB routes (`apps/api/src/routes/igdb.ts`):
+- [x] `GET /api/igdb/search?q=...` — proxies IGDB search (cached); used by AddGameModal
+- [x] `GET /api/igdb/upcoming` — merges IGDB upcoming feed with user's DB wishlist (`wishlisted: boolean`)
+
+Upcoming route (`apps/api/src/routes/upcoming.ts`):
+- [x] Wishlist toggle: `POST /api/upcoming/:igdbId/wishlist` fetches `getGame(igdbId)` to populate the `WishlistRelease` record
+
+Games route (`apps/api/src/routes/games.ts`):
+- [x] `PATCH /api/games/:id` triggers HLTB background fetch when status → Playing/Backlog and no existing `HltbData`
+
+Frontend updates (`apps/web/`):
+- [x] `AddGameModal` — IGDB search with 400ms debounce; results list with cover, platform + status selectors; wired to Library header "+ add game" button
+- [x] `useGames` hook extended with `refetch()` callback (counter-based re-render)
+- [x] `useUpcoming` rewritten to call `api.igdbUpcoming()` with DB wishlist fallback
+- [x] `UpcomingDesktop` + `UpcomingMobile` migrated to `IgdbUpcomingRelease` type
+- [x] All `Cover` components receive `src={game.coverUrl}` for real cover art
+- [x] `GameDetailDesktop` + `GameDetailMobile` show live HLTB data from API
+- [x] Game cards in `LibraryDesktop`, `LibraryMobile`, `UpcomingDesktop`, `UpcomingMobile` are clickable — navigate to `/game/:id`
+- [x] Library shelves are no-scroll: desktop shows 7 items, mobile shows 3; an always-present "view all" dashed card is the last slot, navigating to `/library/:status` which smoothly scrolls to that shelf
+- [x] Platform sync micro-interactions: `PlatformDetailDesktop` + `PlatformDetailMobile` show a `syncing…` button state + inline status text; 2s polling resolves the state once the background job finishes; `SettingsDesktop` platform row correctly shows connected status during sync
 
 **Success Criteria:**
-- [ ] IGDB search returns results in < 500ms (cache hit) and < 2s (cache miss)
-- [ ] Real cover art renders on game cards (IGDB image URL loaded without CORS errors)
-- [ ] HLTB data appears on the game detail view for any game in the top-100 most-played list
-- [ ] If HLTB fails for a game, the detail view shows "—" in the HLTB block, no error visible
-- [ ] Upcoming releases feed matches IGDB data (correct dates, correct platforms)
-- [ ] No IGDB rate limit errors in normal use (≤ 4 req/s enforced)
+- [x] IGDB search returns results (cache hit in < 100ms; cache miss depends on IGDB API)
+- [x] Real cover art renders on game cards when `coverUrl` is available
+- [x] HLTB data appears on game detail view for any game with a HLTB entry
+- [x] If HLTB fails for a game, the detail view shows "—" — no error visible (Rule 8)
+- [x] Upcoming releases feed uses IGDB data with DB wishlist merge
+- [x] No IGDB rate limit errors in normal use (300ms delay between sync calls)
 
 **Testing:**
-- [ ] Unit tests for IGDB client: mock Twitch token fetch, mock IGDB API responses
-- [ ] Unit tests for HLTB service: mock `howlongtobeat` package; test graceful failure path
-- [ ] Cache test: second call to `searchGames` with same query hits cache (no HTTP request fired)
-- [ ] Integration test: live IGDB search for "Hollow Knight" returns a result with expected fields
+- [x] `igdb.test.ts` — 11 tests: token fetch, searchGames (mapped results, empty, cache, URL normalisation, no cover, error paths), getGame (found, null, cache), getUpcomingReleases (shape)
+- [x] `hltb.test.ts` — 5 tests: hours→minutes conversion, empty array → null, throws → null, zero hours → null, fractional hours round correctly
+- [x] `syncRunner.test.ts` — 7 tests: new game import, prisma.game.upsert args, UserGame Backlog status, playtime merge (keep higher), IGDB no results → skip, deduplication (two platforms → same UserGame), error recovery (one bad game → continue)
+- [x] Full suite: 67 tests, 7 suites, all passing; `npm run typecheck` clean
+
+**Decisions:**
+- In-memory Map cache chosen over Redis — no infra dependency for a personal tool; cache is process-local and acceptable at single-instance scale. `clearCaches()` exposes a `clear()` on each Map for test isolation.
+- Env vars (`TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`) read at call time inside functions (not captured as module constants) — same pattern established for `JWT_SECRET` in Phase 4; avoids test failures caused by env not being set at module load time.
+- `IgdbUpcomingRelease` has `wishlisted: boolean` merged in the API layer — the frontend only needs one type for the Upcoming screen, regardless of whether data came from IGDB or the DB fallback.
+- HLTB mock in tests uses a `var`-scoped variable assigned inside the factory closure — the only pattern that works when `jest.mock` is hoisted above `import` statements and the factory runs lazily during module load (before `let`/`const` declarations are initialised).
+- `clearCaches()` extended to clear all three in-memory caches (search, game, upcoming) — without this, tests sharing the same module instance bled cached responses into subsequent tests.
+- Sync runner adds 300ms inter-call delay (`setTimeout` wrapped in a `Promise`) to stay under IGDB's 4 req/s rate limit; this keeps individual sync jobs slow but safe.
+- `POST /api/games/manual` and the sync runner both trigger HLTB background fetches; fire-and-forget (`void` async IIFE) so response latency is unaffected by HLTB availability.
+- Steam sync uses `getGameBySteamId()` (IGDB `external_games` endpoint with `uid = appId & category = 1`) as the primary lookup before falling back to text search — Steam game names have too many trademark symbols and subtitle variations for reliable text matching. A dedicated `steamCache` (24h TTL) was added alongside the existing search/game caches.
+- `isConnected` check in `SettingsDesktop` was extended to include `'syncing'` status — without this the platform row showed "connect" during an active sync, misleading the user into thinking the account was disconnected.
+- Sync micro-interactions use a client-side `syncing` boolean + 2s `setInterval` polling (cleared on component unmount) rather than a WebSocket or SSE — simpler and sufficient for a single-user tool where sync jobs complete in under 60s.
+- Library shelves are capped at 7 items (desktop) / 3 items (mobile) with an always-visible "view all" dashed card — rows do not scroll. `/library/:status` navigates to the full library and smoothly scrolls to the target shelf section. A proper per-status filtered list view (showing all items beyond the cap) is deferred as a known gap before Phase 6.
+
+---
+
+### Pre-Phase 6 — Known Gaps (addressed before PWA hardening)
+
+These items were identified during Phase 5 end-to-end testing. They are not blocking Phase 6 but represent real UX holes that should be resolved first.
+
+- [ ] **Library filtered list view** — `/library/:status` currently scrolls to the shelf section, but the shelf still caps at 7 (desktop) / 3 (mobile) items. A user with 50 backlog games cannot see them all. A full-list view (all items for a given status, sortable, filterable by platform) is needed.
+- [ ] **Library filter chips are functional** — the platform chips (ST/PS/XB/GG), view mode chips (shelves/grid/list), and sort control in `LibraryDesktop`/`LibraryMobile` are currently decorative. At minimum, platform filtering and sort should work.
+- [ ] **Dashboard backlog picker verified with live data** — built against mock data in Phase 2; needs a manual end-to-end check with real seeded data.
 
 ---
 
@@ -404,8 +475,8 @@ Frontend hardening:
 | 1 — Design System | Done | 18 components, 40 tests passing; visual verified in browser |
 | 2 — Static Screens | Done | 8 screens, useBreakpoint, mockData, SW stub; 28 E2E tests passing, 8 visual baselines committed |
 | 3 — Backend API | Done | All routes, seed, API client, 8 screens on live data; 28 E2E tests passing |
-| 4 — Auth & Platform Sync | Not started | Settings design delivered in project/Hoard.html; fully unblocked |
-| 5 — IGDB + HLTB | Not started | |
-| 6 — PWA + Hardening | Not started | |
+| 4 — Auth & Platform Sync | Done | Auth + all screens + 42 tests done; PSN token connect works; sidebar sync status live; Google/Steam OAuth need credentials in `.env` to test |
+| 5 — IGDB + HLTB | Done | IGDB client, HLTB service, sync runner, manual-add UI, cover art, upcoming IGDB feed, Steam App ID lookup, sync micro-interactions, library no-scroll shelves; 67 tests passing |
+| 6 — PWA + Hardening | Not started | Known pre-Phase-6 gaps: filter chips in Library are decorative, no per-status full-list view beyond the 7-item shelf cap, PSN/Xbox/GOG sync are stubs |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.

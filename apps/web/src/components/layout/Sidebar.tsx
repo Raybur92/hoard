@@ -1,9 +1,11 @@
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icon } from '../primitives/Icon';
 import { Plat } from '../primitives/Plat';
+import { api } from '../../lib/api';
+import type { AuthUser, PlatformDetail } from '@hoard/types';
 
 export interface SidebarProps {
-  syncStatus?: Record<string, { label: string; status: 'ok' | 'error' | 'stale' | 'syncing' | 'manual' }>;
   shelfCounts?: Partial<Record<string, number>>;
 }
 
@@ -11,6 +13,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dotO',   path: '/' },
   { label: 'Library',   icon: 'menu',   path: '/library' },
   { label: 'Upcoming',  icon: 'star',   path: '/upcoming' },
+  { label: 'Settings',  icon: 'cog',    path: '/settings' },
 ] as const;
 
 const DEFAULT_SHELVES = [
@@ -29,9 +32,16 @@ const PLATFORMS = [
   { label: 'GOG',   code: 'GG' },
 ] as const;
 
-export function Sidebar({ syncStatus, shelfCounts }: SidebarProps) {
+export function Sidebar({ shelfCounts }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [platforms, setPlatforms] = useState<PlatformDetail[]>([]);
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    void api.platformStatus().then((r) => setPlatforms(r.platforms)).catch(() => null);
+    void api.me().then((r) => setUser(r)).catch(() => null);
+  }, []);
 
   const isActive = (path: string) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
@@ -72,13 +82,19 @@ export function Sidebar({ syncStatus, shelfCounts }: SidebarProps) {
 
       <div className="group">// platforms</div>
       {PLATFORMS.map(({ label, code }) => {
-        const s = syncStatus?.[code];
+        const p = platforms.find((pl) => pl.code === code);
+        const dotColor = !p ? undefined
+          : p.syncStatus === 'ok' ? 'var(--green)'
+          : p.syncStatus === 'stale' ? 'var(--amber)'
+          : p.syncStatus === 'error' ? 'var(--red)'
+          : p.syncStatus === 'syncing' ? 'var(--green)'
+          : undefined;
         return (
-          <div key={code} className="item">
+          <div key={code} className="item" onClick={() => navigate(`/settings/platforms/${code.toLowerCase()}`)}>
             <span className="glyph"><Plat code={code} /></span>
             <span>{label}</span>
-            {s && (
-              <span className="count" style={{ color: s.status === 'ok' ? 'var(--green)' : 'var(--paper-faint)' }}>
+            {dotColor && (
+              <span className="count" style={{ color: dotColor }}>
                 <Icon name="dotO" size={8} fill={true} />
               </span>
             )}
@@ -90,8 +106,8 @@ export function Sidebar({ syncStatus, shelfCounts }: SidebarProps) {
       <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', fontSize: 10, color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ width: 22, height: 22, background: 'var(--ink-3)', border: '1px solid var(--rule-bright)' }} />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ color: 'var(--paper)', fontSize: 11 }}>andrea</span>
-          <span style={{ fontSize: 9 }}>since 2023</span>
+          <span style={{ color: 'var(--paper)', fontSize: 11 }}>{user?.name ?? '…'}</span>
+          <span style={{ fontSize: 9 }}>since {user ? new Date(user.createdAt).getFullYear() : '…'}</span>
         </div>
       </div>
     </aside>

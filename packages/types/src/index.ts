@@ -135,3 +135,79 @@ export interface StatsResponse {
   genreBreakdown: { name: string; count: number }[];
   shelfCounts: Partial<Record<GameStatus, number>>;
 }
+
+/* ── Auth ── */
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string | null;
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  user: AuthUser;
+}
+
+export interface LoginBody {
+  email: string;
+  password: string;
+}
+
+export interface RegisterBody {
+  email: string;
+  password: string;
+  name?: string;
+}
+
+/* ── Platform detail (settings) ── */
+
+export interface PlatformDetail {
+  id: string;
+  userId: string;
+  code: PlatformCode;
+  name: string;
+  syncable: boolean;
+  connected: boolean;
+  syncStatus: SyncStatus;
+  lastSyncAt: string | null;
+  gameCount: number | null;
+  who: string | null;
+}
+
+export interface PlatformStatusResponse {
+  platforms: PlatformDetail[];
+}
+
+export interface ManualAddBody {
+  igdbId: number;
+  platformLabel: string;
+  status: GameStatus;
+  title: string;
+  developer?: string;
+  coverUrl?: string;
+}
+
+/* ── IGDB ── */
+
+export interface IgdbSearchResult {
+  igdbId: number;
+  title: string;
+  developer: string | null;
+  releaseYear: number | null;
+  genres: string[];
+  coverUrl: string | null;
+}
+
+export interface IgdbUpcomingRelease {
+  igdbId: number;
+  title: string;
+  developer: string | null;
+  releaseDate: string | null;
+  releaseDateCategory: ReleaseDateCategory;
+  platforms: string[];
+  genres: string[];
+  coverUrl: string | null;
+  synopsis: string | null;
+  wishlisted: boolean;
+}

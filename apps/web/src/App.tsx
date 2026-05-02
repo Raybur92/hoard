@@ -5,6 +5,10 @@ import {
   LibraryDesktop, LibraryMobile,
   UpcomingDesktop, UpcomingMobile,
   GameDetailDesktop, GameDetailMobile,
+  SettingsDesktop, SettingsMobile,
+  PlatformDetailDesktop, PlatformDetailMobile,
+  PsnGuidedFlowDesktop, PsnGuidedFlowMobile,
+  LoginScreen,
 } from './components/screens';
 
 export default function App() {
@@ -13,14 +17,17 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/"                element={desktop ? <DashboardDesktop /> : <DashboardMobile />} />
-      <Route path="/library"         element={desktop ? <LibraryDesktop />   : <LibraryMobile />} />
-      <Route path="/library/:status" element={desktop ? <LibraryDesktop />   : <LibraryMobile />} />
-      <Route path="/upcoming"        element={desktop ? <UpcomingDesktop />  : <UpcomingMobile />} />
-      <Route path="/game/:id"        element={desktop ? <GameDetailDesktop /> : <GameDetailMobile />} />
-      <Route path="/settings"        element={<div style={{ padding: 40, color: 'var(--paper-faint)', fontFamily: 'var(--mono)' }}>Settings — coming in Phase 4</div>} />
-      <Route path="/login"           element={<div style={{ padding: 40, color: 'var(--paper-faint)', fontFamily: 'var(--mono)' }}>Login — coming in Phase 4</div>} />
-      <Route path="*"                element={<Navigate to="/" replace />} />
+      <Route path="/"                                    element={desktop ? <DashboardDesktop />      : <DashboardMobile />} />
+      <Route path="/library"                             element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
+      <Route path="/library/:status"                     element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
+      <Route path="/upcoming"                            element={desktop ? <UpcomingDesktop />       : <UpcomingMobile />} />
+      <Route path="/game/:id"                            element={desktop ? <GameDetailDesktop />     : <GameDetailMobile />} />
+      <Route path="/settings"                            element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
+      <Route path="/settings/:section"                   element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
+      <Route path="/settings/platforms/:code"            element={desktop ? <PlatformDetailDesktop /> : <PlatformDetailMobile />} />
+      <Route path="/settings/platforms/:code/connect"    element={desktop ? <PsnGuidedFlowDesktop />  : <PsnGuidedFlowMobile />} />
+      <Route path="/login"                               element={<LoginScreen />} />
+      <Route path="*"                                    element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

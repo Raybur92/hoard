@@ -82,7 +82,7 @@ export function GameDetailDesktop() {
             <Marker>// game record · {g.lastPlayedAt ? `last sync ${formatRelative(g.lastPlayedAt)}` : 'never played'}</Marker>
 
             <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 28, marginTop: 18 }}>
-              <Cover w={220} h={300} label={g.game.title.toUpperCase()} dev={g.game.developer ?? ''} year={shortYear(g.game.releaseYear)} bright />
+              <Cover w={220} h={300} src={g.game.coverUrl} label={g.game.title.toUpperCase()} dev={g.game.developer ?? ''} year={shortYear(g.game.releaseYear)} bright />
               <div>
                 <div className="t-up t-faint" style={{ fontSize: 10 }}>
                   {g.game.developer} · {g.game.releaseYear} · {g.game.genres[0] ?? '—'}

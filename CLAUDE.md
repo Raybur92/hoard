@@ -140,8 +140,8 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: Phase 4 — Auth & Platform Integrations**
+**Active: Phase 6 — PWA & Production Hardening**
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
-**Settings screen (Phase 4):** design is now available in `project/Hoard.html` (sections 05–11). Fully unblocked — implement Account, Platforms, Preferences, PSN guided flow, and Danger Zone screens.
+Phases 0–5 are complete. Phase 6 covers: Workbox service worker with cache strategies, offline banner, Zod input validation on all routes, rate limiting, pino structured logging, error boundaries, loading skeletons, and Lighthouse CI thresholds.

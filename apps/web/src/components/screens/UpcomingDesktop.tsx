@@ -6,10 +6,10 @@ import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
 import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
-import { HypeBars } from '../primitives/HypeBars';
 import { useUpcoming } from '../../hooks/useUpcoming';
 import { daysUntil, upcomingDateParts, countdownParts } from '../../lib/utils';
-import type { WishlistRelease } from '@hoard/types';
+import { api } from '../../lib/api';
+import type { IgdbUpcomingRelease } from '@hoard/types';
 
 function toPlatCode(name: string): string {
   const n = name.toLowerCase();
@@ -22,13 +22,13 @@ function toPlatCode(name: string): string {
   return n.slice(0, 2).toUpperCase();
 }
 
-interface UpcomingItem extends WishlistRelease {
+interface UpcomingItem extends IgdbUpcomingRelease {
   days: number;
   parts: ReturnType<typeof upcomingDateParts>;
   platStr: string;
 }
 
-function enrichItem(w: WishlistRelease): UpcomingItem {
+function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
   return {
     ...w,
     days: daysUntil(w.releaseDate),
@@ -38,7 +38,14 @@ function enrichItem(w: WishlistRelease): UpcomingItem {
 }
 
 export function UpcomingDesktop() {
-  const { data, loading } = useUpcoming();
+  const { data, loading, refetch } = useUpcoming();
+
+  async function handleToggleWishlist(igdbId: number) {
+    try {
+      await api.toggleWishlist(igdbId);
+      void refetch();
+    } catch { /* silent */ }
+  }
 
   if (loading || !data) {
     return (
@@ -104,7 +111,7 @@ export function UpcomingDesktop() {
               const cd = countdownParts(featured.releaseDate);
               return (
                 <div className="panel" style={{ padding: 24, display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24, alignItems: 'start' }}>
-                  <Cover w={180} h={240} label={featured.title.toUpperCase()} dev={featured.developer ?? '—'} year={featured.parts.full.split(',')[1]?.trim() ?? null} bright />
+                  <Cover w={180} h={240} src={featured.coverUrl} label={featured.title.toUpperCase()} dev={featured.developer ?? '—'} year={featured.parts.full.split(',')[1]?.trim() ?? null} bright />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
                       <div style={{ minWidth: 0 }}>
@@ -138,14 +145,20 @@ export function UpcomingDesktop() {
                           {featured.platforms.map(p => <Plat key={p} code={toPlatCode(p)} lg />)}
                         </div>
                       </div>
-                      <div><div className="t-up t-faint" style={{ fontSize: 9 }}>hype</div><div style={{ marginTop: 6 }}><HypeBars n={featured.hype ?? 3} /></div></div>
+                      <div><div className="t-up t-faint" style={{ fontSize: 9 }}>genres</div><div style={{ marginTop: 4, fontSize: 11 }}>{featured.genres[0] ?? '—'}</div></div>
                     </div>
                     <div className="t-sans" style={{ marginTop: 16, fontSize: 13, lineHeight: 1.5, color: 'var(--paper-dim)' }}>
                       {featured.synopsis ?? featured.genres.join(' · ')}
                     </div>
                     <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <Btn variant="amber" sm><Icon name="star" size={11} /> on wishlist</Btn>
-                      <Btn sm><Icon name="play" size={11} fill={true} /> trailer</Btn>
+                      <Btn
+                        {...(featured.wishlisted ? { variant: 'amber' as const } : {})}
+                        sm
+                        onClick={() => void handleToggleWishlist(featured.igdbId)}
+                      >
+                        <Icon name="star" size={11} fill={featured.wishlisted} />
+                        {featured.wishlisted ? 'on wishlist' : '+ wishlist'}
+                      </Btn>
                     </div>
                   </div>
                 </div>
@@ -161,7 +174,7 @@ export function UpcomingDesktop() {
                     const x = maxDays > 0 ? Math.round((e.days / maxDays) * 85) + 5 : 50;
                     const labelTop = e.side === 'top';
                     return (
-                      <div key={e.id} style={{
+                      <div key={e.igdbId} style={{
                         position: 'absolute', left: `${x}%`,
                         top: labelTop ? 0 : '50%',
                         height: '50%',
@@ -198,14 +211,14 @@ export function UpcomingDesktop() {
             <div style={{ marginTop: 36 }}>
               <Marker>// upcoming · {items.length} tracked</Marker>
               <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-                {items.slice(0, 4).map((g, i) => (
-                  <div key={g.id} style={{ display: 'grid', gridTemplateColumns: '60px 76px 1fr', gap: 14, padding: 14, border: '1px solid var(--rule)', background: 'var(--ink)' }}>
+                {items.slice(0, 4).map((g) => (
+                  <div key={g.igdbId} style={{ display: 'grid', gridTemplateColumns: '60px 76px 1fr', gap: 14, padding: 14, border: '1px solid var(--rule)', background: 'var(--ink)' }}>
                     <div style={{ textAlign: 'center', borderRight: '1px dashed var(--rule-bright)', paddingRight: 8 }}>
                       <div className="t-up t-faint" style={{ fontSize: 9 }}>{g.parts.month}</div>
                       <div className="t-display" style={{ fontSize: 26, color: 'var(--amber)', lineHeight: 1, marginTop: 3 }}>{g.parts.day === '—' ? '?' : g.parts.day}</div>
                       <div className="t-mono t-faint" style={{ fontSize: 9, marginTop: 3 }}>{g.parts.dow}</div>
                     </div>
-                    <Cover w={76} h={100} label={(g.title.split(' ')[0] ?? g.title).toUpperCase()} bright />
+                    <Cover w={76} h={100} src={g.coverUrl} label={(g.title.split(' ')[0] ?? g.title).toUpperCase()} bright />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 14, color: 'var(--paper)', lineHeight: 1.15 }}>{g.title}</div>
                       <div className="t-mono t-faint" style={{ fontSize: 10, marginTop: 2 }}>{g.developer}</div>
@@ -213,11 +226,14 @@ export function UpcomingDesktop() {
                       <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                         {g.platforms.slice(0, 3).map(p => <Plat key={p} code={toPlatCode(p)} />)}
                       </div>
-                      <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="t-amber" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <Icon name="star" size={10} fill={true} /> tracking
+                      <div style={{ marginTop: 8 }}>
+                        <span
+                          onClick={() => void handleToggleWishlist(g.igdbId)}
+                          style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                        >
+                          <Icon name="star" size={10} fill={g.wishlisted} />
+                          {g.wishlisted ? 'tracking' : '+ wishlist'}
                         </span>
-                        <HypeBars n={g.hype ?? 3} />
                       </div>
                     </div>
                   </div>
@@ -232,8 +248,8 @@ export function UpcomingDesktop() {
               <Marker>// agenda · all tracked</Marker>
               <span className="t-mono t-faint" style={{ fontSize: 10 }}>{items.length} items</span>
             </div>
-            {items.map((g, i) => (
-              <div key={g.id} style={{
+            {items.map((g) => (
+              <div key={g.igdbId} style={{
                 display: 'grid',
                 gridTemplateColumns: '52px 32px 1fr auto',
                 gap: 12,
@@ -246,7 +262,7 @@ export function UpcomingDesktop() {
                   <div className="t-up t-faint" style={{ fontSize: 8 }}>{g.parts.month}</div>
                   <div className="t-display" style={{ fontSize: 20, color: 'var(--amber)', lineHeight: 1 }}>{g.parts.day === '—' ? '?' : g.parts.day}</div>
                 </div>
-                <Cover w={32} h={42} label={(g.title[0] ?? '').toUpperCase()} bright />
+                <Cover w={32} h={42} src={g.coverUrl} label={(g.title[0] ?? '').toUpperCase()} bright />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, lineHeight: 1.1 }}>{g.title}</div>
                   <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>{g.developer} · {g.platStr}</div>
@@ -255,7 +271,12 @@ export function UpcomingDesktop() {
                   <div className="t-tnum" style={{ fontSize: 13, color: 'var(--amber)' }}>
                     {g.releaseDate ? `T-${g.days}d` : 'TBA'}
                   </div>
-                  <div className="t-amber" style={{ marginTop: 2 }}><Icon name="star" size={10} fill={true} /></div>
+                  <div
+                    style={{ marginTop: 2, cursor: 'pointer', color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                    onClick={() => void handleToggleWishlist(g.igdbId)}
+                  >
+                    <Icon name="star" size={10} fill={g.wishlisted} />
+                  </div>
                 </div>
               </div>
             ))}

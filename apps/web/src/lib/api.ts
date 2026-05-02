@@ -6,10 +6,24 @@ import type {
   StatsResponse,
   GameStatus,
   PatchGameBody,
+  AuthUser,
+  AuthResponse,
+  LoginBody,
+  RegisterBody,
+  PlatformStatusResponse,
+  ManualAddBody,
+  IgdbSearchResult,
+  IgdbUpcomingRelease,
 } from '@hoard/types';
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: 'include' });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json() as Promise<T>;
+}
+
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(path, { method: 'DELETE', credentials: 'include' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
@@ -74,4 +88,47 @@ export const api = {
 
   stats: () =>
     get<StatsResponse>('/api/stats'),
+
+  // auth
+  login: (body: LoginBody) =>
+    post<AuthResponse>('/api/auth/login', body),
+
+  register: (body: RegisterBody) =>
+    post<AuthResponse>('/api/auth/register', body),
+
+  logout: () =>
+    post<void>('/api/auth/logout'),
+
+  me: () =>
+    get<AuthUser>('/api/auth/me'),
+
+  updateMe: (body: Partial<Pick<AuthUser, 'name'>>) =>
+    patch<AuthUser>('/api/auth/me', body),
+
+  // platforms
+  platformStatus: () =>
+    get<PlatformStatusResponse>('/api/platforms/status'),
+
+  syncPlatform: (code: string) =>
+    post<void>(`/api/platforms/${code.toLowerCase()}/sync`),
+
+  disconnectPlatform: (code: string) =>
+    del<void>(`/api/platforms/${code.toLowerCase()}`),
+
+  connectPsn: (npsso: string) =>
+    post<void>('/api/platforms/psn/connect', { npsso }),
+
+  connectXbox: (apiKey: string) =>
+    post<void>('/api/platforms/xbox/connect', { apiKey }),
+
+  // manual games (Nintendo / Epic)
+  addManualGame: (body: ManualAddBody) =>
+    post<UserGameDetail>('/api/games/manual', body),
+
+  // IGDB
+  igdbSearch: (q: string) =>
+    get<IgdbSearchResult[]>(`/api/igdb/search?q=${encodeURIComponent(q)}`),
+
+  igdbUpcoming: () =>
+    get<IgdbUpcomingRelease[]>('/api/igdb/upcoming'),
 };

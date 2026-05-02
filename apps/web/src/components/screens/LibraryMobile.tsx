@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
 import { MobileTabBar } from '../layout/MobileTabBar';
@@ -5,8 +7,10 @@ import { Cover } from '../primitives/Cover';
 import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
 import { Icon } from '../primitives/Icon';
+import { Btn } from '../primitives/Btn';
 import { useGames } from '../../hooks/useGames';
 import { minutesToHours, formatRelative } from '../../lib/utils';
+import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
 
 interface GameDisplay {
@@ -15,6 +19,7 @@ interface GameDisplay {
   platformCode: string;
   playtime: string;
   progress: number;
+  coverUrl: string | null;
   hltbHours?: number;
 }
 
@@ -49,28 +54,29 @@ function toGameDisplay(ug: UserGameDetail): GameDisplay {
     platformCode,
     playtime: minutesToHours(totalMin),
     progress,
+    coverUrl: ug.game.coverUrl,
     ...(ug.hltb?.mainStory ? { hltbHours: Math.round(ug.hltb.mainStory / 60) } : {}),
   };
 }
 
 function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
+  const navigate = useNavigate();
   const accent = shelf.tone === 'green' ? 'var(--green)' : shelf.tone === 'amber' ? 'var(--amber)' : shelf.tone === 'red' ? 'var(--red)' : 'var(--paper)';
   const isBacklog = shelf.status === 'Backlog';
-  const shown = shelf.items.slice(0, 6);
+  const shown = shelf.items.slice(0, 3);
+  const remaining = shelf.count - shown.length;
   return (
-    <div style={{ padding: '14px 0 18px' }}>
+    <div id={`shelf-${shelf.status}`} style={{ padding: '14px 0 18px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0 16px' }}>
         <span className="t-display" style={{ fontSize: 18, color: accent, lineHeight: 0.9 }}>{String(idx).padStart(2, '0')}</span>
         <span className="t-up" style={{ fontSize: 12, letterSpacing: '0.14em' }}>{shelf.name}</span>
         <span className="t-mono t-faint" style={{ fontSize: 10 }}>· {shelf.count}</span>
-        <span style={{ flex: 1 }} />
-        <span className="t-faint" style={{ fontSize: 10 }}>see all ›</span>
       </div>
-      <div className="thin-scroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '12px 16px 0' }}>
+      <div style={{ display: 'flex', gap: 10, overflow: 'hidden', padding: '12px 16px 0' }}>
         {shown.map(g => (
-          <div key={g.id} style={{ width: 84, flex: '0 0 auto' }}>
+          <div key={g.id} style={{ width: 84, flex: '0 0 auto', cursor: 'pointer' }} onClick={() => navigate(`/game/${g.id}`)}>
             <div style={{ position: 'relative' }}>
-              <Cover w={84} h={112} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
+              <Cover w={84} h={112} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
               <div style={{ position: 'absolute', top: 4, right: 4 }}><Plat code={g.platformCode} /></div>
               {g.progress > 0 && (
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: 'rgba(0,0,0,0.3)' }}>
@@ -85,6 +91,13 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
             </div>
           </div>
         ))}
+        <div
+          style={{ width: 84, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: 112, color: 'var(--paper-faint)', fontSize: 10, gap: 4, cursor: 'pointer' }}
+          onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
+        >
+          {remaining > 0 && <span style={{ fontSize: 16 }}>+{remaining}</span>}
+          <span className="t-up" style={{ fontSize: 8 }}>view all</span>
+        </div>
       </div>
       <div style={{ height: 3, background: 'var(--rule-bright)', margin: '10px 16px 0' }} />
     </div>
@@ -92,7 +105,15 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
 }
 
 export function LibraryMobile() {
-  const { data, loading } = useGames({ limit: 100 });
+  const { data, loading, refetch } = useGames({ limit: 100 });
+  const [showAddModal, setShowAddModal] = useState(false);
+  const { status: statusParam } = useParams<{ status?: string }>();
+
+  useEffect(() => {
+    if (!statusParam || loading) return;
+    const el = document.getElementById(`shelf-${statusParam}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [statusParam, loading]);
 
   const grouped = new Map<GameStatus, UserGameDetail[]>();
   if (data) {
@@ -120,7 +141,17 @@ export function LibraryMobile() {
 
   return (
     <MobileFrame>
-      <MobileHeader title="shelves" sub={`// ${data.total} titles`} />
+      <MobileHeader
+        title="shelves"
+        sub={`// ${data.total} titles`}
+        right={<Btn sm variant="primary" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
+      />
+      {showAddModal && (
+        <AddGameModal
+          onClose={() => setShowAddModal(false)}
+          onAdded={() => { void refetch(); }}
+        />
+      )}
       <div style={{ padding: '10px 16px 0', display: 'flex', gap: 6, overflowX: 'auto' }}>
         <Chip on>all</Chip>
         <Chip><Plat code="ST" /></Chip>
