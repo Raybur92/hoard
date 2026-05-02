@@ -68,6 +68,7 @@ These are non-negotiable. Do not deviate without explicit instruction.
    - Update the Phase Status table
    - Record any design decisions made during the phase — what was decided, why, and any trade-offs — directly in the relevant phase section under a `**Decisions:**` block
    - If a decision affects the overall architecture or is permanent for v1, mirror it in `AGENT.md` under Key Decisions
+   - Update the `## Current Phase` section in this file (`CLAUDE.md`) to name the next active phase explicitly — never leave it as a bare pointer to PLAN.md
 
 ---
 
