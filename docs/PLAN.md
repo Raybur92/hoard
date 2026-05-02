@@ -48,8 +48,8 @@ Breakpoint: `≥ 1024px` → desktop (sidebar + topbar). `< 1024px` → mobile (
 - [x] `npm run lint` passes with no errors
 
 **Testing:**
-- Manual smoke test of `/health` endpoint
-- CI runs lint + typecheck — must be green before proceeding
+- [ ] Manual smoke test of `/health` endpoint
+- [ ] CI runs lint + typecheck — must be green before proceeding
 
 ---
 
@@ -96,9 +96,9 @@ Layout components (`apps/web/src/components/layout/`):
 - [ ] `npm run typecheck` still passes
 
 **Testing:**
-- Vitest: smoke render test for every component (renders without throwing)
-- TypeScript strict mode: zero `any`, all props explicitly typed
-- Visual check: render each component against the design source
+- [ ] Vitest: smoke render test for every component (renders without throwing)
+- [ ] TypeScript strict mode: zero `any`, all props explicitly typed
+- [ ] Visual check: render each component against the design source
 
 ---
 
@@ -128,9 +128,9 @@ Layout components (`apps/web/src/components/layout/`):
 - [ ] No prop type errors
 
 **Testing:**
-- Playwright E2E: visit `/`, `/library`, `/upcoming`, `/game/1` — assert page title and one key element per screen
-- Playwright visual regression: screenshot each screen at 1440×900 and 390×844 — baseline snapshots committed to repo
-- TypeScript strict typecheck
+- [ ] Playwright E2E: visit `/`, `/library`, `/upcoming`, `/game/1` — assert page title and one key element per screen
+- [ ] Playwright visual regression: screenshot each screen at 1440×900 and 390×844 — baseline snapshots committed to repo
+- [ ] TypeScript strict typecheck
 
 ---
 
@@ -171,13 +171,13 @@ Frontend API client (`apps/web/src/lib/api.ts`):
 - [ ] `prisma migrate deploy` runs cleanly with no manual intervention
 
 **Testing:**
-- Jest + Supertest integration tests:
-  - Happy path for every route
-  - 404 for unknown game ID
-  - 400 for invalid status value in PATCH
-  - Pagination: `GET /api/games?page=2&limit=5` returns correct slice
-- Test database: isolated Supabase test branch, seeded before each test run
-- Frontend: Vitest with mock API responses for each screen (verify correct rendering)
+- [ ] Jest + Supertest integration tests:
+  - [ ] Happy path for every route
+  - [ ] 404 for unknown game ID
+  - [ ] 400 for invalid status value in PATCH
+  - [ ] Pagination: `GET /api/games?page=2&limit=5` returns correct slice
+- [ ] Test database: isolated Supabase test branch, seeded before each test run
+- [ ] Frontend: Vitest with mock API responses for each screen (verify correct rendering)
 
 ---
 
@@ -230,13 +230,13 @@ Settings screen (frontend):
 - [ ] Logging out clears the session; protected routes return 401 afterward
 
 **Testing:**
-- Unit tests for each platform adapter using mocked HTTP responses (nock or msw)
-- Auth middleware test: protected route returns 401 without cookie, 200 with valid cookie
-- Google OAuth: test callback handler with mocked Google token response
-- Steam OpenID: test callback handler with mocked OpenID assertion
-- Integration test: full Steam OAuth flow against a test Steam account (manual, documented in `docs/TESTING.md`)
-- Manual add test: `POST /api/games/manual` with `platformLabel: "Nintendo"` creates a `UserGame` with `syncable: false`
-- Deduplication test: two platforms returning the same game → one `UserGame` record
+- [ ] Unit tests for each platform adapter using mocked HTTP responses (nock or msw)
+- [ ] Auth middleware test: protected route returns 401 without cookie, 200 with valid cookie
+- [ ] Google OAuth: test callback handler with mocked Google token response
+- [ ] Steam OpenID: test callback handler with mocked OpenID assertion
+- [ ] Integration test: full Steam OAuth flow against a test Steam account (manual, documented in `docs/TESTING.md`)
+- [ ] Manual add test: `POST /api/games/manual` with `platformLabel: "Nintendo"` creates a `UserGame` with `syncable: false`
+- [ ] Deduplication test: two platforms returning the same game → one `UserGame` record
 
 ---
 
@@ -276,10 +276,10 @@ Frontend updates:
 - [ ] No IGDB rate limit errors in normal use (≤ 4 req/s enforced)
 
 **Testing:**
-- Unit tests for IGDB client: mock Twitch token fetch, mock IGDB API responses
-- Unit tests for HLTB service: mock `howlongtobeat` package; test graceful failure path
-- Cache test: second call to `searchGames` with same query hits cache (no HTTP request fired)
-- Integration test: live IGDB search for "Hollow Knight" returns a result with expected fields
+- [ ] Unit tests for IGDB client: mock Twitch token fetch, mock IGDB API responses
+- [ ] Unit tests for HLTB service: mock `howlongtobeat` package; test graceful failure path
+- [ ] Cache test: second call to `searchGames` with same query hits cache (no HTTP request fired)
+- [ ] Integration test: live IGDB search for "Hollow Knight" returns a result with expected fields
 
 ---
 
@@ -323,11 +323,11 @@ Frontend hardening:
 - [ ] No unhandled promise rejections in production logs after 24h of use
 
 **Testing:**
-- Playwright: simulate offline (`page.route('**/*', r => r.abort())`) — assert Dashboard renders cached content
-- Playwright: install prompt appears on Chrome (check `beforeinstallprompt` event fires)
-- Lighthouse CI in GitHub Actions: enforce PWA ≥ 90, Performance ≥ 80 thresholds
-- Manual install test: install on iOS Safari, verify it appears on home screen and launches in standalone mode
-- API: Jest tests for validation middleware (malformed body → 400) and rate limiter (429 after threshold)
+- [ ] Playwright: simulate offline (`page.route('**/*', r => r.abort())`) — assert Dashboard renders cached content
+- [ ] Playwright: install prompt appears on Chrome (check `beforeinstallprompt` event fires)
+- [ ] Lighthouse CI in GitHub Actions: enforce PWA ≥ 90, Performance ≥ 80 thresholds
+- [ ] Manual install test: install on iOS Safari, verify it appears on home screen and launches in standalone mode
+- [ ] API: Jest tests for validation middleware (malformed body → 400) and rate limiter (429 after threshold)
 
 ---
 
