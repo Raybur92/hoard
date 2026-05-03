@@ -582,17 +582,17 @@ Railway (API):
 - [ ] Custom domain configured (optional — `hoardapi-production.up.railway.app` works fine for now)
 
 Vercel (web):
-- [ ] Create Vercel project, link this repo (Vercel auto-detects Vite)
-- [ ] Build settings:
+- [x] Create Vercel project, link this repo (Vercel auto-detects Vite)
+- [x] Build settings:
   - Framework preset: Vite
   - Root directory: `apps/web`
-  - Build command: `npm run build` (default for Vite)
+  - Build command: `npm run build` (Vercel runs it from `apps/web/`)
   - Output directory: `dist`
-  - Install command: `cd ../.. && npm ci` (workspace install from monorepo root)
-- [ ] Environment variable: `VITE_API_URL` = the Railway API URL
-- [ ] First deploy succeeds; the Vercel URL renders the dashboard
-- [ ] CORS: update Railway `WEB_URL` env var to the actual Vercel URL once known
-- [ ] Custom domain configured (optional)
+  - Install command: default (Vercel auto-detects npm workspaces and installs from monorepo root)
+- [x] Environment variable: `VITE_API_URL = https://hoardapi-production.up.railway.app` (Production + Preview)
+- [x] First deploy succeeds; `https://hoard-liard.vercel.app` renders the login screen and redirects to dashboard after auth
+- [x] CORS: Railway `WEB_URL` env var updated to `https://hoard-liard.vercel.app`
+- [ ] Custom domain configured (optional — `hoard-liard.vercel.app` works fine for now)
 
 Google OAuth:
 - [ ] Google Cloud project created (or existing project reused)
@@ -604,14 +604,14 @@ Google OAuth:
 - [ ] Google sign-in button on `/login` flows through to a logged-in dashboard end-to-end (manual verification)
 
 **Success Criteria:**
-- [ ] `GET https://<railway-domain>/health` returns 200
-- [ ] Vercel deployment renders without console errors
-- [ ] Email/password login works end-to-end against the deployed API
-- [ ] Steam OpenID login works end-to-end (the OpenID return URL must be the Railway domain)
-- [ ] Google OAuth login works end-to-end
-- [ ] Library sync (Steam + PSN) runs against the production API with no errors
+- [x] `GET https://hoardapi-production.up.railway.app/health` returns `{"status":"ok","db":"ok",...}`
+- [x] Vercel deployment renders without console errors
+- [x] Email/password registration works end-to-end against the deployed API; cross-origin cookie persists across page loads
+- [ ] Steam OpenID login works end-to-end (needs the OpenID return URL re-pointed to the Railway domain — verify after deploy is fully settled)
+- [ ] Google OAuth login works end-to-end (next sub-step — needs Google Cloud Console setup)
+- [ ] Library sync (Steam + PSN) runs against the production API with no errors (test once Steam OpenID is connected on the prod account)
 - [ ] PWA install on iOS Safari succeeds (HTTPS available via Vercel)
-- [ ] No CORS errors in browser console when web → api requests fire
+- [x] No CORS errors in browser console when web → api requests fire
 
 **Decisions:**
 - Railway auto-created two services on first link (`hoard/api` and `hoard/web`) because the repo has two apps. Deleted `hoard/web` since Vercel hosts the frontend — Railway is API-only.
@@ -619,6 +619,13 @@ Google OAuth:
 - `NPM_CONFIG_PRODUCTION=false` is mandatory on Railway. When `NODE_ENV=production` is set (which we want for runtime), `npm ci` defaults to skipping devDependencies — but `typescript`, `@types/node`, `@types/express`, etc. are devDeps and are needed at build time. Setting `NPM_CONFIG_PRODUCTION=false` explicitly tells npm to install everything regardless of NODE_ENV. Container is ~30-50 MB larger than strictly necessary; trivial for a personal tool.
 - `apps/api/package.json` build script switched from `tsc -p` to `tsc -b` — `-p` doesn't follow project references, so `packages/types` and `packages/db` weren't built when only the api workspace was built from clean. `-b` builds project references in dependency order.
 - `packages/db/package.json` gained a `postinstall` hook that runs `prisma generate`. Without it, `@prisma/client` has no generated client and any import fails at build/runtime. Running it during postinstall means `npm ci` always produces a usable client.
+- `apps/web/package.json` build script switched from `tsc -b && vite build` to `npx tsc -b && npx vite build`. Vercel's build invocation didn't traverse parent `node_modules/.bin` to resolve workspace-hoisted binaries, so plain `tsc` failed with `command not found`. `npx` walks the workspace tree and finds the binary regardless of where npm hoisted it.
+- `apps/web/vite.config.ts` gained a `preview.proxy` mirror of `server.proxy` so `vite preview` (used by the offline E2E test) forwards `/api/*` to the local API server, matching dev behaviour.
+- API client uses `import.meta.env.VITE_API_URL` as a base URL prepended to every request. In dev, leave it unset and rely on Vite's proxy (keeps requests same-origin so SameSite=Lax cookies still work). In production, set it to the Railway domain — combined with SameSite=None+Secure cookies, the browser accepts cross-origin cookies between Vercel and Railway.
+- Auth cookies switch to `SameSite=None; Secure` when `NODE_ENV=production` (and `Lax` otherwise). `lax` blocks the cross-origin cookie flow between `*.vercel.app` and `*.up.railway.app`. Both flags must match between `setAuthCookie` and `clearCookie` calls — extracted into a shared `cookieOptions()` helper to avoid drift.
+- `<RequireAuth>` wraps every protected route. It calls `api.me()` once on mount: success → render children, 401 → `<Navigate to="/login" replace state={{ from: pathname }} />`. Without it, an unauthenticated user landed on a blank dashboard because the dev fallback (`JWT_SECRET === 'dev-secret'`) auto-authenticated them locally.
+- `app.set('trust proxy', 1)` is required on Railway. Without it, `X-Forwarded-For` is ignored, `req.ip` returns the proxy IP, and `express-rate-limit` throws a `ValidationError` on every request. `1` (one hop) is the right value — `true` would trust any forwarded header, which is a spoofing risk.
+- `DATABASE_URL` on Railway must include `?pgbouncer=true&connection_limit=1` query params. Supabase's transaction-mode pooler (port 6543) doesn't support prepared statements, but Prisma uses them by default — every request crashes with `prepared statement "s0" already exists`. The `pgbouncer=true` flag tells Prisma to disable prepared statements for pgbouncer compatibility; `connection_limit=1` keeps Prisma from exhausting the per-tenant pgbouncer pool from a single Railway container.
 
 ---
 
@@ -697,6 +704,6 @@ These items were addressed after PSN was connected and real data revealed gaps.
 | Post-6 — UX Fixes & Data Quality | Done | Settings game count, shelf counts, shelf order, game detail editing, viewport-filling shelves, HLTB rewrite (codepotatoes.de), steamAppId on Game, full HLTB + status backfill. |
 | Post-6 — PSN Sync Quality & HLTB | Done | PSN title cleaning (®/™/platform suffix strip, 94% IGDB match rate), PSN HLTB backfill via Steam Store search (48 records), genres chart proportional bars. |
 | Post-6 — Test Backfill & CI Hardening | Done | Fixed 4 stale test suites (hltb fetch mock, platforms `$queryRaw` mock, auth `deleteMany` mock, TopBar Router wrapper). Added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb. Added Playwright offline E2E (`test:e2e:offline`) + Lighthouse CI workflow with Performance ≥ 80 / Accessibility ≥ 90 / Best-practices ≥ 90 thresholds. Final: 103 API + 40 web tests passing; Lighthouse local Performance 99 / Accessibility 100 / Best-practices 100. |
-| 7 — Deploy + Google OAuth | Active | Push API to Railway, web to Vercel, configure Google OAuth client. Steam OpenID and PSN already work locally and just need redeploy. |
+| 7 — Deploy + Google OAuth | Active | Railway + Vercel deploys live (API at `hoardapi-production.up.railway.app`, web at `hoard-liard.vercel.app`). End-to-end auth verified with cross-origin cookies. Remaining: Google OAuth client setup + verify Steam OpenID on prod redirects correctly. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.
