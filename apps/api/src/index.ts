@@ -19,6 +19,10 @@ const app = express();
 const PORT = process.env['PORT'] ?? 3001;
 const startTime = Date.now();
 
+// Trust the platform proxy (Railway / Vercel) so req.ip and X-Forwarded-For
+// resolve to the real client IP — required by express-rate-limit.
+app.set('trust proxy', 1);
+
 // ── Logging ───────────────────────────────────────────────────────────
 app.use(pinoHttp({
   customLogLevel: (_req, res, err) => {
