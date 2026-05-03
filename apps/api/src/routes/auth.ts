@@ -49,14 +49,21 @@ function getSessionUserId(req: Request): string | null {
   }
 }
 
+function cookieOptions() {
+  const isProd = process.env['NODE_ENV'] === 'production';
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+  };
+}
+
 function setAuthCookie(res: Response, userId: string): void {
   const token = jwt.sign({ sub: userId }, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
   } as jwt.SignOptions);
   res.cookie('session', token, {
-    httpOnly: true,
-    secure: process.env['NODE_ENV'] === 'production',
-    sameSite: 'lax',
+    ...cookieOptions(),
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 }
@@ -126,7 +133,7 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
 
 // POST /api/auth/logout
 router.post('/auth/logout', (_req: Request, res: Response): void => {
-  res.clearCookie('session', { httpOnly: true, sameSite: 'lax' });
+  res.clearCookie('session', cookieOptions());
   res.json({ ok: true });
 });
 
@@ -180,7 +187,7 @@ router.patch('/auth/me', requireUser, async (req: Request, res: Response): Promi
 // DELETE /api/auth/me — permanently delete account and all data
 router.delete('/auth/me', requireUser, async (req: Request, res: Response): Promise<void> => {
   await prisma.user.delete({ where: { id: req.userId } });
-  res.clearCookie('session', { httpOnly: true, sameSite: 'lax' });
+  res.clearCookie('session', cookieOptions());
   res.json({ ok: true });
 });
 
