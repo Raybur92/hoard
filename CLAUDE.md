@@ -140,11 +140,11 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: No active phase — app is in production use**
+**Active: Deployment + Google OAuth**
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
-All phases complete through Post-Phase 6. The app is in real use.
+All phases complete through Post-Phase 6 at the code level. The app is currently used locally (`npm run dev`); next step is deployment to Railway (API) + Vercel (web) and Google OAuth setup so it's reachable from anywhere.
 
 **Test commands:**
 - `npm run test` — 103 API tests + 40 web tests, all passing

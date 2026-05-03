@@ -41,15 +41,15 @@ Breakpoint: `≥ 1024px` → desktop (sidebar + topbar). `< 1024px` → mobile (
 - [x] `.env.example` files in `apps/web` and `apps/api`
 
 **Success Criteria:**
-- [x] `GET /health` returns 200 from the Railway production URL — confirmed via app being in production use
-- [x] Frontend Vercel URL renders without console errors — confirmed via app being in production use
+- [ ] `GET /health` returns 200 from the Railway production URL — *not deployed yet; runs locally on port 3001 and the health route is wired*
+- [ ] Frontend Vercel URL renders without console errors — *not deployed yet; runs locally on port 5173*
 - [x] `npx prisma migrate deploy` runs cleanly against Supabase
 - [x] `npm run typecheck` passes in all packages with no errors
-- [x] `npm run lint` passes with no errors — *pre-existing failures on main; not regressed by current work*
+- [ ] `npm run lint` passes with no errors — *86 pre-existing errors on main (mostly `any` in test middleware mocks, missing `import type` for Express types, Node globals in `scripts/`); not regressed by current work*
 
 **Testing:**
-- [x] Manual smoke test of `/health` endpoint — health check wired into Railway deploy probe
-- [x] CI runs lint + typecheck — `.github/workflows/ci.yml` runs lint, format, typecheck, web tests, api tests, and builds on every PR
+- [x] Manual smoke test of `/health` endpoint — verified locally; `apps/api/railway.toml` wires it to the deploy probe for when production goes up
+- [ ] CI runs lint + typecheck — `.github/workflows/ci.yml` is in place but commits go directly to `main` (no PRs yet), so CI hasn't actually been exercised end-to-end
 
 ---
 
@@ -408,20 +408,20 @@ Frontend hardening:
 - [x] `meta` tags: `theme-color` (was present), `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title`, `apple-touch-icon`
 
 **Success Criteria:**
-- [x] App installs successfully on Chrome (desktop) and Safari (iOS) — confirmed via app being in production use; `manifest.json` + apple-touch-icon meta tags in place
+- [ ] App installs successfully on Chrome (desktop) and Safari (iOS) — `manifest.json` + apple-touch-icon meta tags in place; will be testable once deployed (Safari requires HTTPS for install)
 - [x] Dashboard and Library render from cache when network is offline — verified by `tests/e2e-offline/offline.spec.ts` (run via `npm run test:e2e:offline`)
 - [x] Lighthouse PWA score ≥ 90 — *retired by Lighthouse 12; the PWA category was removed and split into individual audits. Replaced with: viewport audit pass + offline E2E test (verifies SW registration & cache-from-offline)*
 - [x] Lighthouse Performance score ≥ 80 on desktop — local run: **99**. Threshold enforced in `lighthouserc.json` and `.github/workflows/lighthouse.yml` on PRs.
 - [x] API request with missing required field returns `400 { error: "..." }` with a descriptive message
 - [x] API request with no auth cookie returns `401`
 - [x] Injecting 1000 requests/min hits the rate limiter and returns `429` — `express-rate-limit` configured at 100/min global + 10/min on auth routes; behaviour exercised by route tests
-- [x] No unhandled promise rejections in production logs after 24h of use — confirmed via app being in production use
+- [ ] No unhandled promise rejections in production logs after 24h of use — *not deployed yet; will gate on after first 24h on Railway*
 
 **Testing:**
 - [x] Playwright: simulate offline — `tests/e2e-offline/offline.spec.ts` uses `context.setOffline(true)` and asserts cached content renders. Runs against `vite preview` with PWA service worker active.
 - [ ] Playwright: install prompt appears on Chrome (check `beforeinstallprompt` event fires) — *not added; install confirmed manually in production use*
 - [x] Lighthouse CI in GitHub Actions: enforce Performance ≥ 80 (and Accessibility ≥ 90, Best-practices ≥ 90) — `.github/workflows/lighthouse.yml` runs `@lhci/cli autorun` on every PR touching `apps/web/**`. PWA category retired in Lighthouse 12 — installability is now verified by the offline E2E test instead.
-- [x] Manual install test: install on iOS Safari, verify it appears on home screen and launches in standalone mode — confirmed via app being in production use
+- [ ] Manual install test: install on iOS Safari, verify it appears on home screen and launches in standalone mode — *not testable until deployed with HTTPS (Safari requires HTTPS for "Add to Home Screen" install)*
 - [x] API: Jest test for health check (db + uptime fields); validation and rate-limiter tests are exercised by existing route test suite
 
 **Decisions:**
@@ -552,6 +552,70 @@ These items were discovered during real-world use after all phases were function
 
 ---
 
+### Phase 7 — Production Deployment & Google OAuth
+
+**Goal:** Hoard is reachable from outside the local machine. Frontend on Vercel, API on Railway, both connecting to the existing Supabase database. Google OAuth wired up alongside the existing Steam OpenID flow.
+
+**Order matters:** Supabase first (already in place), then Railway, then Vercel, then Google OAuth (because the OAuth callback URL needs the production API domain). All four are free-tier compatible.
+
+**Deliverables:**
+
+Database (already in place — verify only):
+- [x] Supabase project exists and is the dev database
+- [ ] Decide: keep current Supabase as production (single project for v1) vs. provision a fresh production Supabase + migrate. Recommended for a personal tool: keep current as production, since it already holds 488 Steam games + 132 PSN games + HLTB data.
+- [ ] `prisma migrate deploy` runs cleanly against the production DB
+
+Railway (API):
+- [ ] Create Railway project, link this repo via the dashboard or CLI
+- [ ] Service points at `apps/api/` build and start commands (already configured in `apps/api/railway.toml`)
+- [ ] Environment variables set in Railway dashboard:
+  - `DATABASE_URL` (from Supabase production connection pooler — IPv6 transaction-mode URL, port 6543)
+  - `JWT_SECRET` (newly generated 32+ character random string — do NOT reuse the dev secret)
+  - `WEB_URL` (the Vercel production URL — placeholder until Vercel is set up, then update)
+  - `STEAM_API_KEY` (copy from local `.env`)
+  - `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` (copy from local `.env`)
+  - `NODE_ENV=production`
+  - `JWT_EXPIRES_IN=7d`
+  - (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` added in the OAuth step)
+- [ ] First deploy succeeds; `GET https://<railway-domain>/health` returns 200
+- [ ] Custom domain configured (optional — Railway gives a free `*.up.railway.app` subdomain that's usable as-is)
+
+Vercel (web):
+- [ ] Create Vercel project, link this repo (Vercel auto-detects Vite)
+- [ ] Build settings:
+  - Framework preset: Vite
+  - Root directory: `apps/web`
+  - Build command: `npm run build` (default for Vite)
+  - Output directory: `dist`
+  - Install command: `cd ../.. && npm ci` (workspace install from monorepo root)
+- [ ] Environment variable: `VITE_API_URL` = the Railway API URL
+- [ ] First deploy succeeds; the Vercel URL renders the dashboard
+- [ ] CORS: update Railway `WEB_URL` env var to the actual Vercel URL once known
+- [ ] Custom domain configured (optional)
+
+Google OAuth:
+- [ ] Google Cloud project created (or existing project reused)
+- [ ] OAuth consent screen configured (External user type, scopes: `openid email profile`)
+- [ ] OAuth client ID created (Web application)
+  - Authorized JavaScript origins: `http://localhost:5173`, `http://localhost:3001`, the Vercel URL, the Railway URL
+  - Authorized redirect URIs: `http://localhost:3001/api/auth/google/callback`, `https://<railway-domain>/api/auth/google/callback`
+- [ ] `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` set in both `apps/api/.env` (dev) and Railway env vars (prod)
+- [ ] Google sign-in button on `/login` flows through to a logged-in dashboard end-to-end (manual verification)
+
+**Success Criteria:**
+- [ ] `GET https://<railway-domain>/health` returns 200
+- [ ] Vercel deployment renders without console errors
+- [ ] Email/password login works end-to-end against the deployed API
+- [ ] Steam OpenID login works end-to-end (the OpenID return URL must be the Railway domain)
+- [ ] Google OAuth login works end-to-end
+- [ ] Library sync (Steam + PSN) runs against the production API with no errors
+- [ ] PWA install on iOS Safari succeeds (HTTPS available via Vercel)
+- [ ] No CORS errors in browser console when web → api requests fire
+
+**Decisions:** *(filled in as the deploy progresses)*
+
+---
+
 ### Post-Phase 6 — PSN Sync Quality & HLTB Coverage
 
 These items were addressed after PSN was connected and real data revealed gaps.
@@ -622,10 +686,11 @@ These items were addressed after PSN was connected and real data revealed gaps.
 | 3 — Backend API | Done | All routes, seed, API client, 8 screens on live data; 28 E2E tests passing |
 | 4 — Auth & Platform Sync | Done | Auth + all screens + 42 tests; Steam OpenID + PSN token connect both verified in production. Google OAuth route implemented but blocked by missing client credentials. Xbox/GOG sync stubs return [] — manual-only acceptable for v1. |
 | 5 — IGDB + HLTB | Done | IGDB client, HLTB service, sync runner, manual-add UI, cover art, upcoming IGDB feed, Steam App ID lookup, sync micro-interactions, library no-scroll shelves; 67 tests passing |
-| 6 — PWA + Hardening | Done | All deliverables implemented. Playwright offline test added (`tests/e2e-offline/offline.spec.ts`). Lighthouse CI workflow + thresholds in place (`.github/workflows/lighthouse.yml`). iOS install verified in production use. |
+| 6 — PWA + Hardening | Done (pending deploy) | All code deliverables implemented. Playwright offline test added (`tests/e2e-offline/offline.spec.ts`). Lighthouse CI workflow + thresholds in place (`.github/workflows/lighthouse.yml`). iOS install + production-runtime gates require deployment (see deploy plan below). |
 | Post-6 — Preferences & UX Polish | Done | All stubbed UI eliminated. Preferences system, IGDB filtering, search overlay, delete account, breadcrumbs, sidebar logout, cover density, scope toggle. |
 | Post-6 — UX Fixes & Data Quality | Done | Settings game count, shelf counts, shelf order, game detail editing, viewport-filling shelves, HLTB rewrite (codepotatoes.de), steamAppId on Game, full HLTB + status backfill. |
 | Post-6 — PSN Sync Quality & HLTB | Done | PSN title cleaning (®/™/platform suffix strip, 94% IGDB match rate), PSN HLTB backfill via Steam Store search (48 records), genres chart proportional bars. |
-| Post-6 — Test Backfill & CI Hardening | Done | Fixed 4 stale test suites (hltb fetch mock, platforms `$queryRaw` mock, auth `deleteMany` mock, TopBar Router wrapper). Added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb. Added Playwright offline E2E (`test:e2e:offline`) + Lighthouse CI workflow with PWA ≥ 90 / Performance ≥ 80 thresholds. Final: 103 API + 40 web tests passing. |
+| Post-6 — Test Backfill & CI Hardening | Done | Fixed 4 stale test suites (hltb fetch mock, platforms `$queryRaw` mock, auth `deleteMany` mock, TopBar Router wrapper). Added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb. Added Playwright offline E2E (`test:e2e:offline`) + Lighthouse CI workflow with Performance ≥ 80 / Accessibility ≥ 90 / Best-practices ≥ 90 thresholds. Final: 103 API + 40 web tests passing; Lighthouse local Performance 99 / Accessibility 100 / Best-practices 100. |
+| 7 — Deploy + Google OAuth | Active | Push API to Railway, web to Vercel, configure Google OAuth client. Steam OpenID and PSN already work locally and just need redeploy. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.
