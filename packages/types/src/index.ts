@@ -139,11 +139,20 @@ export interface StatsResponse {
 
 /* ── Auth ── */
 
+export interface UserPreferences {
+  hypeThreshold: number;
+  libraryView: 'shelves' | 'grid' | 'list';
+  showHltb: boolean;
+  coverDensity: 'cozy' | 'standard' | 'dense';
+  terminalCursor: boolean;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
   createdAt: string;
+  preferences: UserPreferences;
 }
 
 export interface AuthResponse {
@@ -159,6 +168,16 @@ export interface RegisterBody {
   email: string;
   password: string;
   name?: string;
+}
+
+export interface PatchMeBody {
+  name?: string;
+  email?: string;
+  hypeThreshold?: number;
+  libraryView?: 'shelves' | 'grid' | 'list';
+  showHltb?: boolean;
+  coverDensity?: 'cozy' | 'standard' | 'dense';
+  terminalCursor?: boolean;
 }
 
 /* ── Platform detail (settings) ── */
@@ -211,4 +230,6 @@ export interface IgdbUpcomingRelease {
   coverUrl: string | null;
   synopsis: string | null;
   wishlisted: boolean;
+  category: number;
+  hype: number | null;
 }

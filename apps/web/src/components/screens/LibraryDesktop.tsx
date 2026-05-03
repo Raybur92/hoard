@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
@@ -8,6 +8,8 @@ import { Chip } from '../primitives/Chip';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { useGames } from '../../hooks/useGames';
+import { usePreferences } from '../../contexts/PreferencesContext';
+import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, shortYear } from '../../lib/utils';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
@@ -35,9 +37,9 @@ interface ShelfDisplay {
 
 const SHELF_CONFIG: Array<{ name: string; status: GameStatus; tone: 'green' | 'amber' | 'red' | null }> = [
   { name: 'Now Playing', status: 'Playing',   tone: 'green' },
-  { name: 'Backlog',     status: 'Backlog',   tone: null },
-  { name: 'Completed',   status: 'Completed', tone: null },
   { name: 'On Hold',     status: 'On Hold',   tone: null },
+  { name: 'Completed',   status: 'Completed', tone: null },
+  { name: 'Backlog',     status: 'Backlog',   tone: null },
   { name: 'Dropped',     status: 'Dropped',   tone: 'red' },
   { name: 'Wishlist',    status: 'Wishlist',  tone: 'amber' },
 ];
@@ -64,14 +66,21 @@ function toGameDisplay(ug: UserGameDetail): GameDisplay {
   };
 }
 
+const COVER_DIMS: Record<string, { w: number; h: number }> = {
+  cozy:     { w: 150, h: 200 },
+  standard: { w: 130, h: 174 },
+  dense:    { w: 108, h: 144 },
+};
+
 interface ShelfItemProps {
   g: GameDisplay;
   w?: number;
   h?: number;
   isBacklog: boolean;
+  showHltb: boolean;
 }
 
-function ShelfItem({ g, w = 130, h = 174, isBacklog }: ShelfItemProps) {
+function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps) {
   const navigate = useNavigate();
   const tone = g.progress === 100 ? 'var(--paper)' : g.progress > 0 ? 'var(--green)' : 'var(--paper-faint)';
   return (
@@ -81,7 +90,7 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog }: ShelfItemProps) {
         <div style={{ position: 'absolute', top: 6, right: 6 }}>
           <Plat code={g.platformCode} />
         </div>
-        {isBacklog && g.hltbHours != null && (
+        {isBacklog && showHltb && g.hltbHours != null && (
           <div style={{ position: 'absolute', bottom: 4, left: 4, padding: '2px 5px', background: 'rgba(0,0,0,0.78)', border: '1px solid var(--rule-bright)', fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.04em', color: 'var(--paper-dim)' }}>
             <span style={{ color: 'var(--paper-faint)', fontSize: 8 }}>HLTB </span>~{g.hltbHours}h
           </div>
@@ -101,11 +110,38 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog }: ShelfItemProps) {
   );
 }
 
-function Shelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
+interface ShelfProps {
+  idx: number;
+  shelf: ShelfDisplay;
+  coverW: number;
+  coverH: number;
+  showHltb: boolean;
+}
+
+const SHELF_GAP = 16;
+
+function Shelf({ idx, shelf, coverW, coverH, showHltb }: ShelfProps) {
   const navigate = useNavigate();
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [visibleSlots, setVisibleSlots] = useState(8);
+
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    const compute = (width: number) => {
+      const slots = Math.max(2, Math.floor((width + SHELF_GAP) / (coverW + SHELF_GAP)));
+      setVisibleSlots(slots);
+    };
+    compute(el.clientWidth);
+    const ro = new ResizeObserver((entries) => { if (entries[0]) compute(entries[0].contentRect.width); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [coverW]);
+
   const isBacklog = shelf.status === 'Backlog';
   const accent = shelf.tone === 'green' ? 'var(--green)' : shelf.tone === 'amber' ? 'var(--amber)' : shelf.tone === 'red' ? 'var(--red)' : 'var(--paper)';
-  const shown = shelf.items.slice(0, 7);
+  // Reserve last slot for "view all", show the rest with game covers
+  const shown = shelf.items.slice(0, visibleSlots - 1);
   const remaining = shelf.count - shown.length;
   return (
     <div id={`shelf-${shelf.status}`} style={{ padding: '24px 0' }}>
@@ -114,10 +150,10 @@ function Shelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
         <span className="name">{shelf.name}</span>
         <span className="t-mono t-faint" style={{ fontSize: 11 }}>· {shelf.count} titles</span>
       </div>
-      <div style={{ display: 'flex', gap: 16, overflow: 'hidden', position: 'relative' }}>
-        {shown.map(g => <ShelfItem key={g.id} g={g} isBacklog={isBacklog} />)}
+      <div ref={rowRef} style={{ display: 'flex', gap: SHELF_GAP, overflow: 'hidden' }}>
+        {shown.map(g => <ShelfItem key={g.id} g={g} w={coverW} h={coverH} isBacklog={isBacklog} showHltb={showHltb} />)}
         <div
-          style={{ width: 130, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: 174, color: 'var(--paper-faint)', fontSize: 11, gap: 6, cursor: 'pointer' }}
+          style={{ width: coverW, flex: `0 0 ${coverW}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: coverH, color: 'var(--paper-faint)', fontSize: 11, gap: 6, cursor: 'pointer' }}
           onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
         >
           {remaining > 0 && <span style={{ fontSize: 22 }}>+{remaining}</span>}
@@ -138,11 +174,21 @@ const SORT_CYCLE: SortBy[] = ['lastPlayed', 'title', 'playtime'];
 
 export function LibraryDesktop() {
   const navigate = useNavigate();
-  const { data, loading, refetch } = useGames({ limit: 100 });
+  const { status: statusParam } = useParams<{ status?: string }>();
+  const { data, loading, refetch } = useGames(
+    statusParam ? { status: statusParam as GameStatus, limit: 2000 } : { limit: 2000 }
+  );
+  const { prefs, updatePref } = usePreferences();
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortBy>('lastPlayed');
-  const { status: statusParam } = useParams<{ status?: string }>();
+  const [viewMode, setViewMode] = useState<'shelves' | 'grid' | 'list'>(prefs.libraryView);
+  const [apiCounts, setApiCounts] = useState<Partial<Record<string, number>>>({});
+  const coverDims = COVER_DIMS[prefs.coverDensity] ?? COVER_DIMS['standard']!;
+
+  useEffect(() => {
+    void api.gameCounts().then((r) => setApiCounts(r.counts)).catch(() => null);
+  }, []);
 
   const grouped = new Map<GameStatus, UserGameDetail[]>();
   if (data) {
@@ -164,20 +210,32 @@ export function LibraryDesktop() {
   }
 
   const shelfCounts: Record<string, number> = Object.fromEntries(
-    SHELF_CONFIG.map(cfg => [cfg.status, (grouped.get(cfg.status) ?? []).length])
+    SHELF_CONFIG.map(cfg => [cfg.status, apiCounts[cfg.status] ?? (grouped.get(cfg.status) ?? []).length])
   );
 
   const shelves: ShelfDisplay[] = SHELF_CONFIG.map(cfg => {
     const items = applyFilters(grouped.get(cfg.status) ?? []);
-    return { ...cfg, count: items.length, items: items.map(toGameDisplay) };
+    return { ...cfg, count: shelfCounts[cfg.status] ?? items.length, items: items.map(toGameDisplay) };
   });
 
   if (loading || !data) {
     return (
       <div className="app-shell hoard-noise">
         <Sidebar />
-        <div className="app-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="t-mono t-faint" style={{ fontSize: 12 }}>// loading...</span>
+        <div className="app-main">
+          <TopBar crumbs={['hoard', 'library']} />
+          <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 32 }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="skel" style={{ width: 140, height: 11 }} />
+                <div style={{ display: 'flex', gap: 16 }}>
+                  {[0, 1, 2, 3, 4].map(j => (
+                    <div key={j} className="skel" style={{ width: 130, height: 174, flex: '0 0 auto' }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -213,7 +271,7 @@ export function LibraryDesktop() {
               <span className="t-mono t-faint" style={{ fontSize: 12 }}>// no titles in this shelf yet</span>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                {items.map(g => <ShelfItem key={g.id} g={g} isBacklog={isBacklog} />)}
+                {items.map(g => <ShelfItem key={g.id} g={g} w={coverDims.w} h={coverDims.h} isBacklog={isBacklog} showHltb={prefs.showHltb} />)}
               </div>
             )}
           </div>
@@ -240,9 +298,9 @@ export function LibraryDesktop() {
           </div>
           <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
           <span className="t-up t-faint" style={{ fontSize: 10 }}>view</span>
-          <Chip on>shelves</Chip>
-          <Chip>grid</Chip>
-          <Chip>list</Chip>
+          <Chip on={viewMode === 'shelves'} onClick={() => { setViewMode('shelves'); void updatePref({ libraryView: 'shelves' }); }}>shelves</Chip>
+          <Chip on={viewMode === 'grid'}    onClick={() => { setViewMode('grid');    void updatePref({ libraryView: 'grid' }); }}>grid</Chip>
+          <Chip on={viewMode === 'list'}    onClick={() => { setViewMode('list');    void updatePref({ libraryView: 'list' }); }}>list</Chip>
           <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
           <span className="t-up t-faint" style={{ fontSize: 10 }}>plat</span>
           <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
@@ -272,7 +330,7 @@ export function LibraryDesktop() {
         {/* shelves */}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '0 32px 40px' }}>
           {shelves.map((s, i) => (
-            <Shelf key={s.status} idx={i + 1} shelf={s} />
+            <Shelf key={s.status} idx={i + 1} shelf={s} coverW={coverDims.w} coverH={coverDims.h} showHltb={prefs.showHltb} />
           ))}
         </div>
       </div>

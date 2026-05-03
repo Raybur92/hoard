@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
@@ -10,6 +10,7 @@ import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { Hr } from '../primitives/Hr';
 import { api } from '../../lib/api';
+import { usePreferences } from '../../contexts/PreferencesContext';
 import type { AuthUser, PlatformDetail, PlatformCode } from '@hoard/types';
 
 const SECTION_LABELS: Record<string, string> = {
@@ -77,28 +78,76 @@ export function SettingsDesktop() {
 
 /* ── Account section ── */
 
-function AccountSection({ user }: { user: AuthUser | null }) {
+function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
+  const [name, setName] = useState(initialUser?.name ?? '');
+  const [email, setEmail] = useState(initialUser?.email ?? '');
+  const [saved, setSaved] = useState<'name' | 'email' | null>(null);
+  const [createdAt, setCreatedAt] = useState(initialUser?.createdAt ?? '');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (initialUser) {
+      setName(initialUser.name ?? '');
+      setEmail(initialUser.email ?? '');
+      setCreatedAt(initialUser.createdAt);
+    }
+  }, [initialUser]);
+
+  async function saveField(field: 'name' | 'email', value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const current = field === 'name' ? initialUser?.name : initialUser?.email;
+    if (trimmed === current) return;
+    try {
+      await api.updateMe({ [field]: trimmed });
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setSaved(field);
+      timerRef.current = setTimeout(() => setSaved(null), 2000);
+    } catch { /* silently ignore */ }
+  }
+
   return (
     <>
-      <Marker>// account · {user?.name ?? 'loading…'}</Marker>
+      <Marker>// account · {name || 'loading…'}</Marker>
       <div className="t-display" style={{ fontSize: 28, marginTop: 8, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
         account
       </div>
       <div className="t-mono t-faint" style={{ fontSize: 11, marginTop: 4 }}>
-        member since {user ? new Date(user.createdAt).getFullYear() : '…'}
+        member since {createdAt ? new Date(createdAt).getFullYear() : '…'}
       </div>
 
       <div style={{ marginTop: 28 }}>
         <SettingsRow label="display name" hint="shown on your profile and shared receipts.">
-          <div className="field" style={{ width: 320 }}>{user?.name ?? '…'}</div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <input
+              className="field"
+              style={{ width: 320 }}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => void saveField('name', name)}
+              placeholder="display name"
+            />
+            {saved === 'name' && <span className="t-mono t-green" style={{ fontSize: 10 }}>// saved</span>}
+          </div>
         </SettingsRow>
 
         <SettingsRow label="email" hint="used for sign-in, magic links, and digest emails.">
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div className="field" style={{ width: 320 }}>{user?.email ?? '…'}</div>
-            <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)' }}>
-              <Icon name="check" size={10} /> verified
-            </span>
+            <input
+              className="field"
+              type="email"
+              style={{ width: 320 }}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => void saveField('email', email)}
+              placeholder="email address"
+            />
+            {saved === 'email'
+              ? <span className="t-mono t-green" style={{ fontSize: 10 }}>// saved</span>
+              : <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)' }}>
+                  <Icon name="check" size={10} /> verified
+                </span>
+            }
           </div>
         </SettingsRow>
 
@@ -284,6 +333,7 @@ function PlatformRow({ code, name, via, status, who, gameCount, onManage }: Plat
 /* ── Appearance section ── */
 
 function AppearanceSection() {
+  const { prefs, updatePref } = usePreferences();
   return (
     <>
       <Marker>// preferences · how hoard looks &amp; behaves</Marker>
@@ -291,47 +341,70 @@ function AppearanceSection() {
         preferences
       </div>
       <div className="t-mono t-faint" style={{ fontSize: 11, marginTop: 4 }}>
-        all changes apply instantly · resets stored per-device.
+        all changes apply instantly · synced across devices.
       </div>
 
       <div style={{ marginTop: 28 }}>
         <SettingsRow label="theme" hint="dark mode is the only option in v1. light mode is planned.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Radio on={true}  label="dark"  sub="// the way it's meant to be played" />
+            <Radio on={true} label="dark" sub="// the way it's meant to be played" />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', opacity: 0.45 }}>
               <span style={{ width: 12, height: 12, border: '1px dashed var(--paper-faint)', display: 'inline-block' }} />
-              <div>
-                <div style={{ fontSize: 12, color: 'var(--paper-dim)' }}>
-                  light <span className="t-faint" style={{ marginLeft: 6, fontSize: 10, color: 'var(--amber)', letterSpacing: '0.1em' }}>// v2</span>
-                </div>
-              </div>
+              <div><div style={{ fontSize: 12, color: 'var(--paper-dim)' }}>light <span className="t-faint" style={{ marginLeft: 6, fontSize: 10, color: 'var(--amber)', letterSpacing: '0.1em' }}>// v2</span></div></div>
             </div>
-            <Radio on={false} label="auto"  sub="// follows system · also v2" />
+            <Radio on={false} label="auto" sub="// follows system · also v2" />
           </div>
         </SettingsRow>
 
         <SettingsRow label="default library view" hint="what /library opens to by default.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Radio on={true}  label="shelves" sub="grouped by status" />
-            <Radio on={false} label="grid"    sub="all covers, dense" />
-            <Radio on={false} label="table"   sub="rows · for power users" />
+            <Radio on={prefs.libraryView === 'shelves'} label="shelves" sub="grouped by status" onClick={() => void updatePref({ libraryView: 'shelves' })} />
+            <Radio on={prefs.libraryView === 'grid'}    label="grid"    sub="all covers, dense"  onClick={() => void updatePref({ libraryView: 'grid' })} />
+            <Radio on={prefs.libraryView === 'list'}    label="list"    sub="rows · for power users" onClick={() => void updatePref({ libraryView: 'list' })} />
           </div>
         </SettingsRow>
 
         <SettingsRow label="show HLTB estimates" hint="how-long-to-beat times under backlog covers and on the dashboard.">
-          <Toggle on={true} label="enabled" sub="data via howlongtobeat.com · cached locally" />
+          <Toggle
+            on={prefs.showHltb}
+            label={prefs.showHltb ? 'enabled' : 'disabled'}
+            sub="data via howlongtobeat.com · cached locally"
+            onClick={() => void updatePref({ showHltb: !prefs.showHltb })}
+          />
         </SettingsRow>
 
         <SettingsRow label="cover density" hint="how tightly covers pack on shelves and grids.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Radio on={false} label="cozy" />
-            <Radio on={true}  label="standard" />
-            <Radio on={false} label="dense" sub="fits ~30% more · smaller covers" />
+            <Radio on={prefs.coverDensity === 'cozy'}     label="cozy"     onClick={() => void updatePref({ coverDensity: 'cozy' })} />
+            <Radio on={prefs.coverDensity === 'standard'} label="standard" onClick={() => void updatePref({ coverDensity: 'standard' })} />
+            <Radio on={prefs.coverDensity === 'dense'}    label="dense"    sub="fits ~30% more · smaller covers" onClick={() => void updatePref({ coverDensity: 'dense' })} />
           </div>
         </SettingsRow>
 
         <SettingsRow label="terminal cursor" hint="blinking cursor after // markers.">
-          <Toggle on={true} label="blinking" sub="2-second cycle, paused on idle" />
+          <Toggle
+            on={prefs.terminalCursor}
+            label={prefs.terminalCursor ? 'blinking' : 'off'}
+            sub="2-second cycle, paused on idle"
+            onClick={() => void updatePref({ terminalCursor: !prefs.terminalCursor })}
+          />
+        </SettingsRow>
+
+        <SettingsRow label="upcoming hype filter" hint="minimum IGDB hype count for the upcoming releases feed. lower = more results including obscure titles.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              className="btn sm"
+              onClick={() => void updatePref({ hypeThreshold: Math.max(0, prefs.hypeThreshold - 1) })}
+              style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
+            >−</button>
+            <span className="t-mono t-tnum" style={{ fontSize: 16, minWidth: 28, textAlign: 'center' }}>{prefs.hypeThreshold}</span>
+            <button
+              className="btn sm"
+              onClick={() => void updatePref({ hypeThreshold: Math.min(100, prefs.hypeThreshold + 1) })}
+              style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
+            >+</button>
+            <span className="t-faint" style={{ fontSize: 10 }}>default 5 · 0 = no filter</span>
+          </div>
         </SettingsRow>
       </div>
     </>
@@ -341,9 +414,21 @@ function AppearanceSection() {
 /* ── Danger zone section ── */
 
 function DangerSection({ user }: { user: AuthUser | null }) {
+  const navigate = useNavigate();
   const [confirmText, setConfirmText] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const confirmed = confirmText === 'HOARD';
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await api.deleteAccount();
+      navigate('/login');
+    } catch {
+      setDeleting(false);
+    }
+  }
 
   return (
     <>
@@ -382,7 +467,9 @@ function DangerSection({ user }: { user: AuthUser | null }) {
           userName={user?.name ?? 'your account'}
           confirmText={confirmText}
           confirmed={confirmed}
+          deleting={deleting}
           onTextChange={setConfirmText}
+          onConfirm={() => void handleDelete()}
           onCancel={() => { setShowModal(false); setConfirmText(''); }}
         />
       )}
@@ -394,11 +481,13 @@ interface DeleteModalProps {
   userName: string;
   confirmText: string;
   confirmed: boolean;
+  deleting: boolean;
   onTextChange: (v: string) => void;
+  onConfirm: () => void;
   onCancel: () => void;
 }
 
-function DeleteModal({ userName, confirmText, confirmed, onTextChange, onCancel }: DeleteModalProps) {
+function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange, onConfirm, onCancel }: DeleteModalProps) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,9,10,0.72)' }} onClick={onCancel} />
@@ -472,10 +561,11 @@ function DeleteModal({ userName, confirmText, confirmed, onTextChange, onCancel 
             </button>
             <button
               className="btn"
-              disabled={!confirmed}
-              style={{ height: 38, fontSize: 11, color: 'var(--red)', borderColor: 'var(--red)', background: 'transparent', opacity: confirmed ? 1 : 0.4 }}
+              disabled={!confirmed || deleting}
+              onClick={onConfirm}
+              style={{ height: 38, fontSize: 11, color: 'var(--red)', borderColor: 'var(--red)', background: 'transparent', opacity: (confirmed && !deleting) ? 1 : 0.4 }}
             >
-              <Icon name="trash" size={11} /> delete forever
+              <Icon name="trash" size={11} /> {deleting ? 'deleting…' : 'delete forever'}
             </button>
           </div>
         </div>

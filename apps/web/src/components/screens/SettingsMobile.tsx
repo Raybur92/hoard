@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
@@ -10,6 +10,7 @@ import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { api } from '../../lib/api';
+import { usePreferences } from '../../contexts/PreferencesContext';
 import type { AuthUser, PlatformDetail, PlatformCode } from '@hoard/types';
 
 const TOP_SECTIONS = [
@@ -28,17 +29,45 @@ export function SettingsMobile() {
   const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [platforms, setPlatforms] = useState<PlatformDetail[]>([]);
+  const [draftName, setDraftName] = useState('');
+  const [draftEmail, setDraftEmail] = useState('');
+  const [saved, setSaved] = useState<'name' | 'email' | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const { prefs, updatePref } = usePreferences();
 
   useEffect(() => {
     void api.me().then((r) => setUser(r)).catch(() => null);
     void api.platformStatus().then((r) => setPlatforms(r.platforms)).catch(() => null);
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      setDraftName(user.name ?? '');
+      setDraftEmail(user.email ?? '');
+    }
+  }, [user]);
+
+  async function saveField(field: 'name' | 'email', value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const current = field === 'name' ? user?.name : user?.email;
+    if (trimmed === current) return;
+    try {
+      const updated = await api.updateMe({ [field]: trimmed });
+      setUser(updated);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setSaved(field);
+      timerRef.current = setTimeout(() => setSaved(null), 2000);
+    } catch { /* silently ignore */ }
+  }
+
   // Top-level menu (no section selected)
   if (!section) {
     return (
       <MobileFrame>
-        <MobileHeader title="settings" sub={`// ${user?.name ?? 'andrea'} · v0.1`} />
+        <MobileHeader title="settings" sub={`// ${user?.name ?? '…'} · v0.1`} />
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
           <div style={{
             padding: '14px 16px 8px',
@@ -48,7 +77,7 @@ export function SettingsMobile() {
             <div style={{ width: 44, height: 44, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)' }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14 }}>{user?.name ?? '…'}</div>
-              <div className="t-faint" style={{ fontSize: 10 }}>hoard.app/u/andrea</div>
+              <div className="t-faint" style={{ fontSize: 10 }}>hoard.app/u/{user?.name ?? user?.id ?? '…'}</div>
             </div>
             <Btn sm onClick={() => navigate('/settings/account')}>edit</Btn>
           </div>
@@ -97,19 +126,40 @@ export function SettingsMobile() {
   if (section === 'account') {
     return (
       <MobileFrame>
-        {backHeader('account', `// ${user?.name ?? 'andrea'}`)}
+        {backHeader('account', `// ${draftName || '…'}`)}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 16px 24px' }}>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
             <div className="t-up t-faint" style={{ fontSize: 9 }}>// display name</div>
-            <div className="field" style={{ marginTop: 8, fontSize: 12 }}>{user?.name ?? '…'}</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <input
+                className="field"
+                style={{ flex: 1, fontSize: 12 }}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onBlur={() => void saveField('name', draftName)}
+                placeholder="display name"
+              />
+              {saved === 'name' && <span className="t-mono t-green" style={{ fontSize: 10 }}>ok</span>}
+            </div>
           </div>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
             <div className="t-up t-faint" style={{ fontSize: 9 }}>// email</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-              <div className="field" style={{ flex: 1, fontSize: 12 }}>{user?.email ?? '…'}</div>
-              <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)', fontSize: 10 }}>
-                <Icon name="check" size={9} /> ok
-              </span>
+              <input
+                className="field"
+                type="email"
+                style={{ flex: 1, fontSize: 12 }}
+                value={draftEmail}
+                onChange={(e) => setDraftEmail(e.target.value)}
+                onBlur={() => void saveField('email', draftEmail)}
+                placeholder="email address"
+              />
+              {saved === 'email'
+                ? <span className="t-mono t-green" style={{ fontSize: 10 }}>ok</span>
+                : <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)', fontSize: 10 }}>
+                    <Icon name="check" size={9} /> ok
+                  </span>
+              }
             </div>
           </div>
           <div style={{ padding: '14px 0' }}>
@@ -177,7 +227,7 @@ export function SettingsMobile() {
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
             <div className="t-up t-faint" style={{ fontSize: 9 }}>// theme</div>
             <div style={{ marginTop: 8 }}>
-              <Radio on={true}  label="dark" sub="default" />
+              <Radio on={true} label="dark" sub="default" />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', opacity: 0.45 }}>
                 <span style={{ width: 12, height: 12, border: '1px dashed var(--paper-faint)', display: 'inline-block' }} />
                 <div style={{ fontSize: 12, color: 'var(--paper-dim)' }}>
@@ -187,17 +237,58 @@ export function SettingsMobile() {
             </div>
           </div>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
+            <div className="t-up t-faint" style={{ fontSize: 9 }}>// default library view</div>
+            <div style={{ marginTop: 8 }}>
+              <Radio on={prefs.libraryView === 'shelves'} label="shelves" sub="grouped by status"   onClick={() => void updatePref({ libraryView: 'shelves' })} />
+              <Radio on={prefs.libraryView === 'grid'}    label="grid"    sub="all covers, dense"   onClick={() => void updatePref({ libraryView: 'grid' })} />
+              <Radio on={prefs.libraryView === 'list'}    label="list"    sub="rows · power users"  onClick={() => void updatePref({ libraryView: 'list' })} />
+            </div>
+          </div>
+          <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
             <div className="t-up t-faint" style={{ fontSize: 9 }}>// show HLTB estimates</div>
             <div style={{ marginTop: 10 }}>
-              <Toggle on={true} label="enabled" sub="data via howlongtobeat.com" />
+              <Toggle
+                on={prefs.showHltb}
+                label={prefs.showHltb ? 'enabled' : 'disabled'}
+                sub="data via howlongtobeat.com"
+                onClick={() => void updatePref({ showHltb: !prefs.showHltb })}
+              />
             </div>
           </div>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
             <div className="t-up t-faint" style={{ fontSize: 9 }}>// cover density</div>
             <div style={{ marginTop: 8 }}>
-              <Radio on={false} label="cozy" />
-              <Radio on={true}  label="standard" />
-              <Radio on={false} label="dense" />
+              <Radio on={prefs.coverDensity === 'cozy'}     label="cozy"     onClick={() => void updatePref({ coverDensity: 'cozy' })} />
+              <Radio on={prefs.coverDensity === 'standard'} label="standard" onClick={() => void updatePref({ coverDensity: 'standard' })} />
+              <Radio on={prefs.coverDensity === 'dense'}    label="dense"    sub="~30% more covers" onClick={() => void updatePref({ coverDensity: 'dense' })} />
+            </div>
+          </div>
+          <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
+            <div className="t-up t-faint" style={{ fontSize: 9 }}>// terminal cursor</div>
+            <div style={{ marginTop: 10 }}>
+              <Toggle
+                on={prefs.terminalCursor}
+                label={prefs.terminalCursor ? 'blinking' : 'off'}
+                sub="2-second cycle, paused on idle"
+                onClick={() => void updatePref({ terminalCursor: !prefs.terminalCursor })}
+              />
+            </div>
+          </div>
+          <div style={{ padding: '14px 0' }}>
+            <div className="t-up t-faint" style={{ fontSize: 9 }}>// upcoming hype filter</div>
+            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                className="btn sm"
+                onClick={() => void updatePref({ hypeThreshold: Math.max(0, prefs.hypeThreshold - 1) })}
+                style={{ width: 28, height: 28, padding: 0, fontSize: 14, lineHeight: 1 }}
+              >−</button>
+              <span className="t-mono t-tnum" style={{ fontSize: 16, minWidth: 28, textAlign: 'center' }}>{prefs.hypeThreshold}</span>
+              <button
+                className="btn sm"
+                onClick={() => void updatePref({ hypeThreshold: Math.min(100, prefs.hypeThreshold + 1) })}
+                style={{ width: 28, height: 28, padding: 0, fontSize: 14, lineHeight: 1 }}
+              >+</button>
+              <span className="t-faint" style={{ fontSize: 10 }}>0 = no filter</span>
             </div>
           </div>
         </div>
@@ -207,6 +298,18 @@ export function SettingsMobile() {
   }
 
   if (section === 'danger') {
+    const deleteReady = deleteConfirm === 'HOARD';
+
+    async function handleDelete() {
+      setDeleting(true);
+      try {
+        await api.deleteAccount();
+        navigate('/login');
+      } catch {
+        setDeleting(false);
+      }
+    }
+
     return (
       <MobileFrame>
         {backHeader('danger zone', '// settings')}
@@ -225,8 +328,23 @@ export function SettingsMobile() {
             <div className="t-faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
               permanently erases your account and all data. cannot be undone.
             </div>
-            <Btn sm style={{ marginTop: 10, color: 'var(--red)', borderColor: 'var(--red)' }}>
-              <Icon name="trash" size={10} /> delete account
+            <div className="t-up t-faint" style={{ fontSize: 9, marginTop: 14 }}>
+              // type <span style={{ color: 'var(--red)' }}>HOARD</span> to confirm
+            </div>
+            <input
+              className="field"
+              style={{ marginTop: 8, fontSize: 13, letterSpacing: '0.14em', width: '100%' }}
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value.toUpperCase())}
+              placeholder="HOARD"
+              maxLength={5}
+            />
+            <Btn
+              sm
+              style={{ marginTop: 10, color: 'var(--red)', borderColor: 'var(--red)', opacity: (deleteReady && !deleting) ? 1 : 0.4 }}
+              {...(deleteReady && !deleting ? { onClick: () => void handleDelete() } : {})}
+            >
+              <Icon name="trash" size={10} /> {deleting ? 'deleting…' : 'delete forever'}
             </Btn>
           </div>
         </div>

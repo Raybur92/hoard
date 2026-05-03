@@ -65,9 +65,13 @@ interface IgdbRawGame {
   first_release_date?: number;
   cover?: { url: string };
   genres?: { name: string }[];
-  platforms?: { name: string }[];
+  platforms?: { id: number; name: string }[];
   involved_companies?: { company: { name: string }; developer: boolean }[];
   summary?: string;
+  hypes?: number;
+  category?: number;
+  version_parent?: number | null;
+  total_rating_count?: number;
 }
 
 interface IgdbRawExternalGame {
@@ -166,41 +170,80 @@ limit 1;`,
   return mapped;
 }
 
-export async function getUpcomingReleases(
-  fromDate: Date = new Date(),
-  limit = 20,
-): Promise<IgdbUpcomingRelease[]> {
-  const key = `upcoming_${Math.floor(fromDate.getTime() / (ONE_DAY))}_${limit}`;
-  const cached = upcomingCache.get(key);
+const PLATFORM_IGDB_IDS: Record<string, number[]> = {
+  ST: [6],          // PC (Windows) / Steam
+  GG: [6],          // GOG → PC
+  EP: [6],          // Epic → PC
+  PS: [48, 167],    // PS4, PS5
+  XB: [49, 169],    // Xbox One, Xbox Series X/S
+  NT: [130],        // Nintendo Switch
+};
+
+export function platformCodesToIgdbIds(codes: string[]): number[] {
+  return [...new Set(codes.flatMap((c) => PLATFORM_IGDB_IDS[c] ?? []))];
+}
+
+export interface UpcomingOptions {
+  platformIds: number[];
+  allPlatforms: boolean;
+  hypeThreshold: number;
+  fromDate?: Date;
+  limit?: number;
+}
+
+export async function getUpcomingReleases(opts: UpcomingOptions): Promise<IgdbUpcomingRelease[]> {
+  const { platformIds, allPlatforms, hypeThreshold, fromDate = new Date(), limit = 50 } = opts;
+
+  const sortedIds = [...platformIds].sort((a, b) => a - b);
+  const cacheKey = `upcoming_${Math.floor(fromDate.getTime() / ONE_DAY)}_h${hypeThreshold}_${allPlatforms ? 'all' : sortedIds.join(',')}`;
+  const cached = upcomingCache.get(cacheKey);
   if (cached) return cached;
 
   const fromTs = Math.floor(fromDate.getTime() / 1000);
-  const toTs = fromTs + 365 * 24 * 60 * 60; // next 12 months
+  const toTs = fromTs + 365 * 24 * 60 * 60;
 
-  const results = await igdbPost(
-    'games',
-    `fields id, name, first_release_date, cover.url, genres.name, platforms.name, involved_companies.company.name, involved_companies.developer, summary;
-where first_release_date >= ${fromTs} & first_release_date <= ${toTs} & platforms.name = ("PC (Microsoft Windows)","PlayStation 5","Xbox Series X|S","Nintendo Switch");
+  const platformClause = !allPlatforms && platformIds.length > 0
+    ? `& platforms = (${sortedIds.join(',')})`
+    : '';
+  const hypeClause = hypeThreshold > 0 ? `& hypes > ${hypeThreshold}` : '';
+
+  const query = `fields id, name, first_release_date, cover.url, genres.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
+where (category = (2, 8) | category = null)
+  ${hypeClause}
+  & version_parent = null
+  & first_release_date >= ${fromTs}
+  & first_release_date <= ${toTs}
+  ${platformClause};
 sort first_release_date asc;
-limit ${limit};`,
-  );
+limit ${limit};`;
 
-  const mapped: IgdbUpcomingRelease[] = results.map((raw) => ({
-    igdbId: raw.id,
-    title: raw.name,
-    developer: getDeveloper(raw.involved_companies),
-    releaseDate: raw.first_release_date
-      ? new Date(raw.first_release_date * 1000).toISOString()
-      : null,
-    releaseDateCategory: categoriseRelease(raw.first_release_date),
-    platforms: raw.platforms?.map((p) => p.name) ?? [],
-    genres: raw.genres?.map((g) => g.name) ?? [],
-    coverUrl: normalizeCover(raw.cover?.url),
-    synopsis: raw.summary ?? null,
-    wishlisted: false,
-  }));
+  const results = await igdbPost('games', query);
 
-  upcomingCache.set(key, mapped);
+  const nowTs = Math.floor(Date.now() / 1000);
+  const mapped: IgdbUpcomingRelease[] = results
+    .filter((raw) => {
+      // Rating count floor for any already-released titles that slipped through
+      if (raw.total_rating_count !== undefined && raw.first_release_date && raw.first_release_date < nowTs) {
+        return raw.total_rating_count > 10;
+      }
+      return true;
+    })
+    .map((raw) => ({
+      igdbId: raw.id,
+      title: raw.name,
+      developer: getDeveloper(raw.involved_companies),
+      releaseDate: raw.first_release_date ? new Date(raw.first_release_date * 1000).toISOString() : null,
+      releaseDateCategory: categoriseRelease(raw.first_release_date),
+      platforms: raw.platforms?.map((p) => p.name) ?? [],
+      genres: raw.genres?.map((g) => g.name) ?? [],
+      coverUrl: normalizeCover(raw.cover?.url),
+      synopsis: raw.summary ?? null,
+      wishlisted: false,
+      category: raw.category ?? 0,
+      hype: raw.hypes ?? null,
+    }));
+
+  upcomingCache.set(cacheKey, mapped);
   return mapped;
 }
 

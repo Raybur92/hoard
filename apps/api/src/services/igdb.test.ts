@@ -117,7 +117,7 @@ describe('getUpcomingReleases', () => {
     };
     mockTwitchAndIgdb([upcoming]);
 
-    const results = await getUpcomingReleases();
+    const results = await getUpcomingReleases({ platformIds: [], allPlatforms: true, hypeThreshold: 0 });
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
       igdbId: 101,

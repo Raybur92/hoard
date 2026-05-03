@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { requireUser } from '../middleware/user';
-import { searchGames, getUpcomingReleases } from '../services/igdb';
+import { searchGames, getUpcomingReleases, platformCodesToIgdbIds } from '../services/igdb';
 import { prisma } from '@hoard/db';
 import type { IgdbSearchResult, IgdbUpcomingRelease } from '@hoard/types';
 
@@ -23,21 +24,30 @@ router.get('/igdb/search', requireUser, async (req: Request, res: Response): Pro
   }
 });
 
-// GET /api/igdb/upcoming
+const upcomingQuerySchema = z.object({
+  scope: z.enum(['my-platforms', 'all']).default('my-platforms'),
+});
+
+// GET /api/igdb/upcoming?scope=my-platforms|all
 router.get('/igdb/upcoming', requireUser, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
+  const { scope } = upcomingQuerySchema.parse(req.query);
+  const allPlatforms = scope === 'all';
 
   try {
-    const [games, wishlisted] = await Promise.all([
-      getUpcomingReleases(),
-      prisma.wishlistRelease.findMany({
-        where: { userId },
-        select: { igdbId: true },
-      }),
+    const [user, platforms, wishlisted] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { hypeThreshold: true } }),
+      prisma.platform.findMany({ where: { userId }, select: { code: true } }),
+      prisma.wishlistRelease.findMany({ where: { userId }, select: { igdbId: true } }),
     ]);
 
-    const wishlistedIds = new Set(wishlisted.map((w) => w.igdbId));
+    const hypeThreshold = user?.hypeThreshold ?? 5;
+    const platformCodes = platforms.map((p) => p.code as string);
+    const platformIds = allPlatforms ? [] : platformCodesToIgdbIds(platformCodes);
 
+    const games = await getUpcomingReleases({ platformIds, allPlatforms, hypeThreshold });
+
+    const wishlistedIds = new Set(wishlisted.map((w) => w.igdbId));
     const result: IgdbUpcomingRelease[] = games.map((g) => ({
       ...g,
       wishlisted: wishlistedIds.has(g.igdbId),

@@ -7,8 +7,17 @@ import { Icon } from '../primitives/Icon';
 import { Hr } from '../primitives/Hr';
 import { Heatmap } from '../primitives/Heatmap';
 import { useDashboard } from '../../hooks/useDashboard';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { minutesToHours, formatRelative, daysUntil, buildAsciiBar } from '../../lib/utils';
 import type { PlatformStat, WishlistRelease } from '@hoard/types';
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5)  return 'night';
+  if (h < 12) return 'morning';
+  if (h < 17) return 'afternoon';
+  return 'evening';
+}
 
 const PLATFORM_NAMES: Record<string, string> = {
   ST: 'STEAM', PS: 'PSN', XB: 'XBOX', GG: 'GOG', NT: 'NINT', EP: 'EPIC',
@@ -36,12 +45,22 @@ function asciiChart(platforms: PlatformStat[]): string {
 
 export function DashboardMobile() {
   const { data, loading } = useDashboard();
+  const user = useCurrentUser();
 
   if (loading || !data) {
     return (
       <MobileFrame>
-        <MobileHeader title="hoard" sub="// loading..." />
-        <div style={{ flex: 1 }} />
+        <MobileHeader title="hoard" />
+        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="skel" style={{ width: 100, height: 10 }} />
+            <div className="skel" style={{ width: 60, height: 36 }} />
+            <div className="skel" style={{ width: 180, height: 10 }} />
+          </div>
+          <div className="skel" style={{ height: 100 }} />
+          <div className="skel" style={{ height: 80 }} />
+          <div className="skel" style={{ height: 60 }} />
+        </div>
         <MobileTabBar />
       </MobileFrame>
     );
@@ -78,7 +97,7 @@ export function DashboardMobile() {
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
 
         <div style={{ padding: '14px 16px 4px' }}>
-          <Marker>// good evening, andrea</Marker>
+          <Marker>// good {greeting()}, {(user?.name ?? user?.email?.split('@')[0] ?? 'hoard').toLowerCase()}</Marker>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 10 }}>
             <span className="t-display bignum" style={{ fontSize: 56, lineHeight: 0.85 }}>{stats.totalGames}</span>
             <div>

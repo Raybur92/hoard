@@ -6,6 +6,7 @@ import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
 import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
+import { useState } from 'react';
 import { useUpcoming } from '../../hooks/useUpcoming';
 import { daysUntil, upcomingDateParts, countdownParts } from '../../lib/utils';
 import { api } from '../../lib/api';
@@ -38,7 +39,8 @@ function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
 }
 
 export function UpcomingDesktop() {
-  const { data, loading, refetch } = useUpcoming();
+  const [scope, setScope] = useState<'my-platforms' | 'all'>('my-platforms');
+  const { data, loading, refetch } = useUpcoming(scope);
 
   async function handleToggleWishlist(igdbId: number) {
     try {
@@ -51,8 +53,17 @@ export function UpcomingDesktop() {
     return (
       <div className="app-shell hoard-noise">
         <Sidebar />
-        <div className="app-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="t-mono t-faint" style={{ fontSize: 12 }}>// loading...</span>
+        <div className="app-main">
+          <TopBar crumbs={['hoard', 'upcoming']} />
+          <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div className="skel" style={{ height: 200 }} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              {[0, 1, 2, 3].map(i => <div key={i} className="skel" style={{ width: 80, height: 28 }} />)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[0, 1, 2, 3, 4].map(i => <div key={i} className="skel" style={{ height: 52 }} />)}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -96,8 +107,8 @@ export function UpcomingDesktop() {
           ))}
           <span style={{ flex: 1 }} />
           <div style={{ padding: '6px 0', display: 'flex', gap: 6, alignItems: 'center' }}>
-            <Chip on><Icon name="star" size={11} /> wishlist · {items.length}</Chip>
-            <Chip>all releases</Chip>
+            <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}><Icon name="star" size={11} /> wishlist · {items.length}</Chip>
+            <Chip on={scope === 'all'} onClick={() => setScope(scope === 'all' ? 'my-platforms' : 'all')}>all releases</Chip>
           </div>
         </div>
 
@@ -220,7 +231,11 @@ export function UpcomingDesktop() {
                     </div>
                     <Cover w={76} h={100} src={g.coverUrl} label={(g.title.split(' ')[0] ?? g.title).toUpperCase()} bright />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, color: 'var(--paper)', lineHeight: 1.15 }}>{g.title}</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <div style={{ fontSize: 14, color: 'var(--paper)', lineHeight: 1.15 }}>{g.title}</div>
+                        {g.category === 2 && <span className="chip" style={{ fontSize: 9, color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>DLC</span>}
+                        {g.category === 8 && <span className="chip" style={{ fontSize: 9, color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>remake</span>}
+                      </div>
                       <div className="t-mono t-faint" style={{ fontSize: 10, marginTop: 2 }}>{g.developer}</div>
                       <div className="t-faint" style={{ fontSize: 11, marginTop: 4 }}>{g.genres[0] ?? '—'}</div>
                       <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
@@ -264,7 +279,11 @@ export function UpcomingDesktop() {
                 </div>
                 <Cover w={32} h={42} src={g.coverUrl} label={(g.title[0] ?? '').toUpperCase()} bright />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, lineHeight: 1.1 }}>{g.title}</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.1, display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    <span>{g.title}</span>
+                    {g.category === 2 && <span style={{ fontSize: 9, color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>DLC</span>}
+                    {g.category === 8 && <span style={{ fontSize: 9, color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>remake</span>}
+                  </div>
                   <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>{g.developer} · {g.platStr}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>

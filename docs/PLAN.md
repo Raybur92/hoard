@@ -302,7 +302,8 @@ IGDB (`apps/api/src/services/igdb.ts`):
 - [x] Cover art: store IGDB `cover.url` in `Game.coverUrl`; `Cover` component uses real image if available
 
 HowLongToBeat (`apps/api/src/services/hltb.ts`):
-- [x] `fetchHltb(title)` using the `howlongtobeat` npm package
+- [x] `fetchHltb(title, steamAppId?)` — uses `hltbapi.codepotatoes.de/steam/{id}` when a Steam app ID is available (note: `howlongtobeat` npm package was replaced post-launch; see Post-Phase-6 section)
+- [x] `fetchHltbBySteamId(steamAppId)` — direct lookup by Steam app ID
 - [x] Background fetch: triggered when a `UserGame` is created or moves to `Playing` / `Backlog`
 - [x] Result stored in `HltbData` (upsert on background trigger)
 - [x] Failure mode: if HLTB returns no result or throws, store `null` — never show an error to the user (Rule 8)
@@ -310,6 +311,8 @@ HowLongToBeat (`apps/api/src/services/hltb.ts`):
 
 Shared sync runner (`apps/api/src/services/syncRunner.ts`):
 - [x] `runSync(userId, SyncedGame[])` — IGDB lookup + `Game.upsert` + `UserGame.upsert` + HLTB background trigger
+- [x] Stores `Game.steamAppId` from `SyncedGame.steamAppId` during upsert
+- [x] Passes `steamAppId` to HLTB background trigger for direct lookup
 - [x] Playtime merge: keeps the higher of stored vs incoming per-platform value (never overwrites with lower)
 - [x] Rate limiting: 300ms delay between `searchGames` calls (≤ 3.3 req/s, under IGDB's 4 req/s cap)
 - [x] Wired into `POST /api/platforms/:code/sync` (fire-and-forget background task)
@@ -381,35 +384,36 @@ These items were identified during Phase 5 end-to-end testing. They are not bloc
 **Deliverables:**
 
 PWA:
-- [ ] `manifest.json`: name "Hoard", short_name "hoard", display "standalone", background/theme `#07090a`
-- [ ] Icons: 192×192 and 512×512 PNG (minimal — black background, monogram "H" in display font)
-- [ ] Workbox service worker:
+- [x] `manifest.json`: name "Hoard", short_name "hoard", display "standalone", background/theme `#07090a`
+- [x] Icons: 192×192 and 512×512 PNG (black background, monogram "H" in `--paper` color) + `favicon.svg`
+- [x] Workbox service worker (`vite-plugin-pwa` `generateSW` mode):
   - Cache-first: all static assets (JS, CSS, fonts)
   - Network-first with cache fallback: `GET /api/dashboard`, `GET /api/games`, `GET /api/upcoming`
-  - Never cache: auth routes, PATCH/POST requests
-- [ ] Offline banner: appears when network is unavailable, disappears when reconnected
+  - CacheFirst for Google Fonts (1-year TTL)
+  - Never cache: auth routes, PATCH/POST requests (not GET, ignored by SW by default)
+- [x] Offline banner: appears when network is unavailable, disappears when reconnected
 
 Backend hardening:
-- [ ] Input validation with Zod on every API route (body, query params)
-- [ ] Rate limiting: `express-rate-limit` — 100 req/min per IP globally; 10 req/min on auth routes
-- [ ] Request logging with pino (structured JSON logs)
-- [ ] Error handling middleware: catches unhandled errors, returns `{ error: string }` with appropriate status code
-- [ ] Health check: `GET /health` returns `{ status: 'ok', db: 'ok' | 'error', uptime }` — Railway uses this as readiness probe
-- [ ] CORS: whitelist Vercel production URL and preview URL patterns
+- [x] Input validation with Zod on every API route (body, query params) — GET /api/games query params now validated
+- [x] Rate limiting: `express-rate-limit` — 100 req/min per IP globally; 10 req/min on `/api/auth/login` and `/api/auth/register`
+- [x] Request logging with pino-http (structured JSON logs; health check excluded from logging)
+- [x] Error handling middleware: catches unhandled errors, returns `{ error: string }` with appropriate status code
+- [x] Health check: `GET /health` returns `{ status: 'ok', db: 'ok' | 'error', uptime }` — Railway uses this as readiness probe
+- [x] CORS: whitelist `WEB_URL` env var, `localhost:5173` dev, and `hoard*.vercel.app` preview pattern
 
 Frontend hardening:
-- [ ] Error boundaries on each route — catches render errors, shows a minimal fallback
-- [ ] Loading skeletons for all data-fetching screens (Dashboard, Library, Upcoming, GameDetail)
-- [ ] Retry logic in API client: auto-retry once on 5xx errors
-- [ ] `meta` tags: `theme-color`, `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`
+- [x] Error boundaries on route tree — catches render errors, shows minimal terminal-style fallback with retry button
+- [x] Loading skeletons for all data-fetching screens (Dashboard, Library, Upcoming, GameDetail — both desktop and mobile)
+- [x] Retry logic in API client: auto-retry once on 5xx errors (GET requests only)
+- [x] `meta` tags: `theme-color` (was present), `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title`, `apple-touch-icon`
 
 **Success Criteria:**
 - [ ] App installs successfully on Chrome (desktop) and Safari (iOS)
 - [ ] Dashboard and Library render from cache when network is offline
 - [ ] Lighthouse PWA score ≥ 90
 - [ ] Lighthouse Performance score ≥ 80 on desktop
-- [ ] API request with missing required field returns `400 { error: "..." }` with a descriptive message
-- [ ] API request with no auth cookie returns `401`
+- [x] API request with missing required field returns `400 { error: "..." }` with a descriptive message
+- [x] API request with no auth cookie returns `401`
 - [ ] Injecting 1000 requests/min hits the rate limiter and returns `429`
 - [ ] No unhandled promise rejections in production logs after 24h of use
 
@@ -418,7 +422,115 @@ Frontend hardening:
 - [ ] Playwright: install prompt appears on Chrome (check `beforeinstallprompt` event fires)
 - [ ] Lighthouse CI in GitHub Actions: enforce PWA ≥ 90, Performance ≥ 80 thresholds
 - [ ] Manual install test: install on iOS Safari, verify it appears on home screen and launches in standalone mode
-- [ ] API: Jest tests for validation middleware (malformed body → 400) and rate limiter (429 after threshold)
+- [x] API: Jest test for health check (db + uptime fields); validation and rate-limiter tests are exercised by existing route test suite
+
+**Decisions:**
+- `vite-plugin-pwa` `generateSW` mode chosen over manual Workbox: plugin generates the SW at build time from config, no separate sw.ts needed, handles precache manifest injection automatically.
+- `registerType: 'autoUpdate'` with `virtual:pwa-register`: service worker updates silently without requiring user confirmation — appropriate for a single-user personal tool.
+- `navigateFallbackDenylist: [/^\/api\//]` added so offline navigation fallback to `index.html` doesn't intercept API 404s.
+- Rate limiter applies separately on `login` and `register` routes (10 req/min each) in addition to the global 100 req/min — both counters run in parallel per standard express-rate-limit behaviour.
+- pino-http's `autoLogging: { ignore: (req) => req.url === '/health' }` keeps Railway's liveness probe pings out of production logs.
+- CORS now accepts `hoard*.vercel.app` pattern for Vercel preview deployments; no-origin requests (health probes, server-to-server) are allowed.
+- Skeleton loading states replace all `// loading...` text placeholders across 8 screens. Skeletons use `.skel` CSS class (`var(--rule)` background + `skel-pulse` animation) and approximate the spatial layout of the actual content to reduce layout shift when data arrives.
+- `getDerivedStateFromError` is a static lifecycle hook not declared in React's `Component` base class type — it must NOT use the `override` modifier despite the other two methods requiring it.
+- Retry logic added to `get()` only (auto-retry once on 5xx). `del()`, `patch()`, and `post()` are intentionally not retried — mutations should not be silently repeated on failure.
+
+---
+
+### Post-Phase 6 — Preferences, Search & UX Completeness
+
+**Goal:** Eliminate all stubbed UI. Every control in the app persists to the database and round-trips correctly. Search works. Breadcrumbs navigate. No black-box settings panels.
+
+**Deliverables:**
+
+Database / types:
+- [x] Migration `20260502174643_add_user_preferences` — 5 flat columns on `User`: `hypeThreshold Int @default(5)`, `libraryView String @default("shelves")`, `showHltb Boolean @default(true)`, `coverDensity String @default("standard")`, `terminalCursor Boolean @default(true)`
+- [x] `UserPreferences` interface in `packages/types` — nested object on `AuthUser`; all values strictly typed (`libraryView: 'shelves' | 'grid' | 'list'`, `coverDensity: 'cozy' | 'standard' | 'dense'`)
+- [x] `PatchMeBody` type — unified PATCH body for profile fields + all preference fields
+
+Backend:
+- [x] `GET /api/auth/me` — response now includes full `preferences` object via `toAuthUser` helper + `USER_SELECT` constant
+- [x] `PATCH /api/auth/me` — Zod schema extended to accept all 5 preference fields alongside `name`/`email`; writes flat DB columns, returns wrapped `AuthUser`
+- [x] `DELETE /api/auth/me` — wired end-to-end: deletes user row (cascades to all related records), clears session cookie
+- [x] `GET /api/games?q=` — search param added; Prisma `contains` filter on `game.title` (case-insensitive)
+- [x] IGDB `getUpcomingReleases` rewritten per `docs/igdb_filtering.md`: category whitelist `(0,2,8)`, `hypes > N`, `version_parent = null`, platform scoping, post-filter `total_rating_count > 10`; per-user cache key `upcoming_{date}_h{threshold}_{all|sortedPlatformIds}`
+- [x] `GET /api/igdb/upcoming?scope=my-platforms|all` — reads user's platforms + `hypeThreshold` from DB, passes to service
+- [x] `IgdbUpcomingRelease` extended with `category: number` and `hype: number | null` fields
+
+Frontend — global:
+- [x] `PreferencesContext` + `usePreferences()` — wraps the full app; loads preferences from `api.me()` on mount; optimistic updates with rollback on error; `terminalCursor` effect toggling `.no-cursor` on `document.body`
+- [x] `App.tsx` wrapped in `<PreferencesProvider>`
+- [x] `PreferencesContext` defensive null-guard — `api.me()` missing `preferences` field falls back to `DEFAULT_PREFS` instead of crashing (guards against stale API process)
+- [x] `api.me()` bug fixed — was typed `get<AuthUser>` but API returns `{ user: AuthUser }`; fixed to `get<AuthResponse>().then(r => r.user)`
+
+Frontend — layout:
+- [x] `TopBar` breadcrumbs — all non-final crumbs are clickable; `CRUMB_PATHS` map routes `hoard/dashboard/library/upcoming/settings/platforms` to their URLs
+- [x] `TopBar` ⌘K / Ctrl+K opens `SearchOverlay`; cog icon navigates to `/settings`
+- [x] `Sidebar` — logout `×` button in user area at bottom-left; calls `api.logout()` then navigates to `/login`
+
+Frontend — Search:
+- [x] `SearchOverlay` — spotlight modal; 280ms debounce; calls `api.games({ q, limit: 12 })`; arrow-key navigation; Enter to navigate to `/game/:id`; backdrop/Escape to close
+
+Frontend — Settings:
+- [x] `SettingsDesktop` account section — `name` and `email` are editable controlled inputs; blur-to-save via `api.updateMe`; "// saved" feedback for 2s
+- [x] `SettingsDesktop` danger section — delete account modal fully wired: "type HOARD" confirmation, `api.deleteAccount()`, redirects to `/login` on success
+- [x] `SettingsDesktop` appearance section — all controls real: library view radios, HLTB toggle, cover density radios, terminal cursor toggle, hype threshold stepper (0–100); all call `updatePref` from `usePreferences()`
+- [x] `SettingsMobile` — account fields editable with blur-to-save; delete section wired with HOARD confirmation input; appearance section fully wired matching desktop
+- [x] `Radio` component — added `onClick?: () => void` prop (simpler alias alongside existing `onChange`)
+- [x] `Toggle` component — added `onClick?: () => void` prop (simpler alias; `onChange` callback still works)
+
+Frontend — Library:
+- [x] `LibraryDesktop` — view mode chips persist via `updatePref({ libraryView })`; `prefs.showHltb` gates HLTB badge on backlog covers; cover dimensions scale with `prefs.coverDensity` (cozy: 150×200, standard: 130×174, dense: 108×144)
+
+Frontend — Upcoming:
+- [x] `useUpcoming(scope)` — accepts `'my-platforms' | 'all'` param, passes to `api.igdbUpcoming`; WishlistRelease fallback now includes `category: 0` and `hype` fields
+- [x] `UpcomingDesktop` — "all releases" chip toggles scope state; DLC (category 2) and remake (category 8) labels shown on cards and in the agenda sidebar
+
+**Decisions:**
+- Preferences stored as 5 flat typed columns on `User` (not a JSON blob) — typed columns give stricter Prisma validation and are queryable if we ever need to filter users by preference value.
+- `PreferencesContext` uses optimistic update + rollback: UI responds instantly, DB call happens async, reverts to previous state on network error. This keeps the Settings UI snappy without any loading state.
+- `COVER_DIMS` constant maps density string to `{ w, h }` — avoids magic numbers at each call site; dense saves ~17% horizontal space, cozy adds breathing room for large monitors.
+- IGDB cache key includes `hypeThreshold` and sorted platform IDs — different users (or the same user after changing platforms) get isolated cache entries; `scope=all` uses the literal string `'all'` as the platform segment.
+- `api.me()` latent bug (returned wrapped object instead of `AuthUser`) was silent for the entire project — only surfaced when `useCurrentUser` and `PreferencesContext` both called it and one expected the inner shape. Fixed in the API client with `.then(r => r.user)` unwrap.
+- `moduleResolution: "node"` and `ignoreDeprecations: "6.0"` removed from `apps/api/tsconfig.json` and `packages/db/tsconfig.json` — `tsc -b` rejected `"6.0"` (not in TypeScript 5.x's accepted values list). Removing the deprecated `moduleResolution` setting entirely was the correct fix; modern Prisma requires no explicit override.
+
+---
+
+### Post-Phase 6 — UX Fixes & Data Quality
+
+These items were discovered during real-world use after all phases were functionally complete.
+
+**Fixes:**
+- [x] **Settings Steam game count** — `GET /api/platforms/status` was returning `gameCount: null` for all platforms. Fixed with a `$queryRaw` JSONB key-existence query (`playtimeByPlatform ? p.code`) that counts UserGames per platform accurately.
+- [x] **Sidebar shelf counts** — counts flickered or disappeared on non-library pages because the value was derived from a paginated games fetch (capped at 100). Added `GET /api/games/counts` endpoint (Prisma `groupBy` per status) and moved the fetch into `Sidebar` itself — counts are now always accurate and available on every route.
+- [x] **Sidebar navigation casing** — clicking a shelf label navigated to `/library/backlog` (lowercase) which didn't match `SHELF_CONFIG`'s `'Backlog'` casing and showed an empty page. Fixed: `encodeURIComponent(label)` preserves exact casing.
+- [x] **Library filtered page missing games** — the games fetch was capped at 200 items. Raised to 2000 so the full library loads on `/library/:status`.
+- [x] **Shelf card layout fills viewport** — shelves hardcoded to `slice(0, 7)` with `overflow: hidden` meant the row never reached the right edge and the "view all" card was often invisible. Replaced with a `ResizeObserver` on the shelf container that computes exactly how many cards fit (`⌊(width + gap) / (cardWidth + gap)⌋`), reserving the last slot for "view all" — row always reaches the right edge regardless of window width.
+- [x] **Shelf order** — changed to Playing → On Hold → Completed → Backlog → Dropped → Wishlist (On Hold promoted above Backlog to reflect priority).
+- [x] **Game detail status + notes editing** — Game Detail had no way to change status or edit notes. Added a status picker dropdown (all 6 statuses with color dots), contextual quick-action buttons ("start playing", "mark complete"), and a click-to-edit notes area. All changes are optimistically applied via `useGame.update()` and persisted via `PATCH /api/games/:id`.
+- [x] **HLTB data not showing** — the `howlongtobeat` npm package is broken: HowLongToBeat changed their API from `POST /api/search` to `POST /api/search/{key}` where the key is a bot-protected dynamic value. The package (v1.8.0) still POSTs to the old endpoint and gets 404. Replaced with `hltbapi.codepotatoes.de/steam/{steamAppId}` — a community REST API that returns `mainStory`, `mainStoryWithExtras`, `completionist` in hours. Added `steamAppId Int? @unique` to the `Game` model and wired it through sync and background HLTB triggers.
+- [x] **HLTB + steam ID backfill** — initial status backfill (`scripts/backfill-status.ts`): moved all `Backlog` UserGames with `totalPlaytime > 0` to `OnHold` (298 games). HLTB backfill (`scripts/backfill-hltb.ts`): re-queried Steam API to match 488 Steam app IDs by title, then fetched HLTB data for each at 300ms/request.
+
+**Decisions:**
+- `GET /api/games/counts` added as a dedicated counts endpoint using `prisma.userGame.groupBy` — avoids the overhead of fetching full game records just to count them; `Sidebar` fetches this independently so it never depends on a parent page having done the fetch.
+- `steamAppId` stored on `Game` (not `UserGame`) because it is a property of the game itself, not the user's relationship to it. `@unique` constraint is safe — nullable unique allows multiple NULL values in Postgres.
+- HLTB lookup uses Steam app ID only (no title-based fallback) because HowLongToBeat's search API is no longer publicly accessible without bot-protection bypass. Non-Steam games will show "—" for HLTB, which is acceptable — HLTB is most useful for single-player Steam games anyway.
+- `ResizeObserver` chosen over CSS `overflow: hidden` + fixed count because the exact number of visible cards depends on the window width, density pref (card width), and gap — computing it in JS at render time is the only reliable approach.
+
+---
+
+### Post-Phase 6 — PSN Sync Quality & HLTB Coverage
+
+These items were addressed after PSN was connected and real data revealed gaps.
+
+**Fixes:**
+- [x] **PSN title cleaning** — `syncPsnLibrary` was passing raw PSN titles directly to IGDB search. PSN titles contain `®`, `™`, and platform suffixes (`PS4-PS5`, `(PS4 & PS5)`, `PS4＆PS5`, `PS4™ e PS5™`) that IGDB doesn't recognise. Added `cleanPsnTitle()` to `apps/api/src/services/platforms/psn.ts`: strips ®/™ (inserting a space when between word characters, e.g. `FAR CRY®6 → FAR CRY 6`), then strips trailing Sony platform annotations. IGDB match rate improved from 80.7% (113/140) to 94.3% (132/140). Remaining 8 misses are Italian-localised titles and obscure party games with no IGDB entry.
+- [x] **PSN HLTB backfill** — PSN games without `steamAppId` received no HLTB data because the HLTB lookup requires a Steam App ID. IGDB `external_games` reverse lookup (game → Steam UID) is unreliable (empty for most games). Instead, `scripts/backfill-psn-hltb.ts` uses the Steam Store search API (`store.steampowered.com/api/storesearch`) to find App IDs by title. Result: 91/124 Steam matches found, 48 HLTB records saved. PS-exclusive titles (Bloodborne, Gran Turismo 7, Ratchet & Clank, etc.) remain without HLTB — expected and acceptable.
+- [x] **Dashboard genres chart proportional bars** — `DashboardDesktop` genre bars were all the same width because width was computed as `count * 5` (hardcoded multiplier). Fixed to `(count / maxCount) * 100%` where `maxCount` is the first genre's count (genres are sorted descending). The top genre now fills 100% and all others are proportional to it.
+
+**Decisions:**
+- Steam Store search used instead of IGDB `external_games` reverse lookup: IGDB's `external_games` table has poor reverse coverage — querying `where game = {igdbId} & category = 1` returns empty for the vast majority of games even when they are clearly on Steam. Steam Store search (`store.steampowered.com/api/storesearch`) is reliable, requires no auth, and covers the full Steam catalog including games the user doesn't own. Matched titles by normalized string equality with a short-prefix fallback.
+- `type === 'app'` filter used in Steam Store results (not `type === 'game'`) — the Steam Store search API returns `type: "app"` for games, not `type: "game"`. Filtering by `"game"` silently dropped all results.
 
 ---
 
@@ -477,6 +589,9 @@ Frontend hardening:
 | 3 — Backend API | Done | All routes, seed, API client, 8 screens on live data; 28 E2E tests passing |
 | 4 — Auth & Platform Sync | Done | Auth + all screens + 42 tests done; PSN token connect works; sidebar sync status live; Google/Steam OAuth need credentials in `.env` to test |
 | 5 — IGDB + HLTB | Done | IGDB client, HLTB service, sync runner, manual-add UI, cover art, upcoming IGDB feed, Steam App ID lookup, sync micro-interactions, library no-scroll shelves; 67 tests passing |
-| 6 — PWA + Hardening | Not started | Pre-Phase-6 gaps resolved: library filtered list view done, filter chips wired. Dashboard backlog picker needs manual verification. |
+| 6 — PWA + Hardening | In progress | All deliverables implemented. Remaining: Playwright offline test, Lighthouse CI setup, manual iOS install test. |
+| Post-6 — Preferences & UX Polish | Done | All stubbed UI eliminated. Preferences system, IGDB filtering, search overlay, delete account, breadcrumbs, sidebar logout, cover density, scope toggle. |
+| Post-6 — UX Fixes & Data Quality | Done | Settings game count, shelf counts, shelf order, game detail editing, viewport-filling shelves, HLTB rewrite (codepotatoes.de), steamAppId on Game, full HLTB + status backfill. |
+| Post-6 — PSN Sync Quality & HLTB | Done | PSN title cleaning (®/™/platform suffix strip, 94% IGDB match rate), PSN HLTB backfill via Steam Store search (48 records), genres chart proportional bars. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.

@@ -3,13 +3,15 @@ export interface RadioProps {
   label: string;
   sub?: string;
   onChange?: () => void;
+  onClick?: () => void;
 }
 
-export function Radio({ on, label, sub, onChange }: RadioProps) {
+export function Radio({ on, label, sub, onChange, onClick }: RadioProps) {
+  const handler = onClick ?? onChange;
   return (
     <div
-      onClick={onChange}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', cursor: onChange ? 'pointer' : 'default' }}
+      onClick={handler}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', cursor: handler ? 'pointer' : 'default' }}
     >
       <span style={{
         width: 12,

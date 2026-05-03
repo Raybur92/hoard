@@ -26,10 +26,17 @@ export function GameDetailMobile() {
   if (loading || !ug) {
     return (
       <MobileFrame>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="t-mono t-faint" style={{ fontSize: 12 }}>
-            {error ? `// error: ${error}` : '// loading...'}
-          </span>
+        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+          {error
+            ? <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+            : <>
+                <div className="skel" style={{ height: 180 }} />
+                <div className="skel" style={{ width: 200, height: 20 }} />
+                <div className="skel" style={{ width: 120, height: 11 }} />
+                <div className="skel" style={{ height: 80 }} />
+                <div className="skel" style={{ height: 100 }} />
+              </>
+          }
         </div>
       </MobileFrame>
     );

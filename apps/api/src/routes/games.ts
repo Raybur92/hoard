@@ -6,9 +6,9 @@ import { requireUser } from '../middleware/user';
 import type { UserGameDetail, GameListResponse, PatchGameBody } from '@hoard/types';
 import { fetchHltb } from '../services/hltb';
 
-function triggerHltbBackground(gameId: string, title: string): void {
+function triggerHltbBackground(gameId: string, title: string, steamAppId?: number | null): void {
   void (async () => {
-    const result = await fetchHltb(title);
+    const result = await fetchHltb(title, steamAppId);
     if (!result) return;
     await prisma.hltbData.upsert({
       where: { gameId },
@@ -74,16 +74,31 @@ function mapUserGame(ug: {
   };
 }
 
+const gamesQuerySchema = z.object({
+  status: z.enum(['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist']).optional(),
+  platform: z.string().max(10).optional(),
+  q: z.string().max(100).optional(),
+  sort: z.enum(['lastPlayed', 'title', 'playtime']).default('lastPlayed'),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(2000).default(50),
+});
+
 // GET /api/games
 router.get('/games', requireUser, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
-  const { status, platform, sort = 'lastPlayed', page = '1', limit = '50' } = req.query as Record<string, string | undefined>;
 
-  const pageNum = Math.max(1, parseInt(page ?? '1', 10));
-  const limitNum = Math.min(200, Math.max(1, parseInt(limit ?? '50', 10)));
+  const parsed = gamesQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid query params' });
+    return;
+  }
+  const { status, platform, q, sort, page: pageNum, limit: limitNum } = parsed.data;
 
-  const whereBase: { userId: string; status?: PrismaGameStatus } = { userId };
-  if (status) whereBase.status = toPrismaStatus(status);
+  const where = {
+    userId,
+    ...(status ? { status: toPrismaStatus(status) } : {}),
+    ...(q ? { game: { title: { contains: q, mode: 'insensitive' as const } } } : {}),
+  };
 
   const orderBy =
     sort === 'title'     ? { game: { title: 'asc' as const } } :
@@ -92,13 +107,13 @@ router.get('/games', requireUser, async (req: Request, res: Response): Promise<v
 
   const [games, total] = await Promise.all([
     prisma.userGame.findMany({
-      where: whereBase,
+      where,
       include: { game: { include: { hltbData: true } } },
       orderBy,
       skip: (pageNum - 1) * limitNum,
       take: limitNum,
     }),
-    prisma.userGame.count({ where: whereBase }),
+    prisma.userGame.count({ where }),
   ]);
 
   let filtered = games.map(mapUserGame);
@@ -118,6 +133,21 @@ router.get('/games', requireUser, async (req: Request, res: Response): Promise<v
   };
 
   res.json(body);
+});
+
+// GET /api/games/counts — per-status counts without pagination
+router.get('/games/counts', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const groups = await prisma.userGame.groupBy({
+    by: ['status'],
+    where: { userId: req.userId },
+    _count: { status: true },
+  });
+  const counts: Partial<Record<string, number>> = {};
+  for (const g of groups) {
+    const key = g.status === 'OnHold' ? 'On Hold' : g.status;
+    counts[key] = g._count.status;
+  }
+  res.json({ counts });
 });
 
 // GET /api/games/:id
@@ -182,7 +212,7 @@ router.patch('/games/:id', requireUser, async (req: Request, res: Response): Pro
     (updateData.status === 'Playing' || updateData.status === 'Backlog') &&
     !updated.game.hltbData
   ) {
-    triggerHltbBackground(updated.game.id, updated.game.title);
+    triggerHltbBackground(updated.game.id, updated.game.title, updated.game.steamAppId);
   }
 
   res.json(mapUserGame(updated));

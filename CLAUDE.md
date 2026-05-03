@@ -140,8 +140,22 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: Phase 6 — PWA & Production Hardening**
+**Active: No active phase — app is in production use**
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
-Phases 0–5 are complete. Phase 6 covers: Workbox service worker with cache strategies, offline banner, Zod input validation on all routes, rate limiting, pino structured logging, error boundaries, loading skeletons, and Lighthouse CI thresholds.
+All phases complete through Post-Phase 6. The app is in real use. Recent fixes landed:
+- `GET /api/games/counts` endpoint — sidebar shelf counts always accurate on every route
+- Shelf order: Playing → On Hold → Completed → Backlog → Dropped → Wishlist
+- Library shelf cards fill viewport width exactly via `ResizeObserver`; "view all" always occupies last slot
+- Game Detail: status picker + notes editing fully wired (`PATCH /api/games/:id`, optimistic update)
+- HLTB rewritten: `howlongtobeat` npm package was broken (HLTB changed API); replaced with `hltbapi.codepotatoes.de/steam/{steamAppId}`
+- `steamAppId Int? @unique` added to `Game` model; stored during Steam sync; wired through HLTB background triggers
+- Full Steam backfill: 488 Steam app IDs matched, HLTB data fetched for ~300 games
+- PSN sync fully implemented (`psn-api` v2.18.0); `syncPsnLibrary` fetches paginated library with ISO 8601 duration parsing
+- PSN title cleaning: `cleanPsnTitle()` strips ®/™ and PS4/PS5 platform suffixes before IGDB search; 94% match rate (132/140)
+- PSN HLTB backfill (`scripts/backfill-psn-hltb.ts`): Steam Store search for App IDs; 48 HLTB records added for cross-platform PSN games
+- Dashboard genres chart: bars now proportional to max count (`count / maxCount * 100%`) instead of hardcoded multiplier
+- Shareable receipt: OWNED ON + PROGRESS sections converted from `<pre>` to flexbox `.row` divs with CSS dotted spacers and self-sizing section header lines
+
+Remaining Phase 6 items (not blocking): Playwright offline simulation test, Lighthouse CI GitHub Actions integration, manual iOS Safari install verification.

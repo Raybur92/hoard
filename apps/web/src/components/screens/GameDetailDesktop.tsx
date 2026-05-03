@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
@@ -9,7 +10,9 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
+import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, shortYear, generateReceipt } from '../../lib/utils';
+import type { GameStatus } from '@hoard/types';
 
 const STATUS_COLOR: Record<string, string> = {
   Playing: 'var(--green)',
@@ -20,18 +23,59 @@ const STATUS_COLOR: Record<string, string> = {
   Wishlist: 'var(--amber)',
 };
 
+const ALL_STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist'];
+
 export function GameDetailDesktop() {
   const { id } = useParams<{ id: string }>();
-  const { data: ug, loading, error } = useGame(id);
+  const { data: ug, loading, error, update } = useGame(id);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const statusRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!statusOpen) return;
+    function handler(e: MouseEvent) {
+      if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [statusOpen]);
+
+  async function changeStatus(s: GameStatus) {
+    if (!id) return;
+    setStatusOpen(false);
+    update({ status: s });
+    await api.patchGame(id, { status: s }).catch(() => null);
+  }
+
+  async function saveNote() {
+    if (!id) return;
+    setEditingNotes(false);
+    update({ notes: noteDraft || null });
+    await api.patchGame(id, { notes: noteDraft || null }).catch(() => null);
+  }
 
   if (loading || !ug) {
     return (
       <div className="app-shell hoard-noise">
         <Sidebar />
-        <div className="app-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="t-mono t-faint" style={{ fontSize: 12 }}>
-            {error ? `// error: ${error}` : '// loading...'}
-          </span>
+        <div className="app-main">
+          <TopBar crumbs={['hoard', 'library', '…']} />
+          {error
+            ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+              </div>
+            : <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32 }}>
+                <div className="skel" style={{ height: 347 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div className="skel" style={{ width: 240, height: 28 }} />
+                  <div className="skel" style={{ width: 160, height: 12 }} />
+                  <div className="skel" style={{ height: 80 }} />
+                  <div className="skel" style={{ height: 120 }} />
+                </div>
+              </div>
+          }
         </div>
       </div>
     );
@@ -64,10 +108,6 @@ export function GameDetailDesktop() {
     { label: 'YOUR PLAYTIME',  value: minutesToHours(totalMin),            sub: `across ${Object.keys(g.playtimeByPlatform).join(' · ')}`, you: true },
   ];
 
-  const platLines = platforms
-    .map(([code, min]) => `${code.padEnd(2)}  ${code.padEnd(12)}  ${minutesToHours(min ?? 0).padStart(6)}`)
-    .join('\n');
-  const subtotal = `${''.padEnd(16)}  ─────────\nSUBTOTAL  ${minutesToHours(totalMin).padStart(10)}`;
 
   return (
     <div className="app-shell hoard-noise">
@@ -89,14 +129,49 @@ export function GameDetailDesktop() {
                 </div>
                 <div style={{ fontSize: 44, lineHeight: 1, color: 'var(--paper)', marginTop: 8, letterSpacing: '-0.015em' }}>{g.game.title}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Chip on>
-                    <span style={{ display: 'inline-block', width: 8, height: 8, background: statusColor, marginRight: 4 }} />
-                    {g.status.toLowerCase()}
-                  </Chip>
+                  <div ref={statusRef} style={{ position: 'relative' }}>
+                    <Chip on onClick={() => setStatusOpen(o => !o)} style={{ cursor: 'pointer' }}>
+                      <span style={{ display: 'inline-block', width: 8, height: 8, background: statusColor, marginRight: 4 }} />
+                      {g.status.toLowerCase()}
+                      <Icon name="caret" size={9} style={{ marginLeft: 4 }} />
+                    </Chip>
+                    {statusOpen && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', zIndex: 100, minWidth: 140, padding: '4px 0' }}>
+                        {ALL_STATUSES.map(s => (
+                          <div
+                            key={s}
+                            onClick={() => void changeStatus(s)}
+                            style={{
+                              padding: '6px 14px',
+                              fontSize: 11,
+                              fontFamily: 'var(--mono)',
+                              color: s === g.status ? 'var(--paper)' : 'var(--paper-dim)',
+                              background: s === g.status ? 'var(--ink-3)' : 'transparent',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <span style={{ display: 'inline-block', width: 7, height: 7, background: STATUS_COLOR[s] ?? 'var(--paper-faint)', flexShrink: 0 }} />
+                            {s}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <span style={{ flex: 1 }} />
-                  <Btn variant="primary"><Icon name="play" size={11} fill={true} /> start playing</Btn>
-                  <Btn variant="amber">+ note</Btn>
-                  <Btn><Icon name="arrowR" size={11} /> share receipt</Btn>
+                  {g.status !== 'Playing' && (
+                    <Btn variant="primary" onClick={() => void changeStatus('Playing')}>
+                      <Icon name="play" size={11} fill={true} /> start playing
+                    </Btn>
+                  )}
+                  {g.status !== 'Completed' && (
+                    <Btn onClick={() => void changeStatus('Completed')}>
+                      <Icon name="check" size={11} /> mark complete
+                    </Btn>
+                  )}
+                  <Btn variant="amber" onClick={() => { setNoteDraft(g.notes ?? ''); setEditingNotes(true); }}>+ note</Btn>
                 </div>
 
                 {/* quick stats */}
@@ -180,14 +255,32 @@ export function GameDetailDesktop() {
                 {/* notes */}
                 <div style={{ marginTop: 22 }}>
                   <Marker>// notes · private</Marker>
-                  <div style={{ marginTop: 10, padding: 16, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.6, color: 'var(--paper)' }}>
-                    <div className="t-faint" style={{ fontSize: 10, marginBottom: 6 }}>{g.updatedAt.slice(0, 10)}</div>
-                    {noteLines.length > 0
-                      ? noteLines.map((note, i) => <div key={i}><span className="t-green">&gt;</span> {note}</div>)
-                      : <div className="t-faint">no notes yet</div>
-                    }
-                    <div className="t-faint" style={{ fontSize: 10, marginTop: 12 }}>— add note</div>
-                  </div>
+                  {editingNotes ? (
+                    <div style={{ marginTop: 10 }}>
+                      <textarea
+                        autoFocus
+                        value={noteDraft}
+                        onChange={e => setNoteDraft(e.target.value)}
+                        style={{ width: '100%', minHeight: 100, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.6, padding: '10px 14px', resize: 'vertical', boxSizing: 'border-box' }}
+                        placeholder="// your notes here"
+                      />
+                      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                        <Btn sm variant="primary" onClick={() => void saveNote()}>save</Btn>
+                        <Btn sm onClick={() => setEditingNotes(false)}>cancel</Btn>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      style={{ marginTop: 10, padding: 16, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.6, color: 'var(--paper)', cursor: 'pointer' }}
+                      onClick={() => { setNoteDraft(g.notes ?? ''); setEditingNotes(true); }}
+                    >
+                      <div className="t-faint" style={{ fontSize: 10, marginBottom: 6 }}>{g.updatedAt.slice(0, 10)}</div>
+                      {noteLines.length > 0
+                        ? noteLines.map((note, i) => <div key={i}><span className="t-green">&gt;</span> {note}</div>)
+                        : <div className="t-faint">no notes yet · click to add</div>
+                      }
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -219,34 +312,58 @@ export function GameDetailDesktop() {
 
                 <div className="rule" style={{ margin: '14px 0' }} />
 
-                <div className="row"><span>STATUS</span><span style={{ flex: 1, borderBottom: '1px dotted', alignSelf: 'end', margin: '0 6px 5px', height: 0 }} /><span>{g.status.toUpperCase()}</span></div>
-                <div className="row"><span>RATING</span><span style={{ flex: 1, borderBottom: '1px dotted', alignSelf: 'end', margin: '0 6px 5px', height: 0 }} /><span>{g.rating != null ? `${g.rating}/5` : '—/★★★★★'}</span></div>
-                <div className="row"><span>FIRST ADDED</span><span style={{ flex: 1, borderBottom: '1px dotted', alignSelf: 'end', margin: '0 6px 5px', height: 0 }} /><span>{g.addedAt.slice(0, 10)}</span></div>
+                <div className="row"><span>STATUS</span><span className="dots" /><span>{g.status.toUpperCase()}</span></div>
+                <div className="row"><span>RATING</span><span className="dots" /><span>{g.rating != null ? `${g.rating}/5` : '—/★★★★★'}</span></div>
+                <div className="row"><span>FIRST ADDED</span><span className="dots" /><span>{g.addedAt.slice(0, 10)}</span></div>
 
                 <div className="rule" style={{ margin: '14px 0' }} />
 
-                <div style={{ fontSize: 10, letterSpacing: '0.1em', marginBottom: 6 }}>OWNED ON ────────────────────</div>
-                <pre style={{ fontSize: 11, lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
-                  {platLines}{'\n'}{subtotal}
-                </pre>
+                <div className="section-head">OWNED ON</div>
+                {platforms.map(([code, min]) => (
+                  <div key={code} className="row">
+                    <span>{code}</span>
+                    <span className="dots" />
+                    <span>{minutesToHours(min ?? 0)}</span>
+                  </div>
+                ))}
+                <div style={{ borderTop: '1px solid', opacity: 0.25, margin: '6px 0 4px' }} />
+                <div className="row" style={{ fontWeight: 700 }}>
+                  <span>SUBTOTAL</span>
+                  <span className="dots" />
+                  <span>{minutesToHours(totalMin)}</span>
+                </div>
 
                 <div className="rule" style={{ margin: '14px 0' }} />
 
-                <div style={{ fontSize: 10, letterSpacing: '0.1em', marginBottom: 6 }}>PROGRESS ─────────────────────</div>
-                <pre style={{ fontSize: 11, lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
-{`HLTB main story ...... ${hltbMain ? `${hltbMain} h` : '—'}
-HLTB completionist ... ${hltbComp ? `${hltbComp} h` : '—'}
-% of main ............ ${pctOfMain}
-last played ...... ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
-                </pre>
+                <div className="section-head">PROGRESS</div>
+                <div className="row">
+                  <span>HLTB MAIN STORY</span>
+                  <span className="dots" />
+                  <span>{hltbMain ? `${hltbMain} h` : '—'}</span>
+                </div>
+                <div className="row">
+                  <span>HLTB COMPLETIONIST</span>
+                  <span className="dots" />
+                  <span>{hltbComp ? `${hltbComp} h` : '—'}</span>
+                </div>
+                <div className="row">
+                  <span>% OF MAIN</span>
+                  <span className="dots" />
+                  <span>{pctOfMain}</span>
+                </div>
+                <div className="row">
+                  <span>LAST PLAYED</span>
+                  <span className="dots" />
+                  <span>{g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}</span>
+                </div>
 
                 <div className="rule" style={{ margin: '14px 0' }} />
 
-                <div style={{ fontSize: 10, letterSpacing: '0.1em', marginBottom: 6 }}>NOTES ────────────────────────</div>
-                <div style={{ fontSize: 11, lineHeight: 1.5 }}>
+                <div className="section-head">NOTES</div>
+                <div style={{ fontSize: 11, lineHeight: 1.65 }}>
                   {noteLines.length > 0
-                    ? noteLines.map((n, i) => <div key={i}>&gt; {n}</div>)
-                    : <div>&gt; no notes yet</div>
+                    ? noteLines.map((n, i) => <div key={i} style={{ display: 'flex', gap: 6 }}><span style={{ opacity: 0.5, flexShrink: 0 }}>&gt;</span><span>{n}</span></div>)
+                    : <div style={{ opacity: 0.5 }}>&gt; no notes yet</div>
                   }
                 </div>
 

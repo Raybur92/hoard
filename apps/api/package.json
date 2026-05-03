@@ -19,9 +19,13 @@
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",
     "express": "^4.21.0",
+    "express-rate-limit": "^8.4.1",
     "helmet": "^8.0.0",
     "howlongtobeat": "^1.8.0",
     "jsonwebtoken": "^9.0.2",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "psn-api": "^2.18.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

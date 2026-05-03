@@ -16,5 +16,9 @@ export function useGame(id: string | undefined) {
     return () => { cancelled = true; };
   }, [id]);
 
-  return { data, loading, error };
+  function update(patch: Partial<UserGameDetail>): void {
+    setData(prev => prev ? { ...prev, ...patch } : prev);
+  }
+
+  return { data, loading, error, update };
 }

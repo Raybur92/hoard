@@ -45,6 +45,13 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // preferences
+  hypeThreshold  Int     @default(5)
+  libraryView    String  @default("shelves")
+  showHltb       Boolean @default(true)
+  coverDensity   String  @default("standard")
+  terminalCursor Boolean @default(true)
+
   platforms  Platform[]
   userGames  UserGame[]
   wishlists  WishlistRelease[]
@@ -69,6 +76,7 @@ model Platform {
 model Game {
   id          String   @id @default(cuid())
   igdbId      Int      @unique
+  steamAppId  Int?     @unique
   title       String
   developer   String?
   releaseYear Int?

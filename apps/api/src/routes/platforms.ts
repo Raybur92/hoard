@@ -5,6 +5,7 @@ import type { PlatformCode as PrismaCode, GameStatus as PrismaGameStatus } from 
 import { requireUser } from '../middleware/user';
 import type { PlatformStatusResponse, PlatformDetail, ManualAddBody } from '@hoard/types';
 import { syncSteamLibrary } from '../services/platforms/steam';
+import { syncPsnLibrary } from '../services/platforms/psn';
 import { runSync } from '../services/syncRunner';
 
 const router = Router();
@@ -20,10 +21,23 @@ const PLATFORM_NAMES: Record<string, string> = {
 
 // GET /api/platforms/status
 router.get('/platforms/status', requireUser, async (req: Request, res: Response): Promise<void> => {
-  const platforms = await prisma.platform.findMany({
-    where: { userId: req.userId },
-    orderBy: { createdAt: 'asc' },
-  });
+  const [platforms, rawCounts] = await Promise.all([
+    prisma.platform.findMany({
+      where: { userId: req.userId },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.$queryRaw<Array<{ code: string; count: number }>>`
+      SELECT p.code::text AS code, COUNT(ug.id)::int AS count
+      FROM "Platform" p
+      LEFT JOIN "UserGame" ug
+        ON ug."userId" = p."userId"
+        AND ug."playtimeByPlatform" ? p.code::text
+      WHERE p."userId" = ${req.userId}
+      GROUP BY p.code
+    `,
+  ]);
+
+  const countByCode = Object.fromEntries(rawCounts.map((r) => [r.code, r.count]));
 
   const result: PlatformDetail[] = platforms.map((p) => ({
     id: p.id,
@@ -34,7 +48,7 @@ router.get('/platforms/status', requireUser, async (req: Request, res: Response)
     connected: true,
     syncStatus: p.syncStatus as PlatformDetail['syncStatus'],
     lastSyncAt: p.lastSyncAt?.toISOString() ?? null,
-    gameCount: null,
+    gameCount: countByCode[p.code] ?? null,
     who: (p.credentials as Record<string, string> | null)?.['username'] ?? null,
   }));
 
@@ -78,8 +92,12 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
         const creds = platform.credentials as { steamId?: string } | null;
         if (!creds?.steamId) throw new Error('Steam credentials missing');
         syncedGames = await syncSteamLibrary({ steamId: creds.steamId });
+      } else if (code === 'PS') {
+        const creds = platform.credentials as { npsso?: string } | null;
+        if (!creds?.npsso) throw new Error('PSN credentials missing');
+        syncedGames = await syncPsnLibrary({ npssoToken: creds.npsso });
       }
-      // PSN, XB, GG — stubs return [] until fully implemented
+      // XB, GG — stubs return [] until fully implemented
 
       if (syncedGames.length > 0) {
         await runSync(platform.userId, syncedGames);

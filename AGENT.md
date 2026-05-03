@@ -43,7 +43,7 @@ The visual language is non-negotiable:
 | Auth | Email/password + Google OAuth + Steam OpenID | JWT in HTTP-only cookies — never localStorage |
 | Delivery | PWA | Installable on desktop (Chrome) and mobile (Safari/Chrome) |
 | Game metadata | IGDB via Twitch OAuth | Covers search, upcoming releases, cover art |
-| How Long to Beat | `howlongtobeat` npm package | Unofficial scraper — treat it as fragile |
+| How Long to Beat | `hltbapi.codepotatoes.de` community REST API | `/steam/{appId}` endpoint; requires Game.steamAppId |
 | Steam library | Steam Web API (`IPlayerService/GetOwnedGames`) | Via OpenID OAuth |
 | PSN library | `psn-api` npm + NPSSO token | User pastes token from browser cookies |
 | Xbox library | OpenXBL API | Requires API key from user |
@@ -129,6 +129,11 @@ Design components exist for all screens in `project/Hoard.html`. Settings and pl
 ```
 User
   id, email, name, createdAt
+  hypeThreshold: Int @default(5)       -- IGDB upcoming feed filter
+  libraryView: String @default("shelves")  -- 'shelves' | 'grid' | 'list'
+  showHltb: Boolean @default(true)
+  coverDensity: String @default("standard")  -- 'cozy' | 'standard' | 'dense'
+  terminalCursor: Boolean @default(true)
   (multi-user schema from day one — all records scoped to userId)
 
 Platform
@@ -140,6 +145,7 @@ Platform
 
 Game
   id, igdbId (unique), title, developer
+  steamAppId (unique, nullable) — populated during Steam sync; used for HLTB lookups
   releaseYear, genres: String[]
   coverUrl (from IGDB), metadata: JSON
 
@@ -160,8 +166,10 @@ WishlistRelease
   releaseDate: Date | null
   releaseDateCategory: YYYY | Q1-Q4 | TBA
   platforms: String[], genres: String[]
+  coverUrl: String | null
+  synopsis: String | null
+  hype: Int | null
   userId (tracks whether this user is tracking it)
-  hype: 1–5, synopsis
 ```
 
 ---
@@ -219,7 +227,7 @@ Do not build these in v1, even if they seem small:
 
 **IGDB:** Twitch OAuth client credentials (token cached server-side, refreshed on expiry). Rate limit: 4 req/s on free tier. All IGDB responses must be cached (LRU, 5-minute TTL for search, 24-hour for upcoming). Used for: game search, metadata, cover art, upcoming releases feed.
 
-**HowLongToBeat:** Community-maintained npm package (`howlongtobeat`) — unofficial scraper, not an API. Treat it as fragile. Fetch triggered in the background when a `UserGame` is created or status changes to `Playing`/`Backlog`. Cache result in `HltbData`. If the fetch fails for any reason, store `null` and show "—" in the UI. Never block a user action on HLTB availability.
+**HowLongToBeat:** Uses the community REST API at `hltbapi.codepotatoes.de` — endpoint `/steam/{steamAppId}` returns `mainStory`, `mainStoryWithExtras`, `completionist` in hours. Requires `Game.steamAppId` to be populated. The `howlongtobeat` npm package is dead (HLTB changed their API to require a bot-protected key). Fetch triggered in the background when a `UserGame` is created or status changes to `Playing`/`Backlog`. Result stored in `HltbData`. If the fetch fails for any reason, store `null` and show "—" in the UI. Never block a user action on HLTB availability. Games without a `steamAppId` (non-Steam games) will not have HLTB data.
 
 ---
 
@@ -228,7 +236,7 @@ Do not build these in v1, even if they seem small:
 | Risk | What to watch for |
 |---|---|
 | PSN NPSSO token format changes | Pin `psn-api` version. If sync breaks, users re-enter their token. |
-| HLTB scraper breaks | Silent failure path must be tested. Show "—", never an error. |
+| HLTB API changes | `hltbapi.codepotatoes.de` is community-maintained — it may go down or change. Silent failure path is in place. Show "—", never an error. If it breaks, the fallback is null HltbData. |
 | IGDB rate limit | LRU cache is mandatory, not optional. Batch requests where possible. |
 | GOG API instability | Degrade to manual-add gracefully if OAuth flow fails. |
 | OpenXBL paid tier required | Validate whether free tier returns full library before implementing. |

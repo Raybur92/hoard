@@ -3,13 +3,15 @@ export interface ToggleProps {
   label?: string;
   sub?: string;
   onChange?: (on: boolean) => void;
+  onClick?: () => void;
 }
 
-export function Toggle({ on, label, sub, onChange }: ToggleProps) {
+export function Toggle({ on, label, sub, onChange, onClick }: ToggleProps) {
+  const handler = onClick ?? (() => onChange?.(!on));
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <span
-        onClick={() => onChange?.(!on)}
+        onClick={handler}
         style={{
           position: 'relative',
           width: 36,
@@ -17,7 +19,7 @@ export function Toggle({ on, label, sub, onChange }: ToggleProps) {
           background: on ? 'var(--green)' : 'var(--ink-2)',
           border: `1px solid ${on ? 'var(--green)' : 'var(--rule-bright)'}`,
           display: 'inline-block',
-          cursor: onChange ? 'pointer' : 'default',
+          cursor: (onClick ?? onChange) ? 'pointer' : 'default',
           flexShrink: 0,
         }}
       >

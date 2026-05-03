@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { IgdbUpcomingRelease } from '@hoard/types';
 
-export function useUpcoming() {
+export function useUpcoming(scope: 'my-platforms' | 'all' = 'my-platforms') {
   const [data, setData] = useState<IgdbUpcomingRelease[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -11,15 +11,13 @@ export function useUpcoming() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api.igdbUpcoming()
+    api.igdbUpcoming(scope)
       .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
       .catch(() => {
-        // Fall back to DB wishlist if IGDB is unavailable
         if (!cancelled) {
           api.upcoming()
             .then(d => {
               if (!cancelled) {
-                // Map WishlistRelease to IgdbUpcomingRelease shape
                 const mapped: IgdbUpcomingRelease[] = d.map((w) => ({
                   igdbId: w.igdbId,
                   title: w.title,
@@ -28,9 +26,11 @@ export function useUpcoming() {
                   releaseDateCategory: w.releaseDateCategory,
                   platforms: w.platforms,
                   genres: w.genres,
-                  coverUrl: null,
+                  coverUrl: w.coverUrl,
                   synopsis: w.synopsis,
                   wishlisted: true,
+                  category: 0,
+                  hype: w.hype,
                 }));
                 setData(mapped);
                 setLoading(false);
@@ -40,7 +40,7 @@ export function useUpcoming() {
         }
       });
     return () => { cancelled = true; };
-  }, [rev]);
+  }, [rev, scope]);
 
   const refetch = useCallback(() => setRev((r) => r + 1), []);
 

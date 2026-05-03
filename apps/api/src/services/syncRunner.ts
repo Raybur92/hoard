@@ -14,9 +14,9 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function triggerHltbBackground(gameId: string, title: string): Promise<void> {
+async function triggerHltbBackground(gameId: string, title: string, steamAppId?: number | null): Promise<void> {
   void (async () => {
-    const result = await fetchHltb(title);
+    const result = await fetchHltb(title, steamAppId);
     if (!result) return;
     await prisma.hltbData.upsert({
       where: { gameId },
@@ -59,6 +59,7 @@ export async function runSync(
       }
 
       // Upsert the Game record (deduplication by igdbId)
+      const steamAppId = sg.steamAppId ?? null;
       const game = await prisma.game.upsert({
         where: { igdbId: igdbGame.igdbId },
         update: {
@@ -67,6 +68,7 @@ export async function runSync(
           releaseYear: igdbGame.releaseYear,
           genres: igdbGame.genres,
           coverUrl: igdbGame.coverUrl,
+          ...(steamAppId ? { steamAppId } : {}),
         },
         create: {
           igdbId: igdbGame.igdbId,
@@ -75,6 +77,7 @@ export async function runSync(
           releaseYear: igdbGame.releaseYear,
           genres: igdbGame.genres,
           coverUrl: igdbGame.coverUrl,
+          steamAppId,
         },
       });
 
@@ -114,7 +117,7 @@ export async function runSync(
       if (isNew) {
         const hasHltb = await prisma.hltbData.findUnique({ where: { gameId: game.id } });
         if (!hasHltb) {
-          triggerHltbBackground(game.id, game.title);
+          triggerHltbBackground(game.id, game.title, steamAppId);
         }
       }
 

@@ -9,8 +9,17 @@ import { Btn } from '../primitives/Btn';
 import { Heatmap } from '../primitives/Heatmap';
 import { Gauge } from '../primitives/Gauge';
 import { useDashboard } from '../../hooks/useDashboard';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { minutesToHours, formatRelative, daysUntil, formatReleaseDate, shortYear, buildAsciiBar } from '../../lib/utils';
 import type { UserGameDetail, PlatformStat, WishlistRelease } from '@hoard/types';
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5)  return 'good night';
+  if (h < 12) return 'good morning';
+  if (h < 17) return 'good afternoon';
+  return 'good evening';
+}
 
 const PLATFORM_NAMES: Record<string, string> = {
   ST: 'STEAM', PS: 'PSN', XB: 'XBOX', GG: 'GOG', NT: 'NINTENDO', EP: 'EPIC',
@@ -50,16 +59,35 @@ function nowPlayingTitle(title: string) {
 
 export function DashboardDesktop() {
   const { data, loading, error } = useDashboard();
+  const user = useCurrentUser();
   const [pickIdx, setPickIdx] = useState(0);
 
   if (loading || error || !data) {
     return (
       <div className="app-shell hoard-noise">
         <Sidebar />
-        <div className="app-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="t-mono t-faint" style={{ fontSize: 12 }}>
-            {error ? `// error: ${error}` : '// loading...'}
-          </span>
+        <div className="app-main">
+          <TopBar crumbs={['hoard', 'dashboard']} />
+          {error
+            ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+              </div>
+            : <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div className="skel" style={{ width: 160, height: 12 }} />
+                    <div className="skel" style={{ width: 80, height: 48 }} />
+                    <div className="skel" style={{ width: 220, height: 12 }} />
+                  </div>
+                  <div className="skel" style={{ height: 96 }} />
+                </div>
+                <div className="skel" style={{ height: 140 }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  <div className="skel" style={{ height: 220 }} />
+                  <div className="skel" style={{ height: 220 }} />
+                </div>
+              </div>
+          }
         </div>
       </div>
     );
@@ -114,7 +142,7 @@ export function DashboardDesktop() {
           {/* hero row */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28, alignItems: 'end' }}>
             <div>
-              <Marker>// good evening, andrea · {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' }).toLowerCase()}</Marker>
+              <Marker>// {greeting()}, {(user?.name ?? user?.email?.split('@')[0] ?? 'hoard').toLowerCase()} · {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' }).toLowerCase()}</Marker>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginTop: 16 }}>
                 <span className="bignum">{stats.totalGames}</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -271,15 +299,18 @@ export function DashboardDesktop() {
               {stats.genres.length > 0 && (
                 <div style={{ marginTop: 18 }}>
                   <div className="t-up t-faint" style={{ fontSize: 10, marginBottom: 8 }}>top genres</div>
-                  {stats.genres.map(({ name, count }, i) => (
-                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 12 }}>
-                      <span style={{ width: 130, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)' }}>{name}</span>
-                      <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
-                        <div style={{ height: '100%', width: `${Math.min(100, count * 5)}%`, background: 'var(--paper-dim)' }} />
+                  {(() => {
+                    const maxCount = stats.genres[0]?.count ?? 1;
+                    return stats.genres.map(({ name, count }, i) => (
+                      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 12 }}>
+                        <span style={{ width: 130, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)' }}>{name}</span>
+                        <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
+                          <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
+                        </div>
+                        <span className="t-tnum t-faint" style={{ fontSize: 11, width: 28, textAlign: 'right' }}>{count}</span>
                       </div>
-                      <span className="t-tnum t-faint" style={{ fontSize: 11, width: 28, textAlign: 'right' }}>{count}</span>
-                    </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
               )}
 

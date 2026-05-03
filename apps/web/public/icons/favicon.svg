@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" fill="#07090a"/>
+  <!-- Left bar -->
+  <rect x="38" y="38" width="24" height="116" fill="#ece8de"/>
+  <!-- Right bar -->
+  <rect x="130" y="38" width="24" height="116" fill="#ece8de"/>
+  <!-- Crossbar -->
+  <rect x="38" y="87" width="116" height="18" fill="#ece8de"/>
+</svg>

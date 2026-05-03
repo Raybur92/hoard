@@ -4,7 +4,32 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
-import type { AuthResponse } from '@hoard/types';
+import type { AuthResponse, AuthUser } from '@hoard/types';
+
+type DbUser = {
+  id: string; email: string; name: string | null; createdAt: Date;
+  hypeThreshold: number; libraryView: string; showHltb: boolean;
+  coverDensity: string; terminalCursor: boolean;
+};
+
+function toAuthUser(u: DbUser): AuthUser {
+  return {
+    id: u.id, email: u.email, name: u.name, createdAt: u.createdAt.toISOString(),
+    preferences: {
+      hypeThreshold: u.hypeThreshold,
+      libraryView: u.libraryView as AuthUser['preferences']['libraryView'],
+      showHltb: u.showHltb,
+      coverDensity: u.coverDensity as AuthUser['preferences']['coverDensity'],
+      terminalCursor: u.terminalCursor,
+    },
+  };
+}
+
+const USER_SELECT = {
+  id: true, email: true, name: true, createdAt: true,
+  hypeThreshold: true, libraryView: true, showHltb: true,
+  coverDensity: true, terminalCursor: true,
+} as const;
 
 const router = Router();
 
@@ -65,10 +90,11 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
   const hashed = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
     data: { email, password: hashed, ...(name ? { name } : {}) },
+    select: { ...USER_SELECT, password: false },
   });
 
   setAuthCookie(res, user.id);
-  const body: AuthResponse = { user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt.toISOString() } };
+  const body: AuthResponse = { user: toAuthUser(user) };
   res.status(201).json(body);
 });
 
@@ -94,7 +120,7 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
   }
 
   setAuthCookie(res, user.id);
-  const body: AuthResponse = { user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt.toISOString() } };
+  const body: AuthResponse = { user: toAuthUser(user) };
   res.json(body);
 });
 
@@ -108,30 +134,54 @@ router.post('/auth/logout', (_req: Request, res: Response): void => {
 router.get('/auth/me', requireUser, async (req: Request, res: Response): Promise<void> => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
-    select: { id: true, email: true, name: true, createdAt: true },
+    select: USER_SELECT,
   });
   if (!user) {
     res.status(404).json({ error: 'User not found' });
     return;
   }
-  const body: AuthResponse = { user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt.toISOString() } };
+  const body: AuthResponse = { user: toAuthUser(user) };
   res.json(body);
 });
 
-// PATCH /api/auth/me — update display name
+// PATCH /api/auth/me — update profile and/or preferences
 router.patch('/auth/me', requireUser, async (req: Request, res: Response): Promise<void> => {
-  const schema = z.object({ name: z.string().min(1).max(80).optional() });
+  const schema = z.object({
+    name: z.string().min(1).max(80).optional(),
+    email: z.string().email().optional(),
+    hypeThreshold: z.coerce.number().int().min(0).max(100).optional(),
+    libraryView: z.enum(['shelves', 'grid', 'list']).optional(),
+    showHltb: z.boolean().optional(),
+    coverDensity: z.enum(['cozy', 'standard', 'dense']).optional(),
+    terminalCursor: z.boolean().optional(),
+  });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid input' });
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
     return;
   }
-  const user = await prisma.user.update({
-    where: { id: req.userId },
-    data: { ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}) },
-  });
-  const body: AuthResponse = { user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt.toISOString() } };
+  const { name, email, ...prefs } = parsed.data;
+  if (email) {
+    const conflict = await prisma.user.findUnique({ where: { email } });
+    if (conflict && conflict.id !== req.userId) {
+      res.status(409).json({ error: 'Email already in use' });
+      return;
+    }
+  }
+  const data: Record<string, unknown> = {};
+  if (name !== undefined) data['name'] = name;
+  if (email !== undefined) data['email'] = email;
+  Object.assign(data, prefs);
+  const user = await prisma.user.update({ where: { id: req.userId }, data, select: USER_SELECT });
+  const body: AuthResponse = { user: toAuthUser(user) };
   res.json(body);
+});
+
+// DELETE /api/auth/me — permanently delete account and all data
+router.delete('/auth/me', requireUser, async (req: Request, res: Response): Promise<void> => {
+  await prisma.user.delete({ where: { id: req.userId } });
+  res.clearCookie('session', { httpOnly: true, sameSite: 'lax' });
+  res.json({ ok: true });
 });
 
 /* ── Google OAuth ── */
@@ -284,6 +334,12 @@ router.get('/auth/steam/callback', async (req: Request, res: Response): Promise<
     // Connect mode: associate Steam account with the currently logged-in user
     const currentUserId = getSessionUserId(req);
     if (currentUserId) {
+      // Remove any orphan Steam-login account that was auto-created for this
+      // steamId (email pattern steam:*@hoard.internal) so the unique constraint
+      // doesn't block associating the same steamId with the real user.
+      await prisma.user.deleteMany({
+        where: { steamId, email: `steam:${steamId}@hoard.internal`, NOT: { id: currentUserId } },
+      });
       await prisma.user.update({
         where: { id: currentUserId },
         data: { steamId },

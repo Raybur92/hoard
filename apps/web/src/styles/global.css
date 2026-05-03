@@ -342,12 +342,31 @@ body {
   font-size: 12px;
   line-height: 1.6;
 }
+.receipt .section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+.receipt .section-head::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-image: linear-gradient(90deg, var(--receipt-ink) 50%, transparent 50%);
+  background-size: 4px 1px;
+  opacity: 0.35;
+}
 .receipt .row .dots {
   flex: 1;
-  border-bottom: 1px dotted var(--receipt-ink);
   align-self: end;
-  margin: 0 6px 6px;
-  height: 0;
+  margin: 0 6px 7px;
+  height: 4px;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--receipt-ink) 30%, transparent) 1.5px, transparent 1.5px);
+  background-size: 7px 4px;
+  background-repeat: repeat-x;
+  background-position: left center;
 }
 
 /* ---------- barcode ---------- */
@@ -547,4 +566,16 @@ body {
 .app-mobile-content {
   flex: 1;
   overflow-y: auto;
+}
+
+/* ---------- skeleton loading ---------- */
+
+@keyframes skel-pulse {
+  from { opacity: 0.3; }
+  to   { opacity: 0.55; }
+}
+.skel {
+  background: var(--rule);
+  border-radius: 2px;
+  animation: skel-pulse 1.4s ease-in-out infinite alternate;
 }

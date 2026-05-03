@@ -48,8 +48,14 @@ export function UpcomingMobile() {
   if (loading || !data) {
     return (
       <MobileFrame>
-        <MobileHeader title="upcoming" sub="// loading..." />
-        <div style={{ flex: 1 }} />
+        <MobileHeader title="upcoming" />
+        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+          <div className="skel" style={{ height: 140 }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[0, 1, 2].map(i => <div key={i} className="skel" style={{ width: 60, height: 24 }} />)}
+          </div>
+          {[0, 1, 2, 3].map(i => <div key={i} className="skel" style={{ height: 48 }} />)}
+        </div>
         <MobileTabBar />
       </MobileFrame>
     );

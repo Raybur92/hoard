@@ -143,8 +143,19 @@ export function LibraryMobile() {
   if (loading || !data) {
     return (
       <MobileFrame>
-        <MobileHeader title="shelves" sub="// loading..." />
-        <div style={{ flex: 1 }} />
+        <MobileHeader title="shelves" />
+        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 24, overflow: 'hidden' }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="skel" style={{ width: 100, height: 10 }} />
+              <div style={{ display: 'flex', gap: 12 }}>
+                {[0, 1, 2].map(j => (
+                  <div key={j} className="skel" style={{ width: 84, height: 112, flex: '0 0 auto' }} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
         <MobileTabBar />
       </MobileFrame>
     );

@@ -18,9 +18,9 @@ const NAV_ITEMS = [
 
 const DEFAULT_SHELVES = [
   { label: 'Playing',   color: 'var(--green)' },
-  { label: 'Backlog',   color: null },
-  { label: 'Completed', color: null },
   { label: 'On Hold',   color: null },
+  { label: 'Completed', color: null },
+  { label: 'Backlog',   color: null },
   { label: 'Dropped',   color: null },
   { label: 'Wishlist',  color: 'var(--amber)' },
 ] as const;
@@ -32,16 +32,20 @@ const PLATFORMS = [
   { label: 'GOG',   code: 'GG' },
 ] as const;
 
-export function Sidebar({ shelfCounts }: SidebarProps) {
+export function Sidebar({ shelfCounts: shelfCountsProp }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [platforms, setPlatforms] = useState<PlatformDetail[]>([]);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [fetchedCounts, setFetchedCounts] = useState<Partial<Record<string, number>>>({});
 
   useEffect(() => {
     void api.platformStatus().then((r) => setPlatforms(r.platforms)).catch(() => null);
     void api.me().then((r) => setUser(r)).catch(() => null);
+    void api.gameCounts().then((r) => setFetchedCounts(r.counts)).catch(() => null);
   }, []);
+
+  const shelfCounts = shelfCountsProp ?? fetchedCounts;
 
   const isActive = (path: string) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
@@ -70,7 +74,7 @@ export function Sidebar({ shelfCounts }: SidebarProps) {
         <div
           key={label}
           className="item"
-          onClick={() => navigate(`/library/${label.toLowerCase().replace(' ', '-')}`)}
+          onClick={() => navigate(`/library/${encodeURIComponent(label)}`)}
         >
           <span className="glyph" style={{ color: color ?? undefined }}>
             <Icon name="dotO" size={8} fill={true} />
@@ -104,11 +108,18 @@ export function Sidebar({ shelfCounts }: SidebarProps) {
 
       <div style={{ flex: 1 }} />
       <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', fontSize: 10, color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ width: 22, height: 22, background: 'var(--ink-3)', border: '1px solid var(--rule-bright)' }} />
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: 22, height: 22, background: 'var(--ink-3)', border: '1px solid var(--rule-bright)', flexShrink: 0 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
           <span style={{ color: 'var(--paper)', fontSize: 11 }}>{user?.name ?? '…'}</span>
           <span style={{ fontSize: 9 }}>since {user ? new Date(user.createdAt).getFullYear() : '…'}</span>
         </div>
+        <span
+          title="sign out"
+          style={{ cursor: 'pointer', color: 'var(--paper-faint)', flexShrink: 0, lineHeight: 1 }}
+          onClick={() => { void api.logout().then(() => navigate('/login')); }}
+        >
+          <Icon name="x" size={11} />
+        </span>
       </div>
     </aside>
   );

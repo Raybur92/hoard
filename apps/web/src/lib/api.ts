@@ -10,14 +10,23 @@ import type {
   AuthResponse,
   LoginBody,
   RegisterBody,
+  PatchMeBody,
   PlatformStatusResponse,
   ManualAddBody,
   IgdbSearchResult,
   IgdbUpcomingRelease,
 } from '@hoard/types';
 
+async function fetchWithRetry(input: string, init: RequestInit, retries = 1): Promise<Response> {
+  const res = await fetch(input, init);
+  if (!res.ok && res.status >= 500 && retries > 0) {
+    return fetchWithRetry(input, init, retries - 1);
+  }
+  return res;
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path, { credentials: 'include' });
+  const res = await fetchWithRetry(path, { credentials: 'include' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
@@ -53,6 +62,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 export interface GamesParams {
   status?: GameStatus;
   platform?: string;
+  q?: string;
   sort?: 'lastPlayed' | 'title' | 'playtime';
   page?: number;
   limit?: number;
@@ -73,6 +83,9 @@ export const api = {
 
   games: (params?: GamesParams) =>
     get<GameListResponse>(`/api/games${buildQuery({ ...params })}`),
+
+  gameCounts: () =>
+    get<{ counts: Partial<Record<GameStatus, number>> }>('/api/games/counts'),
 
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),
@@ -100,10 +113,13 @@ export const api = {
     post<void>('/api/auth/logout'),
 
   me: () =>
-    get<AuthUser>('/api/auth/me'),
+    get<AuthResponse>('/api/auth/me').then((r) => r.user),
 
-  updateMe: (body: Partial<Pick<AuthUser, 'name'>>) =>
-    patch<AuthUser>('/api/auth/me', body),
+  updateMe: (body: PatchMeBody) =>
+    patch<AuthResponse>('/api/auth/me', body).then((r) => r.user),
+
+  deleteAccount: () =>
+    del<{ ok: boolean }>('/api/auth/me'),
 
   // platforms
   platformStatus: () =>
@@ -129,6 +145,6 @@ export const api = {
   igdbSearch: (q: string) =>
     get<IgdbSearchResult[]>(`/api/igdb/search?q=${encodeURIComponent(q)}`),
 
-  igdbUpcoming: () =>
-    get<IgdbUpcomingRelease[]>('/api/igdb/upcoming'),
+  igdbUpcoming: (scope: 'my-platforms' | 'all' = 'my-platforms') =>
+    get<IgdbUpcomingRelease[]>(`/api/igdb/upcoming${scope === 'all' ? '?scope=all' : ''}`),
 };
