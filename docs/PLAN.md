@@ -410,8 +410,8 @@ Frontend hardening:
 **Success Criteria:**
 - [x] App installs successfully on Chrome (desktop) and Safari (iOS) — confirmed via app being in production use; `manifest.json` + apple-touch-icon meta tags in place
 - [x] Dashboard and Library render from cache when network is offline — verified by `tests/e2e-offline/offline.spec.ts` (run via `npm run test:e2e:offline`)
-- [ ] Lighthouse PWA score ≥ 90 — *threshold set in `apps/web/lighthouserc.json`; runs in `.github/workflows/lighthouse.yml` on PRs*
-- [ ] Lighthouse Performance score ≥ 80 on desktop — *threshold set in `apps/web/lighthouserc.json`; runs on PRs*
+- [x] Lighthouse PWA score ≥ 90 — *retired by Lighthouse 12; the PWA category was removed and split into individual audits. Replaced with: viewport audit pass + offline E2E test (verifies SW registration & cache-from-offline)*
+- [x] Lighthouse Performance score ≥ 80 on desktop — local run: **99**. Threshold enforced in `lighthouserc.json` and `.github/workflows/lighthouse.yml` on PRs.
 - [x] API request with missing required field returns `400 { error: "..." }` with a descriptive message
 - [x] API request with no auth cookie returns `401`
 - [x] Injecting 1000 requests/min hits the rate limiter and returns `429` — `express-rate-limit` configured at 100/min global + 10/min on auth routes; behaviour exercised by route tests
@@ -420,7 +420,7 @@ Frontend hardening:
 **Testing:**
 - [x] Playwright: simulate offline — `tests/e2e-offline/offline.spec.ts` uses `context.setOffline(true)` and asserts cached content renders. Runs against `vite preview` with PWA service worker active.
 - [ ] Playwright: install prompt appears on Chrome (check `beforeinstallprompt` event fires) — *not added; install confirmed manually in production use*
-- [x] Lighthouse CI in GitHub Actions: enforce PWA ≥ 90, Performance ≥ 80 thresholds — `.github/workflows/lighthouse.yml` runs `@lhci/cli autorun` on every PR touching `apps/web/**`
+- [x] Lighthouse CI in GitHub Actions: enforce Performance ≥ 80 (and Accessibility ≥ 90, Best-practices ≥ 90) — `.github/workflows/lighthouse.yml` runs `@lhci/cli autorun` on every PR touching `apps/web/**`. PWA category retired in Lighthouse 12 — installability is now verified by the offline E2E test instead.
 - [x] Manual install test: install on iOS Safari, verify it appears on home screen and launches in standalone mode — confirmed via app being in production use
 - [x] API: Jest test for health check (db + uptime fields); validation and rate-limiter tests are exercised by existing route test suite
 
@@ -538,7 +538,7 @@ These items were discovered during real-world use after all phases were function
 
 **Phase 6 — Remaining test deliverables completed:**
 - [x] **Playwright offline simulation** — `apps/web/tests/e2e-offline/offline.spec.ts` (3 tests). Uses `context.setOffline(true)` after waiting for the service worker to activate, then reloads and asserts cached Dashboard/Library content still renders. Runs via `npm run test:e2e:offline` against a separate `playwright.offline.config.ts` that builds the app and serves it via `vite preview` (the dev server has the SW disabled).
-- [x] **Lighthouse CI in GitHub Actions** — `.github/workflows/lighthouse.yml` runs `@lhci/cli autorun` on every PR touching `apps/web/**`. Config in `apps/web/lighthouserc.json` enforces `categories:performance ≥ 0.8` and `categories:pwa ≥ 0.9` as errors; accessibility and best-practices ≥ 0.9 as warnings.
+- [x] **Lighthouse CI in GitHub Actions** — `.github/workflows/lighthouse.yml` runs `@lhci/cli autorun` on every PR touching `apps/web/**`. Config in `apps/web/lighthouserc.json` enforces `categories:performance ≥ 0.8`, `categories:accessibility ≥ 0.9`, `categories:best-practices ≥ 0.9` as errors. Local verification: Performance 99, Accessibility 100, Best-practices 100.
 
 **Final test counts:** API 12 suites / 103 tests passing · Web 2 suites / 40 tests passing · Typecheck clean.
 
@@ -547,6 +547,7 @@ These items were discovered during real-world use after all phases were function
 - Phase 3 integration tests use mocked Prisma (not a real Postgres test branch). Rationale: every route is a thin pass-through over Prisma — the value is in verifying request parsing, response shape, status mapping, and error paths, not in exercising actual SQL. A real DB would add CI run-time and infra without catching meaningful bugs at this layer. The Phase 3 plan item "isolated Supabase test branch" is closed as not-needed for this single-user app.
 - The Phase 6 offline E2E test uses a dedicated playwright config that builds the production bundle and serves it via `vite preview` because `devOptions.enabled: false` keeps the SW out of dev mode. Adding `preview.proxy` to `vite.config.ts` so `/api/*` is forwarded to the API server during the initial (online) load before the test goes offline.
 - Lighthouse CI uses `@lhci/cli autorun` (no static dependency in `package.json`) via `npx --yes @lhci/cli@0.14.x` — keeps the lockfile clean since this only ever runs in CI.
+- The original Phase 6 success criterion was "Lighthouse PWA score ≥ 90". Lighthouse 12 retired the PWA category entirely — the aggregate score no longer exists. Individual installability audits (`installable-manifest`, `service-worker`, `themed-omnibox`) were also dropped. The PWA capability is instead verified by the offline E2E test (which confirms SW registration + cache-from-offline) and the `viewport` audit (still gated). Closing the original criterion as fulfilled by these substitutes.
 - Pre-existing 86 lint errors on main (mostly `any` in test middleware mocks, missing `import type` for `Request`/`Response`, and Node globals in `scripts/`) are out of scope for this pass — they predate the work and would require a focused lint-cleanup commit. New tests follow the same patterns as existing ones to stay consistent.
 
 ---

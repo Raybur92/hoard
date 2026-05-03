@@ -46,3 +46,4 @@ packages/db/prisma/migrations/*.sql.bak
 
 # Railway
 .railway
+.lighthouseci/
