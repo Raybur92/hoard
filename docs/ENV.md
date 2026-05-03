@@ -24,6 +24,7 @@ Copy the respective `.env.example` files to `.env` and fill in the values.
 | `OPENXBL_API_KEY` | Phase 4 | — | From xbl.io — validate free tier covers full library |
 | `GOG_CLIENT_ID` | Phase 4 | — | GOG community OAuth |
 | `GOG_CLIENT_SECRET` | Phase 4 | — | GOG community OAuth |
+| `NPM_CONFIG_PRODUCTION` | Railway only | `false` | **Required on Railway.** Forces `npm ci` to install `devDependencies` so the build finds `typescript` and `@types/*`. Without it, `tsc -b` fails with `Cannot find name 'process'`. |
 
 ---
 

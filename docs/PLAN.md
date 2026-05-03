@@ -566,19 +566,20 @@ Database (already in place — verify only):
 - [ ] `prisma migrate deploy` runs cleanly against the production DB
 
 Railway (API):
-- [ ] Create Railway project, link this repo via the dashboard or CLI
-- [ ] Service points at `apps/api/` build and start commands (already configured in `apps/api/railway.toml`)
-- [ ] Environment variables set in Railway dashboard:
-  - `DATABASE_URL` (from Supabase production connection pooler — IPv6 transaction-mode URL, port 6543)
+- [x] Create Railway project, link this repo via the dashboard or CLI
+- [x] Service points at `apps/api/` build and start commands (configured in root `railway.toml`)
+- [x] Environment variables set in Railway dashboard:
+  - `DATABASE_URL` (from Supabase production connection pooler — transaction-mode URL, port 6543)
   - `JWT_SECRET` (newly generated 32+ character random string — do NOT reuse the dev secret)
   - `WEB_URL` (the Vercel production URL — placeholder until Vercel is set up, then update)
   - `STEAM_API_KEY` (copy from local `.env`)
   - `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` (copy from local `.env`)
   - `NODE_ENV=production`
   - `JWT_EXPIRES_IN=7d`
+  - **`NPM_CONFIG_PRODUCTION=false`** — required so `npm ci` still installs `devDependencies` during the build (TypeScript + `@types/*` packages live there). Without this, the `tsc -b` build step fails with `Cannot find name 'process'` and similar.
   - (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` added in the OAuth step)
-- [ ] First deploy succeeds; `GET https://<railway-domain>/health` returns 200
-- [ ] Custom domain configured (optional — Railway gives a free `*.up.railway.app` subdomain that's usable as-is)
+- [x] First deploy succeeds; `GET https://hoardapi-production.up.railway.app/health` returns `{"status":"ok","db":"ok","uptime":...}`
+- [ ] Custom domain configured (optional — `hoardapi-production.up.railway.app` works fine for now)
 
 Vercel (web):
 - [ ] Create Vercel project, link this repo (Vercel auto-detects Vite)
@@ -612,7 +613,12 @@ Google OAuth:
 - [ ] PWA install on iOS Safari succeeds (HTTPS available via Vercel)
 - [ ] No CORS errors in browser console when web → api requests fire
 
-**Decisions:** *(filled in as the deploy progresses)*
+**Decisions:**
+- Railway auto-created two services on first link (`hoard/api` and `hoard/web`) because the repo has two apps. Deleted `hoard/web` since Vercel hosts the frontend — Railway is API-only.
+- `railway.toml` moved from `apps/api/` to repo root. Railway auto-detects it at root and the `buildCommand` (`npm run build --workspace=apps/api`) needs the monorepo `package-lock.json` resolved, which only works when Root Directory = `/`.
+- `NPM_CONFIG_PRODUCTION=false` is mandatory on Railway. When `NODE_ENV=production` is set (which we want for runtime), `npm ci` defaults to skipping devDependencies — but `typescript`, `@types/node`, `@types/express`, etc. are devDeps and are needed at build time. Setting `NPM_CONFIG_PRODUCTION=false` explicitly tells npm to install everything regardless of NODE_ENV. Container is ~30-50 MB larger than strictly necessary; trivial for a personal tool.
+- `apps/api/package.json` build script switched from `tsc -p` to `tsc -b` — `-p` doesn't follow project references, so `packages/types` and `packages/db` weren't built when only the api workspace was built from clean. `-b` builds project references in dependency order.
+- `packages/db/package.json` gained a `postinstall` hook that runs `prisma generate`. Without it, `@prisma/client` has no generated client and any import fails at build/runtime. Running it during postinstall means `npm ci` always produces a usable client.
 
 ---
 
