@@ -144,7 +144,20 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
-All phases complete through Post-Phase 6. The app is in real use. Recent fixes landed:
+All phases complete through Post-Phase 6. The app is in real use.
+
+**Test commands:**
+- `npm run test` — 103 API tests + 40 web tests, all passing
+- `npm run test:e2e` — Playwright E2E (28 tests) against dev server
+- `npm run test:e2e:offline --workspace=apps/web` — Playwright offline E2E (3 tests) against production preview build with active service worker
+
+**CI workflows:**
+- `.github/workflows/ci.yml` — lint + format + typecheck + tests + builds on every PR
+- `.github/workflows/lighthouse.yml` — Lighthouse CI on PRs touching `apps/web/**`; thresholds: PWA ≥ 90, Performance ≥ 80 (errors); accessibility/best-practices ≥ 90 (warnings)
+
+**Recent fixes landed (most recent first):**
+- Test suite restored to green: 4 stale mocks fixed (hltb fetch mock, platforms `$queryRaw`, auth `deleteMany`, TopBar Router wrapper); added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb routes (38 new tests)
+- Phase 6 testing deliverables completed: Playwright offline simulation (`apps/web/tests/e2e-offline/offline.spec.ts`) + Lighthouse CI workflow + thresholds config (`apps/web/lighthouserc.json`)
 - `GET /api/games/counts` endpoint — sidebar shelf counts always accurate on every route
 - Shelf order: Playing → On Hold → Completed → Backlog → Dropped → Wishlist
 - Library shelf cards fill viewport width exactly via `ResizeObserver`; "view all" always occupies last slot
@@ -158,4 +171,7 @@ All phases complete through Post-Phase 6. The app is in real use. Recent fixes l
 - Dashboard genres chart: bars now proportional to max count (`count / maxCount * 100%`) instead of hardcoded multiplier
 - Shareable receipt: OWNED ON + PROGRESS sections converted from `<pre>` to flexbox `.row` divs with CSS dotted spacers and self-sizing section header lines
 
-Remaining Phase 6 items (not blocking): Playwright offline simulation test, Lighthouse CI GitHub Actions integration, manual iOS Safari install verification.
+**Known gaps (low priority):**
+- Google OAuth login: route implemented + tested, but blocked by missing `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env`. Steam OpenID covers the OAuth need in production.
+- Xbox / GOG library sync: stubs returning `[]`. Manual add covers the gap for now (same approach as Nintendo / Epic).
+- 86 pre-existing lint errors (mostly `any` in test middleware mocks, missing `import type` for `Request`/`Response`, and Node globals in `scripts/`) — predate this work; would benefit from a focused lint-cleanup commit.

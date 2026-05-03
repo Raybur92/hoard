@@ -26,12 +26,16 @@ describe('Sidebar', () => {
 
 describe('TopBar', () => {
   it('renders without throwing', () => {
-    const { container } = render(<TopBar crumbs={['hoard', 'Library']} />);
+    const { container } = render(
+      <MemoryRouter><TopBar crumbs={['hoard', 'Library']} /></MemoryRouter>,
+    );
     expect(container.querySelector('.topbar')).toBeTruthy();
   });
 
   it('renders crumbs', () => {
-    const { getByText } = render(<TopBar crumbs={['hoard', 'Library']} />);
+    const { getByText } = render(
+      <MemoryRouter><TopBar crumbs={['hoard', 'Library']} /></MemoryRouter>,
+    );
     expect(getByText('hoard')).toBeTruthy();
     expect(getByText('Library')).toBeTruthy();
   });

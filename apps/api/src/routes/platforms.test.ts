@@ -15,6 +15,7 @@ jest.mock('@hoard/db', () => ({
     userGame: {
       upsert: jest.fn(),
     },
+    $queryRaw: jest.fn(),
   },
 }));
 
@@ -38,6 +39,7 @@ beforeEach(() => {
 describe('GET /api/platforms/status', () => {
   it('returns an empty platforms array when the user has no connected platforms', async () => {
     (prisma.platform.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([]);
 
     const res = await request(app).get('/api/platforms/status');
 
@@ -58,6 +60,7 @@ describe('GET /api/platforms/status', () => {
         createdAt: new Date(),
       },
     ]);
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ code: 'ST', count: 42 }]);
 
     const res = await request(app).get('/api/platforms/status');
 

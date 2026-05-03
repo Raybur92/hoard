@@ -15,6 +15,7 @@ jest.mock('@hoard/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      deleteMany: jest.fn(),
     },
     platform: {
       upsert: jest.fn(),
