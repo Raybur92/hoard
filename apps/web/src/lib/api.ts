@@ -17,6 +17,16 @@ import type {
   IgdbUpcomingRelease,
 } from '@hoard/types';
 
+// In dev: leave VITE_API_URL unset and let Vite's proxy forward /api/* to the
+// API server (keeps requests same-origin so cookies don't need SameSite=None).
+// In prod: set VITE_API_URL to the Railway domain so requests go directly to
+// the API.
+const API_BASE = import.meta.env['VITE_API_URL'] ?? '';
+
+function url(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
 async function fetchWithRetry(input: string, init: RequestInit, retries = 1): Promise<Response> {
   const res = await fetch(input, init);
   if (!res.ok && res.status >= 500 && retries > 0) {
@@ -26,19 +36,19 @@ async function fetchWithRetry(input: string, init: RequestInit, retries = 1): Pr
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetchWithRetry(path, { credentials: 'include' });
+  const res = await fetchWithRetry(url(path), { credentials: 'include' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
 
 async function del<T>(path: string): Promise<T> {
-  const res = await fetch(path, { method: 'DELETE', credentials: 'include' });
+  const res = await fetch(url(path), { method: 'DELETE', credentials: 'include' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
 
 async function patch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(url(path), {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -49,7 +59,7 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(url(path), {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
