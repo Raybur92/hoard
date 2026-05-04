@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
-import { MobileTabBar } from '../layout/MobileTabBar';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';

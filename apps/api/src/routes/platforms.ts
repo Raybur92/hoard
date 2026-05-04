@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import type { PlatformCode as PrismaCode, GameStatus as PrismaGameStatus } from '@hoard/db';

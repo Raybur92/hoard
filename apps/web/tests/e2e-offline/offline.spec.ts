@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 // These tests run against a production build served by `vite preview` so the
 // service worker registered by vite-plugin-pwa is active. The Phase 6
 // success criterion is: "Dashboard and Library render from cache when
 // network is offline."
 
-async function waitForServiceWorker(page: import('@playwright/test').Page) {
+async function waitForServiceWorker(page: Page) {
   await page.waitForFunction(
     async () => {
       if (!('serviceWorker' in navigator)) return false;

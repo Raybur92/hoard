@@ -15,7 +15,7 @@ function cleanPsnTitle(raw: string): string {
   return raw
     .replace(/([A-Za-z0-9])[®™]([A-Za-z0-9])/g, '$1 $2') // ® between words → space (e.g. FAR CRY®6)
     .replace(/[®™]/g, '')                                   // strip remaining ® ™
-    .replace(/\s+[\[(（]?PS[45][^\]）)]*[\]）)]*\s*$/i, '') // strip trailing PS4/PS5 annotations
+    .replace(/\s+[[(（]?PS[45][^\]）)]*[\]）)]*\s*$/i, '') // strip trailing PS4/PS5 annotations
     .replace(/\s+/g, ' ')
     .trim();
 }

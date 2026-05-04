@@ -9,7 +9,7 @@ import { Chip } from '../primitives/Chip';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { useGames } from '../../hooks/useGames';
-import { minutesToHours, formatRelative } from '../../lib/utils';
+import { minutesToHours } from '../../lib/utils';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
 
@@ -126,7 +126,7 @@ export function LibraryMobile() {
   }
 
   function applyFilters(games: UserGameDetail[]): UserGameDetail[] {
-    let result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    const result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
     if (sortBy === 'title') return [...result].sort((a, b) => a.game.title.localeCompare(b.game.title));
     if (sortBy === 'playtime') return [...result].sort((a, b) => {
       const total = (ug: UserGameDetail) => Object.values(ug.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0);

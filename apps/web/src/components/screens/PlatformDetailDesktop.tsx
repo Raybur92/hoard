@@ -227,7 +227,7 @@ last sync   ${platform.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}
   );
 }
 
-function ConnectButton({ info, code, npssoInput, setNpssoInput }: {
+function ConnectButton({ info, code, npssoInput: _npssoInput, setNpssoInput: _setNpssoInput }: {
   info: typeof PLATFORM_INFO[string];
   code: string;
   npssoInput: string;

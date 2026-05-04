@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
 import type {
@@ -7,6 +8,7 @@ import type {
   PlatformStat,
   UserGameDetail,
   Platform,
+  ReleaseDateCategory,
 } from '@hoard/types';
 
 const router = Router();
@@ -160,7 +162,7 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
     title: w.title,
     developer: w.developer,
     releaseDate: w.releaseDate?.toISOString() ?? null,
-    releaseDateCategory: w.releaseDateCategory as WishlistReleaseCategory,
+    releaseDateCategory: w.releaseDateCategory as ReleaseDateCategory,
     platforms: w.platforms,
     genres: w.genres,
     userId: w.userId,
@@ -180,7 +182,5 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
 
   res.json(body);
 });
-
-type WishlistReleaseCategory = import('@hoard/types').ReleaseDateCategory;
 
 export default router;

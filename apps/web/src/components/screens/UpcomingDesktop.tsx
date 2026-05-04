@@ -181,7 +181,7 @@ export function UpcomingDesktop() {
               <div style={{ marginTop: 28 }}>
                 <Marker>// release timeline</Marker>
                 <div style={{ marginTop: 16, position: 'relative', height: 110 }}>
-                  {timelineItems.map((e, i) => {
+                  {timelineItems.map((e) => {
                     const x = maxDays > 0 ? Math.round((e.days / maxDays) * 85) + 5 : 50;
                     const labelTop = e.side === 'top';
                     return (

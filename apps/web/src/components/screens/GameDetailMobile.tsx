@@ -7,7 +7,7 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
-import { minutesToHours, formatRelative, shortYear, generateReceipt } from '../../lib/utils';
+import { minutesToHours, formatRelative, generateReceipt } from '../../lib/utils';
 
 const STATUS_COLOR: Record<string, string> = {
   Playing: 'var(--green)',

@@ -1,7 +1,9 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import type { requireUser as RequireUser } from './user';
 
 // JWT_SECRET defaults to 'dev-secret' when the env var is absent, which is
 // the case in the test environment. All token signing uses that same value.
@@ -9,7 +11,8 @@ const DEV_SECRET = 'dev-secret';
 const DEV_USER_ID = 'seed-andrea';
 
 function makeApp() {
-  const { requireUser } = require('./user') as { requireUser: typeof import('./user').requireUser };
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { requireUser } = require('./user') as { requireUser: typeof RequireUser };
   const app = express();
   app.use(cookieParser());
   app.get('/protected', requireUser, (req: Request, res: Response) => {

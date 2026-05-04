@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
-async function waitForRender(page: import('@playwright/test').Page) {
+async function waitForRender(page: Page) {
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => document.fonts.ready);
 }

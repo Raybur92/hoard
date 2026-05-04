@@ -135,7 +135,7 @@ export function PlatformDetailMobile() {
       {isConnected && (
         <>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--rule)', padding: '0 16px' }}>
-            {(['auth', 'scope', 'sync', 'log'] as MobileTab[]).map((t, i) => (
+            {(['auth', 'scope', 'sync', 'log'] as MobileTab[]).map((t) => (
               <div
                 key={t}
                 onClick={() => setActiveTab(t)}

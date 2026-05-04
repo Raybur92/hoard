@@ -200,7 +200,7 @@ export function LibraryDesktop() {
   }
 
   function applyFilters(games: UserGameDetail[]): UserGameDetail[] {
-    let result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    const result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
     if (sortBy === 'title') return [...result].sort((a, b) => a.game.title.localeCompare(b.game.title));
     if (sortBy === 'playtime') return [...result].sort((a, b) => {
       const total = (ug: UserGameDetail) => Object.values(ug.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0);

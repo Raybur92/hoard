@@ -6,7 +6,6 @@ import type {
   StatsResponse,
   GameStatus,
   PatchGameBody,
-  AuthUser,
   AuthResponse,
   LoginBody,
   RegisterBody,

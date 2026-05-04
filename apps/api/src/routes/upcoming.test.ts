@@ -1,4 +1,5 @@
 import request from 'supertest';
+import type { Request, Response, NextFunction } from 'express';
 
 jest.mock('@hoard/db', () => ({
   prisma: {
@@ -12,8 +13,8 @@ jest.mock('@hoard/db', () => ({
 }));
 
 jest.mock('../middleware/user', () => ({
-  requireUser: (req: any, _res: any, next: any) => { req.userId = 'test-user-id'; next(); },
-  requireAuth: (req: any, _res: any, next: any) => { req.userId = 'test-user-id'; next(); },
+  requireUser: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
+  requireAuth: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
 }));
 
 const mockGetGame = jest.fn();

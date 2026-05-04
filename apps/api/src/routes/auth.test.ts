@@ -1,4 +1,15 @@
+// Stop dotenv (loaded by apps/api/src/index.ts) from injecting the dev .env
+// during tests — we want a deterministic env regardless of the developer's
+// local config. The auth.ts module reads OAuth credentials at load time, so
+// the test for "501 when GOOGLE_CLIENT_ID is not configured" only passes if
+// GOOGLE_CLIENT_ID is absent when auth.ts loads.
+jest.mock('dotenv/config', () => ({}));
+delete process.env['GOOGLE_CLIENT_ID'];
+delete process.env['GOOGLE_CLIENT_SECRET'];
+delete process.env['STEAM_API_KEY'];
+
 import request from 'supertest';
+import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
 function makeSessionCookie(userId = 'test-user-id'): string {
@@ -26,8 +37,8 @@ jest.mock('@hoard/db', () => ({
 // Mock the auth middleware so that protected routes always receive a userId.
 // Auth middleware behaviour is tested in isolation in middleware/user.test.ts.
 jest.mock('../middleware/user', () => ({
-  requireUser: (req: any, _res: any, next: any) => { req.userId = 'test-user-id'; next(); },
-  requireAuth: (req: any, _res: any, next: any) => { req.userId = 'test-user-id'; next(); },
+  requireUser: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
+  requireAuth: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
 }));
 
 import { app } from '../index';
