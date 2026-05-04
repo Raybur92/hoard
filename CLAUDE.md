@@ -161,10 +161,15 @@ App is deployed and stable. Active work is a focused performance/UX pass to fix 
 
 Production URLs:
 - Web: **https://gamehoardr.com** (Vercel)
-- API: **https://api.gamehoardr.com** (Railway)
-- Database: Supabase (single project shared with dev — Option A from Phase 7)
+- API: **https://api.gamehoardr.com** (Railway, EU West / Amsterdam)
+- Database: Supabase, `aws-0-eu-west-1.pooler.supabase.com:6543` (transaction pooler) — single project shared with dev (Option A from Phase 7)
 - Domain: gamehoardr.com via Porkbun (DNS at Porkbun)
 - Fallback URLs (still active, for emergencies): `hoard-liard.vercel.app`, `hoardapi-production.up.railway.app`
+
+**Operational gotchas (recorded after a costly debug):**
+- **Railway region must match Supabase region.** API was originally deployed in `us-west` (California) and every DB query paid ~150-200 ms transatlantic RTT, then the pgbouncer overhead on top — the dashboard's 7-query `Promise.all` took ~10 s. Moving to `EU West (Amsterdam)` dropped query time to ~50 ms. Settings → Region.
+- **`DATABASE_URL` query string must include `?pgbouncer=true&connection_limit=5`.** `pgbouncer=true` disables Prisma prepared statements (required for transaction-mode pgbouncer). `connection_limit=5` lets parallel `Promise.all` queries actually run in parallel — `connection_limit=1` (the original value) serialized them, multiplying any per-query latency by 7 on the dashboard. Same value should be set in `apps/api/.env` for local dev.
+- **Railway Watch Paths must use one glob per line, not commas.** Watch Paths set as `apps/api/**,packages/**,railway.toml,package*.json` (single line, comma-separated) is parsed as ONE literal pattern with commas in it and matches nothing — every push gets "Skipped: No changes to watched files." Correct format is one pattern per line. Service Settings → Source.
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
