@@ -1,6 +1,5 @@
-import { MobileFrame } from '../layout/MobileFrame';
+import { useMemo } from 'react';
 import { MobileHeader } from '../layout/MobileHeader';
-import { MobileTabBar } from '../layout/MobileTabBar';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
 import { Icon } from '../primitives/Icon';
@@ -46,10 +45,14 @@ function asciiChart(platforms: PlatformStat[]): string {
 export function DashboardMobile() {
   const { data, loading } = useDashboard();
   const user = useCurrentUser();
+  const platformChart = useMemo(
+    () => (data ? asciiChart(data.stats.playtimeByPlatform) : ''),
+    [data],
+  );
 
   if (loading || !data) {
     return (
-      <MobileFrame>
+      <>
         <MobileHeader title="hoard" />
         <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20, overflow: 'hidden' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -61,12 +64,18 @@ export function DashboardMobile() {
           <div className="skel" style={{ height: 80 }} />
           <div className="skel" style={{ height: 60 }} />
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
-  const { stats, nowPlaying, wishlistCountdown, platforms } = data;
+  // `activity` is required in the new DashboardResponse, but old cached
+  // payloads (SW or in-memory) from before F14 may not have it — fall back.
+  const { stats, nowPlaying, wishlistCountdown, platforms, activity = { weeks: 24, cells: [] } } = data;
+  // Mobile shows the last 16 weeks. The activity array is column-major
+  // (col * 7 + row), oldest first — slice off the leading columns.
+  const MOBILE_WEEKS = 16;
+  const skipWeeks = Math.max(0, activity.weeks - MOBILE_WEEKS);
+  const mobileCells = activity.cells.slice(skipWeeks * 7);
   const np = nowPlaying[0] ?? null;
   const npTotalMin = np
     ? Object.values(np.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0)
@@ -83,7 +92,7 @@ export function DashboardMobile() {
     : '// synced';
 
   return (
-    <MobileFrame>
+    <>
       <MobileHeader
         title="hoard"
         sub={syncSub}
@@ -154,16 +163,16 @@ export function DashboardMobile() {
           <div style={{ padding: '14px 16px 0' }}>
             <Marker>// hours by platform</Marker>
             <pre className="ascii t-dim" style={{ marginTop: 8, fontSize: 10, lineHeight: 1.55 }}>
-              {asciiChart(stats.playtimeByPlatform)}
+              {platformChart}
             </pre>
           </div>
         )}
 
         {/* activity */}
         <div style={{ padding: '14px 16px 0' }}>
-          <Marker>// activity · 16 wks</Marker>
+          <Marker>// last-played · 16 wks</Marker>
           <div style={{ marginTop: 8 }}>
-            <Heatmap weeks={16} days={7} density={0.55} />
+            <Heatmap weeks={MOBILE_WEEKS} days={7} cells={mobileCells} />
           </div>
         </div>
 
@@ -207,7 +216,6 @@ export function DashboardMobile() {
         )}
 
       </div>
-      <MobileTabBar />
-    </MobileFrame>
+    </>
   );
 }

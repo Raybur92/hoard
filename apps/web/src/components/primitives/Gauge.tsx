@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 export type GaugeTone = 'default' | 'green' | 'amber';
 
 export interface GaugeProps {
@@ -6,7 +8,7 @@ export interface GaugeProps {
   tone?: GaugeTone;
 }
 
-export function Gauge({ total, filled, tone = 'default' }: GaugeProps) {
+function GaugeImpl({ total, filled, tone = 'default' }: GaugeProps) {
   const segClass = tone === 'green' ? 'green' : tone === 'amber' ? 'amber' : 'on';
   return (
     <div className="gauge">
@@ -16,3 +18,5 @@ export function Gauge({ total, filled, tone = 'default' }: GaugeProps) {
     </div>
   );
 }
+
+export const Gauge = memo(GaugeImpl);

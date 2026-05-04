@@ -164,6 +164,107 @@ describe('GET /api/games/counts', () => {
     expect(res.status).toBe(200);
     expect(res.body.counts).toEqual({ Playing: 3, 'On Hold': 2, Backlog: 17 });
   });
+
+  it('sets a short Cache-Control header (F8)', async () => {
+    (prisma.userGame.groupBy as jest.Mock).mockResolvedValue([]);
+    const res = await request(app).get('/api/games/counts');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('private, max-age=10');
+  });
+});
+
+/* ── GET /api/games/shelves ── */
+
+describe('GET /api/games/shelves (F6)', () => {
+  it('returns up to perStatus games per shelf plus full counts', async () => {
+    // Six findMany calls, one per status. We map status strings to deterministic mock results.
+    const findManyMock = prisma.userGame.findMany as jest.Mock;
+    findManyMock.mockImplementation((args: { where: { status: string } }) => {
+      if (args.where.status === 'Playing')   return Promise.resolve([makeUserGame({ id: 'p1', status: 'Playing' })]);
+      if (args.where.status === 'Backlog')   return Promise.resolve([makeUserGame({ id: 'b1', status: 'Backlog' }), makeUserGame({ id: 'b2', status: 'Backlog' })]);
+      if (args.where.status === 'Completed') return Promise.resolve([]);
+      if (args.where.status === 'OnHold')    return Promise.resolve([makeUserGame({ id: 'h1', status: 'OnHold' })]);
+      if (args.where.status === 'Dropped')   return Promise.resolve([]);
+      if (args.where.status === 'Wishlist')  return Promise.resolve([makeUserGame({ id: 'w1', status: 'Wishlist' })]);
+      return Promise.resolve([]);
+    });
+    (prisma.userGame.groupBy as jest.Mock).mockResolvedValue([
+      { status: 'Playing',  _count: { status: 1 } },
+      { status: 'Backlog',  _count: { status: 200 } },
+      { status: 'OnHold',   _count: { status: 1 } },
+      { status: 'Wishlist', _count: { status: 1 } },
+    ]);
+
+    const res = await request(app).get('/api/games/shelves?perStatus=8');
+
+    expect(res.status).toBe(200);
+    expect(res.body.shelves.Playing).toHaveLength(1);
+    expect(res.body.shelves.Backlog).toHaveLength(2);
+    expect(res.body.shelves.Completed).toEqual([]);
+    expect(res.body.shelves['On Hold']).toHaveLength(1); // OnHold remapped
+    expect(res.body.shelves.Dropped).toEqual([]);
+    expect(res.body.shelves.Wishlist).toHaveLength(1);
+    expect(res.body.counts).toEqual({ Playing: 1, Backlog: 200, 'On Hold': 1, Wishlist: 1 });
+  });
+
+  it('respects the perStatus take parameter on each shelf query', async () => {
+    const findManyMock = prisma.userGame.findMany as jest.Mock;
+    findManyMock.mockResolvedValue([]);
+    (prisma.userGame.groupBy as jest.Mock).mockResolvedValue([]);
+
+    await request(app).get('/api/games/shelves?perStatus=4');
+
+    expect(findManyMock).toHaveBeenCalledTimes(6);
+    for (const call of findManyMock.mock.calls) {
+      expect(call[0].take).toBe(4);
+    }
+  });
+
+  it('defaults perStatus to 12 when omitted', async () => {
+    const findManyMock = prisma.userGame.findMany as jest.Mock;
+    findManyMock.mockResolvedValue([]);
+    (prisma.userGame.groupBy as jest.Mock).mockResolvedValue([]);
+
+    await request(app).get('/api/games/shelves');
+
+    expect(findManyMock).toHaveBeenCalledTimes(6);
+    expect(findManyMock.mock.calls[0]?.[0].take).toBe(12);
+  });
+
+  it('rejects perStatus > 50', async () => {
+    const res = await request(app).get('/api/games/shelves?perStatus=200');
+    expect(res.status).toBe(400);
+  });
+
+  it('orders Wishlist by addedAt and other shelves by lastPlayedAt', async () => {
+    const findManyMock = prisma.userGame.findMany as jest.Mock;
+    findManyMock.mockResolvedValue([]);
+    (prisma.userGame.groupBy as jest.Mock).mockResolvedValue([]);
+
+    await request(app).get('/api/games/shelves?perStatus=5');
+
+    const calls = findManyMock.mock.calls;
+    const wishlistCall = calls.find((c) => c[0].where.status === 'Wishlist');
+    const backlogCall = calls.find((c) => c[0].where.status === 'Backlog');
+    expect(wishlistCall?.[0].orderBy).toEqual({ addedAt: 'desc' });
+    expect(backlogCall?.[0].orderBy).toEqual({ lastPlayedAt: 'desc' });
+  });
+});
+
+/* ── GET /api/games — limit cap ── */
+
+describe('GET /api/games — limit cap (F6)', () => {
+  it('rejects limit > 500', async () => {
+    const res = await request(app).get('/api/games?limit=2000');
+    expect(res.status).toBe(400);
+  });
+
+  it('accepts limit = 500', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.userGame.count as jest.Mock).mockResolvedValue(0);
+    const res = await request(app).get('/api/games?limit=500');
+    expect(res.status).toBe(200);
+  });
 });
 
 /* ── GET /api/games/:id ── */

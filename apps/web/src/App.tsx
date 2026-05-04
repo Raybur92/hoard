@@ -1,42 +1,76 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useBreakpoint } from './hooks/useBreakpoint';
-import {
-  DashboardDesktop, DashboardMobile,
-  LibraryDesktop, LibraryMobile,
-  UpcomingDesktop, UpcomingMobile,
-  GameDetailDesktop, GameDetailMobile,
-  SettingsDesktop, SettingsMobile,
-  PlatformDetailDesktop, PlatformDetailMobile,
-  PsnGuidedFlowDesktop, PsnGuidedFlowMobile,
-  LoginScreen,
-} from './components/screens';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OfflineBanner } from './components/layout/OfflineBanner';
 import { RequireAuth } from './components/RequireAuth';
+import { AppShell } from './components/layout/AppShell';
+import { UserProvider } from './contexts/UserContext';
 import { PreferencesProvider } from './contexts/PreferencesContext';
+
+// Lazy-load each screen so the initial JS bundle ships only the shell + the
+// first visible route. Suspense falls back to the same noise placeholder
+// `RequireAuth` uses, so the transition is visually identical.
+const lazyNamed = <K extends string, T>(
+  loader: () => Promise<Record<K, T>>,
+  key: K,
+) => lazy(() => loader().then((m) => ({ default: m[key] as React.ComponentType })));
+
+const LoginScreen           = lazyNamed(() => import('./components/screens/LoginScreen'),           'LoginScreen');
+const DashboardDesktop      = lazyNamed(() => import('./components/screens/DashboardDesktop'),      'DashboardDesktop');
+const DashboardMobile       = lazyNamed(() => import('./components/screens/DashboardMobile'),       'DashboardMobile');
+const LibraryDesktop        = lazyNamed(() => import('./components/screens/LibraryDesktop'),        'LibraryDesktop');
+const LibraryMobile         = lazyNamed(() => import('./components/screens/LibraryMobile'),         'LibraryMobile');
+const UpcomingDesktop       = lazyNamed(() => import('./components/screens/UpcomingDesktop'),       'UpcomingDesktop');
+const UpcomingMobile        = lazyNamed(() => import('./components/screens/UpcomingMobile'),        'UpcomingMobile');
+const GameDetailDesktop     = lazyNamed(() => import('./components/screens/GameDetailDesktop'),     'GameDetailDesktop');
+const GameDetailMobile      = lazyNamed(() => import('./components/screens/GameDetailMobile'),      'GameDetailMobile');
+const SettingsDesktop       = lazyNamed(() => import('./components/screens/SettingsDesktop'),       'SettingsDesktop');
+const SettingsMobile        = lazyNamed(() => import('./components/screens/SettingsMobile'),        'SettingsMobile');
+const PlatformDetailDesktop = lazyNamed(() => import('./components/screens/PlatformDetailDesktop'), 'PlatformDetailDesktop');
+const PlatformDetailMobile  = lazyNamed(() => import('./components/screens/PlatformDetailMobile'),  'PlatformDetailMobile');
+const PsnGuidedFlowDesktop  = lazyNamed(() => import('./components/screens/PsnGuidedFlowDesktop'),  'PsnGuidedFlowDesktop');
+const PsnGuidedFlowMobile   = lazyNamed(() => import('./components/screens/PsnGuidedFlowMobile'),   'PsnGuidedFlowMobile');
+
+function SuspenseFallback() {
+  return <div className="hoard-noise" style={{ minHeight: '100vh' }} />;
+}
 
 export default function App() {
   const bp = useBreakpoint();
   const desktop = bp === 'desktop';
 
   return (
-    <PreferencesProvider>
-      <OfflineBanner />
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/login"                               element={<LoginScreen />} />
-          <Route path="/"                                    element={<RequireAuth>{desktop ? <DashboardDesktop />      : <DashboardMobile />}</RequireAuth>} />
-          <Route path="/library"                             element={<RequireAuth>{desktop ? <LibraryDesktop />        : <LibraryMobile />}</RequireAuth>} />
-          <Route path="/library/:status"                     element={<RequireAuth>{desktop ? <LibraryDesktop />        : <LibraryMobile />}</RequireAuth>} />
-          <Route path="/upcoming"                            element={<RequireAuth>{desktop ? <UpcomingDesktop />       : <UpcomingMobile />}</RequireAuth>} />
-          <Route path="/game/:id"                            element={<RequireAuth>{desktop ? <GameDetailDesktop />     : <GameDetailMobile />}</RequireAuth>} />
-          <Route path="/settings"                            element={<RequireAuth>{desktop ? <SettingsDesktop />       : <SettingsMobile />}</RequireAuth>} />
-          <Route path="/settings/:section"                   element={<RequireAuth>{desktop ? <SettingsDesktop />       : <SettingsMobile />}</RequireAuth>} />
-          <Route path="/settings/platforms/:code"            element={<RequireAuth>{desktop ? <PlatformDetailDesktop /> : <PlatformDetailMobile />}</RequireAuth>} />
-          <Route path="/settings/platforms/:code/connect"    element={<RequireAuth>{desktop ? <PsnGuidedFlowDesktop />  : <PsnGuidedFlowMobile />}</RequireAuth>} />
-          <Route path="*"                                    element={<Navigate to="/" replace />} />
-        </Routes>
-      </ErrorBoundary>
-    </PreferencesProvider>
+    <UserProvider>
+      <PreferencesProvider>
+        <OfflineBanner />
+        <ErrorBoundary>
+          <Suspense fallback={<SuspenseFallback />}>
+            <Routes>
+              <Route path="/login" element={<LoginScreen />} />
+
+              {/* Authed routes inside the persistent shell */}
+              <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+                <Route path="/"                                 element={desktop ? <DashboardDesktop />      : <DashboardMobile />} />
+                <Route path="/library"                          element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
+                <Route path="/library/:status"                  element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
+                <Route path="/upcoming"                         element={desktop ? <UpcomingDesktop />       : <UpcomingMobile />} />
+                <Route path="/game/:id"                         element={desktop ? <GameDetailDesktop />     : <GameDetailMobile />} />
+                <Route path="/settings"                         element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
+                <Route path="/settings/:section"                element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
+                <Route path="/settings/platforms/:code"         element={desktop ? <PlatformDetailDesktop /> : <PlatformDetailMobile />} />
+              </Route>
+
+              {/* Authed routes that render their own full-screen wrapper (no app shell) */}
+              <Route element={<RequireAuth><Outlet /></RequireAuth>}>
+                <Route path="/settings/platforms/:code/connect" element={desktop ? <PsnGuidedFlowDesktop />  : <PsnGuidedFlowMobile />} />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </PreferencesProvider>
+    </UserProvider>
   );
 }

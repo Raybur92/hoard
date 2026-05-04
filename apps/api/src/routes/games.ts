@@ -4,8 +4,9 @@ import { prisma } from '@hoard/db';
 import type { GameStatus as PrismaGameStatus } from '@hoard/db';
 import { z } from 'zod';
 import { requireUser } from '../middleware/user';
-import type { UserGameDetail, GameListResponse, PatchGameBody } from '@hoard/types';
+import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
 import { fetchHltb } from '../services/hltb';
+import { mapUserGame } from '../lib/mappers';
 
 function triggerHltbBackground(gameId: string, title: string, steamAppId?: number | null): void {
   void (async () => {
@@ -25,63 +26,13 @@ function toPrismaStatus(s: string): PrismaGameStatus {
   return (s === 'On Hold' ? 'OnHold' : s) as PrismaGameStatus;
 }
 
-function fromPrismaStatus(s: string): UserGameDetail['status'] {
-  return (s === 'OnHold' ? 'On Hold' : s) as UserGameDetail['status'];
-}
-
-function mapUserGame(ug: {
-  id: string; userId: string; gameId: string; status: string;
-  playtimeByPlatform: unknown; lastPlayedAt: Date | null; notes: string | null;
-  rating: number | null; addedAt: Date; updatedAt: Date;
-  game: {
-    id: string; igdbId: number; title: string; developer: string | null;
-    releaseYear: number | null; genres: string[]; coverUrl: string | null;
-    hltbData: {
-      id: string; gameId: string; mainStory: number | null;
-      mainExtras: number | null; completionist: number | null; fetchedAt: Date;
-    } | null;
-  };
-}): UserGameDetail {
-  return {
-    id: ug.id,
-    userId: ug.userId,
-    gameId: ug.gameId,
-    game: {
-      id: ug.game.id,
-      igdbId: ug.game.igdbId,
-      title: ug.game.title,
-      developer: ug.game.developer,
-      releaseYear: ug.game.releaseYear,
-      genres: ug.game.genres,
-      coverUrl: ug.game.coverUrl,
-    },
-    status: fromPrismaStatus(ug.status),
-    playtimeByPlatform: ug.playtimeByPlatform as UserGameDetail['playtimeByPlatform'],
-    lastPlayedAt: ug.lastPlayedAt?.toISOString() ?? null,
-    notes: ug.notes,
-    rating: ug.rating,
-    addedAt: ug.addedAt.toISOString(),
-    updatedAt: ug.updatedAt.toISOString(),
-    hltb: ug.game.hltbData
-      ? {
-          id: ug.game.hltbData.id,
-          gameId: ug.game.hltbData.gameId,
-          mainStory: ug.game.hltbData.mainStory,
-          mainExtras: ug.game.hltbData.mainExtras,
-          completionist: ug.game.hltbData.completionist,
-          fetchedAt: ug.game.hltbData.fetchedAt.toISOString(),
-        }
-      : null,
-  };
-}
-
 const gamesQuerySchema = z.object({
   status: z.enum(['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist']).optional(),
   platform: z.string().max(10).optional(),
   q: z.string().max(100).optional(),
   sort: z.enum(['lastPlayed', 'title', 'playtime']).default('lastPlayed'),
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(2000).default(50),
+  limit: z.coerce.number().int().min(1).max(500).default(50),
 });
 
 // GET /api/games
@@ -148,7 +99,57 @@ router.get('/games/counts', requireUser, async (req: Request, res: Response): Pr
     const key = g.status === 'OnHold' ? 'On Hold' : g.status;
     counts[key] = g._count.status;
   }
+  res.set('Cache-Control', 'private, max-age=10');
   res.json({ counts });
+});
+
+const SHELF_STATUSES: PrismaGameStatus[] = ['Playing', 'Backlog', 'Completed', 'OnHold', 'Dropped', 'Wishlist'];
+const shelvesQuerySchema = z.object({
+  perStatus: z.coerce.number().int().min(1).max(50).default(12),
+});
+
+// GET /api/games/shelves — top N games per status + counts in one round trip.
+// Replaces the previous Library Desktop pattern of fetching ?limit=2000 and
+// grouping client-side. Per-status payload size is bounded by `perStatus`.
+router.get('/games/shelves', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const parsed = shelvesQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid query params' });
+    return;
+  }
+  const { perStatus } = parsed.data;
+  const userId = req.userId;
+
+  const [perShelfRows, countGroups] = await Promise.all([
+    Promise.all(
+      SHELF_STATUSES.map((status) =>
+        prisma.userGame.findMany({
+          where: { userId, status },
+          orderBy: status === 'Wishlist' ? { addedAt: 'desc' } : { lastPlayedAt: 'desc' },
+          take: perStatus,
+          include: { game: { include: { hltbData: true } } },
+        }),
+      ),
+    ),
+    prisma.userGame.groupBy({ by: ['status'], where: { userId }, _count: { status: true } }),
+  ]);
+
+  const shelves: ShelvesResponse['shelves'] = {
+    Playing: [], Backlog: [], Completed: [], 'On Hold': [], Dropped: [], Wishlist: [],
+  };
+  SHELF_STATUSES.forEach((status, i) => {
+    const key: GameStatus = status === 'OnHold' ? 'On Hold' : status as GameStatus;
+    shelves[key] = (perShelfRows[i] ?? []).map(mapUserGame);
+  });
+
+  const counts: Partial<Record<GameStatus, number>> = {};
+  for (const g of countGroups) {
+    const key: GameStatus = (g.status === 'OnHold' ? 'On Hold' : g.status) as GameStatus;
+    counts[key] = g._count.status;
+  }
+
+  const body: ShelvesResponse = { shelves, counts };
+  res.json(body);
 });
 
 // GET /api/games/:id

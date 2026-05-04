@@ -1,14 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
-import { MobileTabBar } from '../layout/MobileTabBar';
 import { Cover } from '../primitives/Cover';
 import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { useGames } from '../../hooks/useGames';
+import { useShelves } from '../../hooks/useShelves';
 import { minutesToHours } from '../../lib/utils';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
@@ -110,22 +109,25 @@ const SORT_LABELS: Record<SortBy, string> = { lastPlayed: 'last played', title: 
 
 export function LibraryMobile() {
   const navigate = useNavigate();
-  const { data, loading, refetch } = useGames({ limit: 100 });
+  const { status: statusParam } = useParams<{ status?: string }>();
+  const isFiltered = !!statusParam;
+
+  const { data: shelvesData, loading: shelvesLoading, refetch: refetchShelves } =
+    useShelves(4, { enabled: !isFiltered });
+  const { data: filteredData, loading: filteredLoading, refetch: refetchFiltered } =
+    useGames(
+      isFiltered ? { status: statusParam as GameStatus, limit: 500 } : undefined,
+      { enabled: isFiltered },
+    );
+
+  const loading = isFiltered ? filteredLoading : shelvesLoading;
+  const refetch = isFiltered ? refetchFiltered : refetchShelves;
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortBy>('lastPlayed');
-  const { status: statusParam } = useParams<{ status?: string }>();
 
-  const grouped = new Map<GameStatus, UserGameDetail[]>();
-  if (data) {
-    for (const ug of data.games) {
-      const arr = grouped.get(ug.status) ?? [];
-      arr.push(ug);
-      grouped.set(ug.status, arr);
-    }
-  }
-
-  function applyFilters(games: UserGameDetail[]): UserGameDetail[] {
+  const applyFilters = useCallback((games: UserGameDetail[]): UserGameDetail[] => {
     const result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
     if (sortBy === 'title') return [...result].sort((a, b) => a.game.title.localeCompare(b.game.title));
     if (sortBy === 'playtime') return [...result].sort((a, b) => {
@@ -133,41 +135,78 @@ export function LibraryMobile() {
       return total(b) - total(a);
     });
     return [...result].sort((a, b) => (b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : 0) - (a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0));
-  }
+  }, [platFilter, sortBy]);
 
-  const shelves: ShelfDisplay[] = SHELF_CONFIG.map(cfg => {
-    const items = applyFilters(grouped.get(cfg.status) ?? []);
-    return { ...cfg, count: items.length, items: items.map(toGameDisplay) };
-  });
+  const shelfCounts: Partial<Record<GameStatus, number>> = shelvesData?.counts ?? {};
+  const totalGames = (Object.values(shelfCounts) as number[]).reduce((s, n) => s + n, 0);
 
-  if (loading || !data) {
+  const shelves: ShelfDisplay[] = useMemo(() =>
+    SHELF_CONFIG.map(cfg => {
+      const items = applyFilters(shelvesData?.shelves[cfg.status] ?? []);
+      return { ...cfg, count: shelfCounts[cfg.status] ?? items.length, items: items.map(toGameDisplay) };
+    }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [shelvesData, applyFilters, JSON.stringify(shelfCounts)]);
+
+  if (loading || (!isFiltered && !shelvesData) || (isFiltered && !filteredData)) {
+    // Skeleton mirrors the real layout (header + chip row + 6 shelves) so
+    // the swap to loaded content doesn't jolt.
+    if (isFiltered) {
+      const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
+      const title = (cfg?.name ?? statusParam ?? '').toLowerCase();
+      return (
+        <>
+          <MobileHeader title={title} sub="// loading…" back onBack={() => navigate('/library')} />
+          <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 20px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {Array.from({ length: 12 }).map((_, j) => (
+                <div key={j} className="skel" style={{ width: 84, height: 112, flex: '0 0 auto' }} />
+              ))}
+            </div>
+          </div>
+        </>
+      );
+    }
     return (
-      <MobileFrame>
-        <MobileHeader title="shelves" />
-        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 24, overflow: 'hidden' }}>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className="skel" style={{ width: 100, height: 10 }} />
-              <div style={{ display: 'flex', gap: 12 }}>
-                {[0, 1, 2].map(j => (
+      <>
+        <MobileHeader title="shelves" sub="// loading…" />
+        <div style={{ padding: '10px 16px 0', display: 'flex', gap: 6, overflowX: 'auto' }}>
+          <div className="skel" style={{ width: 32, height: 22 }} />
+          <div className="skel" style={{ width: 32, height: 22 }} />
+          <div className="skel" style={{ width: 32, height: 22 }} />
+          <div className="skel" style={{ width: 32, height: 22 }} />
+          <div className="skel" style={{ width: 32, height: 22 }} />
+          <div className="skel" style={{ width: 78, height: 22 }} />
+        </div>
+        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', marginTop: 6 }}>
+          {SHELF_CONFIG.map((cfg) => (
+            <div key={cfg.status} style={{ padding: '14px 0 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px' }}>
+                <div className="skel" style={{ width: 22, height: 16 }} />
+                <div className="skel" style={{ width: 90, height: 12 }} />
+                <div className="skel" style={{ width: 36, height: 10 }} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, padding: '12px 16px 0', overflow: 'hidden' }}>
+                {[0, 1, 2, 3].map(j => (
                   <div key={j} className="skel" style={{ width: 84, height: 112, flex: '0 0 auto' }} />
                 ))}
               </div>
+              <div style={{ height: 3, background: 'var(--rule-bright)', margin: '10px 16px 0' }} />
             </div>
           ))}
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
   if (statusParam) {
     const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
-    const items = applyFilters(grouped.get(statusParam as GameStatus) ?? []).map(toGameDisplay);
+    const filteredGames = filteredData?.games ?? [];
+    const items = applyFilters(filteredGames).map(toGameDisplay);
     const isBacklog = statusParam === 'Backlog';
     const title = (cfg?.name ?? statusParam).toLowerCase();
     return (
-      <MobileFrame>
+      <>
         <MobileHeader
           title={title}
           sub={`// ${items.length} titles`}
@@ -204,16 +243,15 @@ export function LibraryMobile() {
             </div>
           )}
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
   return (
-    <MobileFrame>
+    <>
       <MobileHeader
         title="shelves"
-        sub={`// ${data.total} titles`}
+        sub={`// ${totalGames} titles`}
         right={<Btn sm variant="primary" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
       />
       {showAddModal && (
@@ -237,7 +275,6 @@ export function LibraryMobile() {
           <MobileShelf key={s.status} idx={i + 1} shelf={s} />
         ))}
       </div>
-      <MobileTabBar />
-    </MobileFrame>
+    </>
   );
 }

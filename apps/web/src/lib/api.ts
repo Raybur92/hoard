@@ -14,7 +14,9 @@ import type {
   ManualAddBody,
   IgdbSearchResult,
   IgdbUpcomingRelease,
+  ShelvesResponse,
 } from '@hoard/types';
+import * as cache from './cache';
 
 // In dev: leave VITE_API_URL unset and let Vite's proxy forward /api/* to the
 // API server (keeps requests same-origin so cookies don't need SameSite=None).
@@ -86,6 +88,17 @@ function buildQuery(params: Record<string, string | number | undefined>): string
   return s ? `?${s}` : '';
 }
 
+/**
+ * Invalidate every cache entry that depends on the user's library.
+ * Called after mutations that change games, status, playtime, or platform sync.
+ */
+function invalidateLibrary(): void {
+  cache.invalidate('games:');
+  cache.invalidate('shelves:');
+  cache.invalidate('gameCounts');
+  cache.invalidate('dashboard');
+}
+
 export const api = {
   dashboard: () =>
     get<DashboardResponse>('/api/dashboard'),
@@ -93,20 +106,31 @@ export const api = {
   games: (params?: GamesParams) =>
     get<GameListResponse>(`/api/games${buildQuery({ ...params })}`),
 
+  shelves: (perStatus?: number) =>
+    get<ShelvesResponse>(`/api/games/shelves${buildQuery({ perStatus })}`),
+
   gameCounts: () =>
     get<{ counts: Partial<Record<GameStatus, number>> }>('/api/games/counts'),
 
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),
 
-  patchGame: (id: string, body: PatchGameBody) =>
-    patch<UserGameDetail>(`/api/games/${id}`, body),
+  patchGame: async (id: string, body: PatchGameBody) => {
+    const updated = await patch<UserGameDetail>(`/api/games/${id}`, body);
+    cache.set(`game:${id}`, updated);
+    invalidateLibrary();
+    return updated;
+  },
 
   upcoming: (params?: { platform?: string }) =>
     get<WishlistRelease[]>(`/api/upcoming${buildQuery({ platform: params?.platform })}`),
 
-  toggleWishlist: (igdbId: number) =>
-    post<{ tracked: boolean }>(`/api/upcoming/${igdbId}/wishlist`),
+  toggleWishlist: async (igdbId: number) => {
+    const r = await post<{ tracked: boolean }>(`/api/upcoming/${igdbId}/wishlist`);
+    cache.invalidate('upcoming:');
+    cache.invalidate('dashboard'); // wishlist countdown lives there
+    return r;
+  },
 
   stats: () =>
     get<StatsResponse>('/api/stats'),
@@ -118,8 +142,12 @@ export const api = {
   register: (body: RegisterBody) =>
     post<AuthResponse>('/api/auth/register', body),
 
-  logout: () =>
-    post<void>('/api/auth/logout'),
+  logout: async () => {
+    const r = await post<void>('/api/auth/logout');
+    // Drop everything — next session starts clean.
+    cache.invalidate('');
+    return r;
+  },
 
   me: () =>
     get<AuthResponse>('/api/auth/me').then((r) => r.user),
@@ -127,28 +155,50 @@ export const api = {
   updateMe: (body: PatchMeBody) =>
     patch<AuthResponse>('/api/auth/me', body).then((r) => r.user),
 
-  deleteAccount: () =>
-    del<{ ok: boolean }>('/api/auth/me'),
+  deleteAccount: async () => {
+    const r = await del<{ ok: boolean }>('/api/auth/me');
+    cache.invalidate('');
+    return r;
+  },
 
   // platforms
   platformStatus: () =>
     get<PlatformStatusResponse>('/api/platforms/status'),
 
-  syncPlatform: (code: string) =>
-    post<void>(`/api/platforms/${code.toLowerCase()}/sync`),
+  syncPlatform: async (code: string) => {
+    const r = await post<void>(`/api/platforms/${code.toLowerCase()}/sync`);
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
 
-  disconnectPlatform: (code: string) =>
-    del<void>(`/api/platforms/${code.toLowerCase()}`),
+  disconnectPlatform: async (code: string) => {
+    const r = await del<void>(`/api/platforms/${code.toLowerCase()}`);
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
 
-  connectPsn: (npsso: string) =>
-    post<void>('/api/platforms/psn/connect', { npsso }),
+  connectPsn: async (npsso: string) => {
+    const r = await post<void>('/api/platforms/psn/connect', { npsso });
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
 
-  connectXbox: (apiKey: string) =>
-    post<void>('/api/platforms/xbox/connect', { apiKey }),
+  connectXbox: async (apiKey: string) => {
+    const r = await post<void>('/api/platforms/xbox/connect', { apiKey });
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
 
   // manual games (Nintendo / Epic)
-  addManualGame: (body: ManualAddBody) =>
-    post<UserGameDetail>('/api/games/manual', body),
+  addManualGame: async (body: ManualAddBody) => {
+    const r = await post<UserGameDetail>('/api/games/manual', body);
+    invalidateLibrary();
+    return r;
+  },
 
   // IGDB
   igdbSearch: (q: string) =>

@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { api } from '../lib/api';
+import { useUser } from './UserContext';
 import type { UserPreferences, PatchMeBody } from '@hoard/types';
 
 const DEFAULT_PREFS: UserPreferences = {
@@ -15,42 +16,43 @@ interface PreferencesContextValue {
   updatePref: (patch: Partial<UserPreferences>) => Promise<void>;
 }
 
-export const PreferencesContext = createContext<PreferencesContextValue>({
+const PreferencesContext = createContext<PreferencesContextValue>({
   prefs: DEFAULT_PREFS,
   updatePref: async () => {},
 });
 
+export { PreferencesContext };
+
 export function PreferencesProvider({ children }: { children: ReactNode }) {
-  const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFS);
+  const { user, setUser } = useUser();
+  const prefs = user?.preferences ?? DEFAULT_PREFS;
 
   useEffect(() => {
-    void api.me().then((user) => {
-      if (user.preferences) setPrefs(user.preferences);
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    document.body.classList.toggle('no-cursor', !prefs?.terminalCursor);
-  }, [prefs?.terminalCursor]);
+    document.body.classList.toggle('no-cursor', !prefs.terminalCursor);
+  }, [prefs.terminalCursor]);
 
   const updatePref = useCallback(async (patch: Partial<UserPreferences>) => {
-    const optimistic = { ...prefs, ...patch };
-    setPrefs(optimistic);
+    if (!user) return;
+    const optimistic = { ...user, preferences: { ...prefs, ...patch } };
+    setUser(optimistic);
     try {
       const updated = await api.updateMe(patch as PatchMeBody);
-      setPrefs(updated.preferences);
+      setUser(updated);
     } catch {
-      setPrefs(prefs);
+      setUser(user);
     }
-  }, [prefs]);
+  }, [user, prefs, setUser]);
+
+  const value = useMemo(() => ({ prefs, updatePref }), [prefs, updatePref]);
 
   return (
-    <PreferencesContext.Provider value={{ prefs, updatePref }}>
+    <PreferencesContext.Provider value={value}>
       {children}
     </PreferencesContext.Provider>
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePreferences() {
   return useContext(PreferencesContext);
 }

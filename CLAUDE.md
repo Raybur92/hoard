@@ -36,6 +36,7 @@ npx prisma db seed            # seed with mock data
 | What | Where |
 |---|---|
 | Execution plan + phase status | `docs/PLAN.md` |
+| Performance & UX workstream (active) | `docs/PERFORMANCE_PLAN.md` |
 | Environment variables reference | `docs/ENV.md` |
 | Design source of truth | `project/` — HTML/CSS/JS prototypes |
 | Design system CSS | `project/styles.css` → port to `apps/web/src/styles/` |
@@ -142,7 +143,21 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: No active phase — production deploy live**
+**Active: Performance & UX workstream — see `docs/PERFORMANCE_PLAN.md`**
+
+App is deployed and stable. Active work is a focused performance/UX pass to fix the "clunky and slow" feel reported in production: shell flicker on navigation, username flashing to `…`, shelf counters disappearing, noise-screen flash between routes. Plan is in `docs/PERFORMANCE_PLAN.md` with 14 fix items, prioritized, each with tests + success criteria. Six PRs total; PR 1 + PR 2 alone are expected to address all four reported symptoms.
+
+**PR 1 landed (F1 + F2 + F3, 2026-05-04):** persistent shell via `AppShell` layout route + `UserProvider` context + `RequireAuth` at layout. Sidebar/TopBar/MobileTabBar mount once per session. `api.me` fetched once instead of 4–5× per navigation. New integration tests in `apps/web/src/__tests__/shell-persistence.test.tsx`. 103 API + 43 web tests passing.
+
+**PR 2 landed (F4 + F8 + F9, 2026-05-04):** stale-while-revalidate request cache (`apps/web/src/lib/cache.ts` + `apps/web/src/hooks/useQuery.ts`); all four data hooks (`useDashboard`/`useGames`/`useGame`/`useUpcoming`) plus Sidebar's `gameCounts`/`platformStatus` use it. Mutation invalidation wired centrally in `lib/api.ts`. `Cache-Control: private, max-age=10/30` on shell endpoints. SW `StaleWhileRevalidate` for `/api/(auth/me|games/counts|platforms/status)`. Tests: 106 API + 59 web (added 3 cache-header + 7 cache unit + 4 useQuery + 5 invalidation = 19 new). After PR 1+2, revisiting a page within 30s shows real data instantly with no skeleton; mutations propagate to all listening hooks automatically.
+
+**PR 3 landed (F5 + F6, 2026-05-04):** `/api/dashboard` no longer loads the full library — split into parallel `groupBy` for counts, `findMany take:3/30` for now-playing/backlog, lightweight selects for aggregations. Backlog pool capped at 30 (shuffle picks among shortest-HLTB). New `GET /api/games/shelves?perStatus=N` endpoint replaces Library's `?limit=2000`; `useShelves` hook on the client. `/api/games` limit capped at 500 (was 2000). Library Desktop uses `useShelves(12)`, Mobile uses `useShelves(4)`. Shared `mapUserGame` extracted to `apps/api/src/lib/mappers.ts`. Tests: 114 API + 59 web (added 8 new: 5 shelves endpoint, 2 limit-cap, 1 dashboard lightweight-select). Dashboard payload drops ~5–10× on a 700-game library; Library Desktop mount stops paying the 2000-game cost.
+
+**PR 4 landed (F7 + F11, 2026-05-04):** Covers now use `loading="lazy"`, `decoding="async"`, and intrinsic `width`/`height`. New `apps/web/src/lib/igdbCover.ts` swaps IGDB URL size variants — mobile shelves (84×112) request `t_cover_small` (90×128) instead of `t_cover_big` (264×374), about 6× less bandwidth per image. Preconnect + dns-prefetch added to `index.html` for `api.gamehoardr.com` and `images.igdb.com`. Tests: 114 API + 69 web (added 10: 6 igdbCover unit + 4 Cover component). Mobile cold-load image bandwidth drops dramatically; cold cross-origin handshake to API and IGDB now overlaps HTML parse. **Same-day follow-on:** Library Desktop and Library Mobile skeleton states rewritten to mirror the real layout (filter bar + 6 shelves at the right cover dims, plus filtered-shelf back-bar variant) so the cold-load skeleton-to-content swap is seamless instead of jolting.
+
+**PR 5 landed (F10 + F12 + F13, 2026-05-04):** Composite indexes added to schema (`UserGame(userId, status)`, `UserGame(userId, lastPlayedAt DESC)`, `WishlistRelease(userId, releaseDate)`) — migration `20260504200000_usergame_perf_indexes` ready to apply via `npx prisma migrate deploy`. `React.memo` on `Sidebar`, `TopBar`, `MobileTabBar`, `Heatmap`, `Gauge`; `useMemo`/`useCallback` for `applyFilters` + `shelves` in Library, `asciiChart` in Dashboard. Each screen now `React.lazy()` in `App.tsx` with one `<Suspense>` boundary. **Initial JS bundle dropped from 105.68 KB to 75.38 KB gzipped (~30%)**, each screen ~3–5 KB. 114 API + 69 web tests still passing.
+
+**PR 6 landed (F14, 2026-05-04):** Activity heatmap is no longer synthetic. New `ActivityHeatmap` type. `/api/dashboard` adds `lastPlayedAt` to the lightweight aggregation select and computes a 24-week × 7-day cell grid (column-major, row 0 = Sunday) — each game contributes one cell on the day its `lastPlayedAt` falls. Heatmap primitive rewritten to take `cells: number[]`, mapping counts (0..6+) to 6 visual levels. Mobile slices the rightmost 16 weeks. Markers re-labeled "// games last-played · Nwk" so the visual is read correctly. **Decision (PERFORMANCE_PLAN.md §7):** without a session log, this is "games last-touched per day," not "playtime per day" — sparse but real. 115 API + 69 web tests passing.
 
 Production URLs:
 - Web: **https://gamehoardr.com** (Vercel)
@@ -187,5 +202,4 @@ All phases complete through Phase 7. App is deployed and reachable from anywhere
 **Known gaps (low priority, none blocking):**
 - Steam OpenID on production not yet click-tested — wiring is in code and was working locally; just needs you to log in once via `https://gamehoardr.com/login` to confirm the redirect URI resolves correctly.
 - Xbox / GOG library sync: stubs returning `[]`. Manual add covers the gap (same approach as Nintendo / Epic).
-- Prisma migration history reconciliation — RLS migration is committed and the SQL is applied on Supabase, but `_prisma_migrations` doesn't have a record of it. Cosmetic; `migrate status` shows it as pending. Doesn't affect runtime.
-- `react-refresh/only-export-components` warnings (2) in `PreferencesContext.tsx` — only impact dev-server HMR experience, not builds.
+- `package.json#prisma` config block is deprecated in Prisma 6.19 — Prisma 7 will require `prisma.config.ts`. Migrate when convenient (warning only, not blocking).

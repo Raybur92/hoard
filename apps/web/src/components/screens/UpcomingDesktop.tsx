@@ -1,4 +1,3 @@
-import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
@@ -51,21 +50,18 @@ export function UpcomingDesktop() {
 
   if (loading || !data) {
     return (
-      <div className="app-shell hoard-noise">
-        <Sidebar />
-        <div className="app-main">
-          <TopBar crumbs={['hoard', 'upcoming']} />
-          <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div className="skel" style={{ height: 200 }} />
-            <div style={{ display: 'flex', gap: 10 }}>
-              {[0, 1, 2, 3].map(i => <div key={i} className="skel" style={{ width: 80, height: 28 }} />)}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[0, 1, 2, 3, 4].map(i => <div key={i} className="skel" style={{ height: 52 }} />)}
-            </div>
+      <>
+        <TopBar crumbs={['hoard', 'upcoming']} />
+        <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div className="skel" style={{ height: 200 }} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            {[0, 1, 2, 3].map(i => <div key={i} className="skel" style={{ width: 80, height: 28 }} />)}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[0, 1, 2, 3, 4].map(i => <div key={i} className="skel" style={{ height: 52 }} />)}
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -86,12 +82,10 @@ export function UpcomingDesktop() {
   const maxDays = Math.max(...timelineItems.map(w => w.days), 1);
 
   return (
-    <div className="app-shell hoard-noise">
-      <Sidebar />
-      <div className="app-main">
-        <TopBar crumbs={['hoard', 'upcoming']} />
+    <>
+      <TopBar crumbs={['hoard', 'upcoming']} />
 
-        {/* month tabs */}
+      {/* month tabs */}
         <div style={{ padding: '16px 32px 0', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 6, alignItems: 'baseline' }}>
           {months.map(([m, n], i) => (
             <div key={m} style={{
@@ -301,7 +295,6 @@ export function UpcomingDesktop() {
             ))}
           </div>
         </div>
-      </div>
-    </div>
+    </>
   );
 }

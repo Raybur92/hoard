@@ -54,6 +54,7 @@ router.get('/platforms/status', requireUser, async (req: Request, res: Response)
   }));
 
   const body: PlatformStatusResponse = { platforms: result };
+  res.set('Cache-Control', 'private, max-age=30');
   res.json(body);
 });
 

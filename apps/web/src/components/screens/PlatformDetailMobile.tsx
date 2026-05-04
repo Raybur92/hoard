@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
-import { MobileTabBar } from '../layout/MobileTabBar';
 import { PlatformDot, Toggle } from '../settings';
 import type { PlatConnectStatus } from '../settings';
 import { Icon } from '../primitives/Icon';
@@ -62,7 +60,7 @@ export function PlatformDetailMobile() {
   const noApi = code === 'nt' || code === 'ep';
 
   return (
-    <MobileFrame>
+    <>
       <MobileHeader
         title={name.toLowerCase()}
         sub={`// ${isConnected ? 'connected' : 'not connected'}`}
@@ -211,8 +209,7 @@ export function PlatformDetailMobile() {
       )}
 
       {!isConnected && <div style={{ flex: 1 }} />}
-      <MobileTabBar />
-    </MobileFrame>
+    </>
   );
 }
 

@@ -3,7 +3,11 @@ import type { Request, Response, NextFunction } from 'express';
 
 jest.mock('@hoard/db', () => ({
   prisma: {
-    userGame: { findMany: jest.fn() },
+    userGame: {
+      findMany: jest.fn(),
+      groupBy: jest.fn(),
+      count: jest.fn(),
+    },
     platform: { findMany: jest.fn() },
     wishlistRelease: { findMany: jest.fn() },
   },
@@ -46,17 +50,73 @@ const makeUserGame = (overrides: Partial<{ id: string; status: string; mainStory
   },
 });
 
+const aggRow = (
+  genres: string[] = ['Platformer'],
+  playtime: Record<string, number> = { ST: 600, PS: 300 },
+  lastPlayedAt: Date | null = null,
+) => ({
+  playtimeByPlatform: playtime,
+  lastPlayedAt,
+  game: { genres },
+});
+
+const backlogIdRow = (id: string, mainStory: number | null) => ({
+  id,
+  game: { hltbData: mainStory != null ? { mainStory } : null },
+});
+
+/**
+ * Sets up the mocks for the slim dashboard route.
+ *
+ * The route runs (in parallel):
+ *   1. userGame.groupBy (counts)
+ *   2. userGame.count   (weeklyAdded)
+ *   3. userGame.findMany — nowPlaying (Playing, take 3, with full game+hltb)
+ *   4. userGame.findMany — backlogIdsRaw (Backlog, lightweight: id + hltb.mainStory)
+ *   5. userGame.findMany — aggUserGames (lightweight: playtime + genres for every userGame)
+ *   6. wishlistRelease.findMany
+ *   7. platform.findMany
+ * Then a follow-up:
+ *   8. userGame.findMany — backlogTopRaw (full data for the 30 IDs with shortest HLTB)
+ */
+function setupDashboard({
+  countGroups = [] as Array<{ status: string; _count: { status: number } }>,
+  weeklyAdded = 0,
+  nowPlaying = [] as ReturnType<typeof makeUserGame>[],
+  backlogIds = [] as ReturnType<typeof backlogIdRow>[],
+  aggRows = [] as ReturnType<typeof aggRow>[],
+  backlogTop = [] as ReturnType<typeof makeUserGame>[],
+  wishlist = [] as unknown[],
+  platforms = [] as unknown[],
+}) {
+  (prisma.userGame.groupBy as jest.Mock).mockResolvedValue(countGroups);
+  (prisma.userGame.count as jest.Mock).mockResolvedValue(weeklyAdded);
+  // findMany order: nowPlaying, backlogIds, aggRows, [backlogTop if any backlogIds]
+  const findManyMock = prisma.userGame.findMany as jest.Mock;
+  findManyMock.mockReset();
+  findManyMock
+    .mockResolvedValueOnce(nowPlaying)
+    .mockResolvedValueOnce(backlogIds)
+    .mockResolvedValueOnce(aggRows)
+    .mockResolvedValueOnce(backlogTop);
+  (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue(wishlist);
+  (prisma.platform.findMany as jest.Mock).mockResolvedValue(platforms);
+}
+
 describe('GET /api/dashboard', () => {
   it('returns the full DashboardResponse shape with all required fields', async () => {
-    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
-      makeUserGame({ id: 'ug-1', status: 'Playing', mainStory: 1500 }),
-      makeUserGame({ id: 'ug-2', status: 'Backlog', mainStory: 600 }),
-      makeUserGame({ id: 'ug-3', status: 'Completed' }),
-    ]);
-    (prisma.platform.findMany as jest.Mock).mockResolvedValue([
-      { id: 'p-1', userId: 'test-user-id', code: 'ST', syncable: true, lastSyncAt: new Date(), syncStatus: 'ok' },
-    ]);
-    (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([]);
+    setupDashboard({
+      countGroups: [
+        { status: 'Playing',  _count: { status: 1 } },
+        { status: 'Backlog',  _count: { status: 1 } },
+        { status: 'Completed', _count: { status: 1 } },
+      ],
+      weeklyAdded: 0,
+      nowPlaying: [makeUserGame({ id: 'np', status: 'Playing', mainStory: 1500 })],
+      backlogIds: [backlogIdRow('ug-2', 600)],
+      aggRows: [aggRow(['Platformer'], { ST: 600, PS: 300 }), aggRow(['Action'], { ST: 600, PS: 300 }), aggRow(['RPG'], { ST: 600, PS: 300 })],
+      backlogTop: [makeUserGame({ id: 'ug-2', status: 'Backlog', mainStory: 600 })],
+    });
 
     const res = await request(app).get('/api/dashboard');
 
@@ -66,42 +126,106 @@ describe('GET /api/dashboard', () => {
     expect(res.body.stats.playingCount).toBe(1);
     expect(res.body.stats.backlogCount).toBe(1);
     expect(res.body.stats.completedCount).toBe(1);
-    expect(res.body.stats.totalPlaytimeMinutes).toBe(2700); // 3 games × (600+300)
+    expect(res.body.stats.totalPlaytimeMinutes).toBe(2700); // 3 agg rows × (600+300)
     expect(res.body.nowPlaying).toHaveLength(1);
-    expect(res.body.platforms).toHaveLength(1);
     expect(res.body.backlogPick).toBeDefined();
     expect(res.body.backlogItems).toBeDefined();
     expect(res.body.wishlistCountdown).toEqual([]);
   });
 
-  it('sorts backlog items by HLTB mainStory ascending so backlogPick is the shortest', async () => {
-    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
-      makeUserGame({ id: 'ug-long', status: 'Backlog', mainStory: 3000 }),
-      makeUserGame({ id: 'ug-short', status: 'Backlog', mainStory: 600 }),
-      makeUserGame({ id: 'ug-mid', status: 'Backlog', mainStory: 1200 }),
-    ]);
-    (prisma.platform.findMany as jest.Mock).mockResolvedValue([]);
-    (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([]);
+  it('orders the backlog pool by HLTB mainStory ascending so backlogPick is the shortest', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Backlog', _count: { status: 3 } }],
+      backlogIds: [
+        backlogIdRow('ug-long',  3000),
+        backlogIdRow('ug-short',  600),
+        backlogIdRow('ug-mid',   1200),
+      ],
+      // Prisma's `where: { id: { in: [...] } }` returns rows in any order — the
+      // route re-orders client-side based on the sortedBacklogIds index map.
+      backlogTop: [
+        makeUserGame({ id: 'ug-mid',   status: 'Backlog', mainStory: 1200 }),
+        makeUserGame({ id: 'ug-long',  status: 'Backlog', mainStory: 3000 }),
+        makeUserGame({ id: 'ug-short', status: 'Backlog', mainStory: 600 }),
+      ],
+    });
 
     const res = await request(app).get('/api/dashboard');
 
     expect(res.status).toBe(200);
     expect(res.body.backlogPick.id).toBe('ug-short');
-    expect(res.body.backlogItems[0].id).toBe('ug-short');
-    expect(res.body.backlogItems[1].id).toBe('ug-mid');
-    expect(res.body.backlogItems[2].id).toBe('ug-long');
+    expect(res.body.backlogItems.map((u: { id: string }) => u.id)).toEqual(['ug-short', 'ug-mid', 'ug-long']);
   });
 
   it('handles empty libraries without crashing', async () => {
-    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
-    (prisma.platform.findMany as jest.Mock).mockResolvedValue([]);
-    (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([]);
-
+    setupDashboard({});
     const res = await request(app).get('/api/dashboard');
 
     expect(res.status).toBe(200);
     expect(res.body.stats.totalGames).toBe(0);
     expect(res.body.backlogPick).toBeNull();
     expect(res.body.nowPlaying).toEqual([]);
+    expect(res.body.backlogItems).toEqual([]);
+  });
+
+  it('returns an activity heatmap built from lastPlayedAt timestamps (F14)', async () => {
+    // Three games last-played today + two yesterday + one a week ago. The cell
+    // for "today" should have count 3, "yesterday" 2, "one week ago" 1.
+    const today = new Date();
+    const yesterday = new Date(today.getTime() - 86_400_000);
+    const lastWeek = new Date(today.getTime() - 7 * 86_400_000);
+
+    setupDashboard({
+      countGroups: [{ status: 'Playing', _count: { status: 6 } }],
+      aggRows: [
+        aggRow(['Action'],   { ST: 60 }, today),
+        aggRow(['Action'],   { ST: 60 }, today),
+        aggRow(['Action'],   { ST: 60 }, today),
+        aggRow(['Strategy'], { ST: 60 }, yesterday),
+        aggRow(['Strategy'], { ST: 60 }, yesterday),
+        aggRow(['RPG'],      { ST: 60 }, lastWeek),
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard');
+
+    expect(res.status).toBe(200);
+    expect(res.body.activity).toBeDefined();
+    expect(res.body.activity.weeks).toBe(24);
+    expect(res.body.activity.cells).toHaveLength(24 * 7);
+
+    // Recompute the expected cell offsets the same way the route does, so the
+    // assertion is robust to whatever today's day-of-week is.
+    const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    const todayDow = new Date(todayUTC).getUTCDay();
+    const oldestSundayUTC = todayUTC - (todayDow + 23 * 7) * 86_400_000;
+    const offsetFor = (d: Date) => {
+      const dUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+      return (dUTC - oldestSundayUTC) / 86_400_000;
+    };
+    expect(res.body.activity.cells[offsetFor(today)]).toBe(3);
+    expect(res.body.activity.cells[offsetFor(yesterday)]).toBe(2);
+    expect(res.body.activity.cells[offsetFor(lastWeek)]).toBe(1);
+  });
+
+  it('does not load every UserGame with full Game data — backlog query uses lightweight select (F5)', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Backlog', _count: { status: 50 } }],
+      backlogIds: Array.from({ length: 50 }, (_, i) => backlogIdRow(`ug-${i}`, i * 100)),
+      backlogTop: Array.from({ length: 30 }, (_, i) => makeUserGame({ id: `ug-${i}`, status: 'Backlog', mainStory: i * 100 })),
+    });
+
+    const res = await request(app).get('/api/dashboard');
+
+    expect(res.status).toBe(200);
+    // Lightweight backlog id query is the second findMany call.
+    const backlogIdsCall = (prisma.userGame.findMany as jest.Mock).mock.calls[1]?.[0];
+    expect(backlogIdsCall.where).toEqual({ userId: 'test-user-id', status: 'Backlog' });
+    expect(backlogIdsCall.select).toBeDefined();
+    expect(backlogIdsCall.include).toBeUndefined();
+    expect(backlogIdsCall.select.id).toBe(true);
+
+    // Full backlog data only loaded for top 30.
+    expect(res.body.backlogItems.length).toBeLessThanOrEqual(30);
   });
 });

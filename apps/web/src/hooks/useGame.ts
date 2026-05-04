@@ -1,24 +1,20 @@
-import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
+import * as cache from '../lib/cache';
+import { useQuery } from './useQuery';
 import type { UserGameDetail } from '@hoard/types';
 
 export function useGame(id: string | undefined) {
-  const [data, setData] = useState<UserGameDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!id) { setLoading(false); return; }
-    let cancelled = false;
-    api.game(id)
-      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
-      .catch(e => { if (!cancelled) { setError(String(e)); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, [id]);
+  const key = id ? `game:${id}` : '';
+  const { data, loading, error } = useQuery<UserGameDetail>(
+    key,
+    () => api.game(id!),
+    { enabled: !!id },
+  );
 
   function update(patch: Partial<UserGameDetail>): void {
-    setData(prev => prev ? { ...prev, ...patch } : prev);
+    if (!id || !data) return;
+    cache.set(`game:${id}`, { ...data, ...patch });
   }
 
-  return { data, loading, error, update };
+  return { data: data ?? null, loading: !!id && loading, error, update };
 }

@@ -3,6 +3,7 @@
 > **Scope:** This file covers execution only — phases, deliverables, success criteria, testing, and current status.
 > For project context, design philosophy, tech stack, data model, key decisions, and risks: read `AGENT.md`.
 > For commands, hard rules, and design system reference: read `CLAUDE.md`.
+> For the active performance & UX workstream (drafted 2026-05-04): read `docs/PERFORMANCE_PLAN.md`.
 
 ---
 
@@ -738,5 +739,6 @@ These items were addressed after PSN was connected and real data revealed gaps.
 | Post-6 — Test Backfill & CI Hardening | Done | Fixed 4 stale test suites (hltb fetch mock, platforms `$queryRaw` mock, auth `deleteMany` mock, TopBar Router wrapper). Added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb. Added Playwright offline E2E (`test:e2e:offline`) + Lighthouse CI workflow with Performance ≥ 80 / Accessibility ≥ 90 / Best-practices ≥ 90 thresholds. Final: 103 API + 40 web tests passing; Lighthouse local Performance 99 / Accessibility 100 / Best-practices 100. |
 | 7 — Deploy + Google OAuth | Done | Railway + Vercel live behind custom domain `gamehoardr.com` (Porkbun registrar). API at `api.gamehoardr.com`, web at `gamehoardr.com`. Email/password + Google OAuth verified end-to-end on desktop Chrome (regular + incognito) and iOS Safari. Cross-origin cookie problem resolved — both subdomains share `.gamehoardr.com` parent so cookies are first-party. Steam OpenID still pending production verification. |
 | Post-7 — Lint Cleanup + Supabase RLS | Done | `npm run lint` 86 errors → 0 errors (CI lint job now actually green). RLS enabled on all public tables, closing 8 Supabase Security Advisor errors. Test suite still 103 API + 40 web all passing. `auth.test.ts` made deterministic via `dotenv/config` mock so it passes regardless of local OAuth env. |
+| Post-7 — Performance & UX | Done | Drafted in `docs/PERFORMANCE_PLAN.md` 2026-05-04. 14 fix items across architecture (shell-as-layout, UserProvider, SWR cache), backend (slim `/api/dashboard`, `/api/games/shelves`, indexes, cache headers), images (lazy + IGDB sizes), and SW. **All 6 PRs landed 2026-05-04.** Persistent shell + UserProvider + SWR cache + slim dashboard + per-shelf endpoint + cover lazy-load + IGDB size variants + preconnect + memoization + screen code-splitting + DB indexes live + real activity heatmap. Initial JS bundle 105.68 → 75.38 KB gzipped (~30%). 115 API + 69 web tests passing. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.

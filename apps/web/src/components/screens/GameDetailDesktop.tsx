@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
@@ -58,26 +57,23 @@ export function GameDetailDesktop() {
 
   if (loading || !ug) {
     return (
-      <div className="app-shell hoard-noise">
-        <Sidebar />
-        <div className="app-main">
-          <TopBar crumbs={['hoard', 'library', '…']} />
-          {error
-            ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-                <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+      <>
+        <TopBar crumbs={['hoard', 'library', '…']} />
+        {error
+          ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+              <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+            </div>
+          : <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32 }}>
+              <div className="skel" style={{ height: 347 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="skel" style={{ width: 240, height: 28 }} />
+                <div className="skel" style={{ width: 160, height: 12 }} />
+                <div className="skel" style={{ height: 80 }} />
+                <div className="skel" style={{ height: 120 }} />
               </div>
-            : <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32 }}>
-                <div className="skel" style={{ height: 347 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div className="skel" style={{ width: 240, height: 28 }} />
-                  <div className="skel" style={{ width: 160, height: 12 }} />
-                  <div className="skel" style={{ height: 80 }} />
-                  <div className="skel" style={{ height: 120 }} />
-                </div>
-              </div>
-          }
-        </div>
-      </div>
+            </div>
+        }
+      </>
     );
   }
 
@@ -110,12 +106,10 @@ export function GameDetailDesktop() {
 
 
   return (
-    <div className="app-shell hoard-noise">
-      <Sidebar />
-      <div className="app-main">
-        <TopBar crumbs={['hoard', 'library', g.game.title.toLowerCase()]} />
+    <>
+      <TopBar crumbs={['hoard', 'library', g.game.title.toLowerCase()]} />
 
-        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', display: 'grid', gridTemplateColumns: '1fr 480px' }}>
+      <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', display: 'grid', gridTemplateColumns: '1fr 480px' }}>
 
           {/* LEFT */}
           <div style={{ padding: '32px 36px 40px' }}>
@@ -401,7 +395,6 @@ export function GameDetailDesktop() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </>
   );
 }

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icon } from '../primitives/Icon';
 import type { IconName } from '../primitives/Icon';
@@ -9,7 +10,7 @@ const TABS: { label: string; icon: IconName; path: string }[] = [
   { label: 'Me',      icon: 'circle', path: '/settings' },
 ];
 
-export function MobileTabBar() {
+function MobileTabBarImpl() {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -31,3 +32,5 @@ export function MobileTabBar() {
     </div>
   );
 }
+
+export const MobileTabBar = memo(MobileTabBarImpl);

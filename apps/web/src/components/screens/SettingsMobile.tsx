@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
-import { MobileTabBar } from '../layout/MobileTabBar';
 import { Toggle, Radio, PlatformDot } from '../settings';
 import type { PlatConnectStatus } from '../settings';
 import { Icon } from '../primitives/Icon';
@@ -10,8 +8,9 @@ import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { api } from '../../lib/api';
+import { useUser } from '../../contexts/UserContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
-import type { AuthUser, PlatformDetail, PlatformCode } from '@hoard/types';
+import type { PlatformDetail, PlatformCode } from '@hoard/types';
 
 const TOP_SECTIONS = [
   { key: 'account',      label: 'account',       sub: 'andrea · andrea@lx-media.at', icon: 'user'     },
@@ -27,7 +26,7 @@ const TOP_SECTIONS = [
 export function SettingsMobile() {
   const { section } = useParams<{ section: string }>();
   const navigate = useNavigate();
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const { user, setUser, signOut } = useUser();
   const [platforms, setPlatforms] = useState<PlatformDetail[]>([]);
   const [draftName, setDraftName] = useState('');
   const [draftEmail, setDraftEmail] = useState('');
@@ -38,7 +37,6 @@ export function SettingsMobile() {
   const { prefs, updatePref } = usePreferences();
 
   useEffect(() => {
-    void api.me().then((r) => setUser(r)).catch(() => null);
     void api.platformStatus().then((r) => setPlatforms(r.platforms)).catch(() => null);
   }, []);
 
@@ -66,7 +64,7 @@ export function SettingsMobile() {
   // Top-level menu (no section selected)
   if (!section) {
     return (
-      <MobileFrame>
+      <>
         <MobileHeader title="settings" sub={`// ${user?.name ?? '…'} · v0.1`} />
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
           <div style={{
@@ -107,14 +105,13 @@ export function SettingsMobile() {
             <span
               className="t-mono t-faint"
               style={{ fontSize: 10, cursor: 'pointer' }}
-              onClick={() => { void api.logout().then(() => navigate('/login')); }}
+              onClick={() => { void signOut().then(() => navigate('/login')); }}
             >
               // sign out
             </span>
           </div>
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
@@ -125,7 +122,7 @@ export function SettingsMobile() {
 
   if (section === 'account') {
     return (
-      <MobileFrame>
+      <>
         {backHeader('account', `// ${draftName || '…'}`)}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 16px 24px' }}>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
@@ -165,21 +162,20 @@ export function SettingsMobile() {
           <div style={{ padding: '14px 0' }}>
             <Btn
               style={{ width: '100%' }}
-              onClick={() => { void api.logout().then(() => navigate('/login')); }}
+              onClick={() => { void signOut().then(() => navigate('/login')); }}
             >
               <Icon name="x" size={11} /> sign out
             </Btn>
           </div>
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
   if (section === 'platforms') {
     const connectedCodes = new Set(platforms.map((p) => p.code));
     return (
-      <MobileFrame>
+      <>
         {backHeader('platforms', `// ${platforms.length} connected`)}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
           {['ST', 'PS', 'XB', 'GG', 'NT', 'EP'].map((code) => {
@@ -214,14 +210,13 @@ export function SettingsMobile() {
             );
           })}
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
   if (section === 'appearance') {
     return (
-      <MobileFrame>
+      <>
         {backHeader('appearance', '// preferences')}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 24px' }}>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
@@ -292,8 +287,7 @@ export function SettingsMobile() {
             </div>
           </div>
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
@@ -311,7 +305,7 @@ export function SettingsMobile() {
     }
 
     return (
-      <MobileFrame>
+      <>
         {backHeader('danger zone', '// settings')}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 16px 24px' }}>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
@@ -348,20 +342,18 @@ export function SettingsMobile() {
             </Btn>
           </div>
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
   // Generic stub for other sections
   return (
-    <MobileFrame>
+    <>
       {backHeader(section, '// settings')}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Marker>// coming soon</Marker>
       </div>
-      <MobileTabBar />
-    </MobileFrame>
+    </>
   );
 }
 

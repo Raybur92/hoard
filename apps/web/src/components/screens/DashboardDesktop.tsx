@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Sidebar } from '../layout/Sidebar';
+import { useState, useMemo } from 'react';
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
@@ -61,39 +60,42 @@ export function DashboardDesktop() {
   const { data, loading, error } = useDashboard();
   const user = useCurrentUser();
   const [pickIdx, setPickIdx] = useState(0);
+  const platformChart = useMemo(
+    () => (data ? asciiChart(data.stats.playtimeByPlatform) : ''),
+    [data],
+  );
 
   if (loading || error || !data) {
     return (
-      <div className="app-shell hoard-noise">
-        <Sidebar />
-        <div className="app-main">
-          <TopBar crumbs={['hoard', 'dashboard']} />
-          {error
-            ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-                <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
-              </div>
-            : <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div className="skel" style={{ width: 160, height: 12 }} />
-                    <div className="skel" style={{ width: 80, height: 48 }} />
-                    <div className="skel" style={{ width: 220, height: 12 }} />
-                  </div>
-                  <div className="skel" style={{ height: 96 }} />
+      <>
+        <TopBar crumbs={['hoard', 'dashboard']} />
+        {error
+          ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+              <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+            </div>
+          : <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="skel" style={{ width: 160, height: 12 }} />
+                  <div className="skel" style={{ width: 80, height: 48 }} />
+                  <div className="skel" style={{ width: 220, height: 12 }} />
                 </div>
-                <div className="skel" style={{ height: 140 }} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                  <div className="skel" style={{ height: 220 }} />
-                  <div className="skel" style={{ height: 220 }} />
-                </div>
+                <div className="skel" style={{ height: 96 }} />
               </div>
-          }
-        </div>
-      </div>
+              <div className="skel" style={{ height: 140 }} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div className="skel" style={{ height: 220 }} />
+                <div className="skel" style={{ height: 220 }} />
+              </div>
+            </div>
+        }
+      </>
     );
   }
 
-  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms } = data;
+  // `activity` is required in the new DashboardResponse, but old cached
+  // payloads (SW or in-memory) from before F14 may not have it — fall back.
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = data;
   const np = nowPlaying[0] ?? null;
 
   const backlogPool: UserGameDetail[] = backlogItems.length > 0 ? backlogItems : [];
@@ -103,15 +105,6 @@ export function DashboardDesktop() {
     if (backlogPool.length === 0) return;
     setPickIdx(Math.floor(Math.random() * backlogPool.length));
   }
-
-  const shelfCounts = {
-    Playing: stats.playingCount,
-    Backlog: stats.backlogCount,
-    Completed: stats.completedCount,
-    'On Hold': stats.onHoldCount,
-    Dropped: stats.droppedCount,
-    Wishlist: stats.wishlistCount,
-  };
 
   const npTotalMins = np
     ? Object.values(np.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0)
@@ -128,16 +121,13 @@ export function DashboardDesktop() {
     : [];
 
   return (
-    <div className="app-shell hoard-noise">
-      <Sidebar shelfCounts={shelfCounts} />
+    <>
+      <TopBar
+        crumbs={['hoard', 'dashboard']}
+        syncedAt={platforms[0]?.lastSyncAt ? `synced ${formatRelative(platforms[0].lastSyncAt)}` : null}
+      />
 
-      <div className="app-main">
-        <TopBar
-          crumbs={['hoard', 'dashboard']}
-          syncedAt={platforms[0]?.lastSyncAt ? `synced ${formatRelative(platforms[0].lastSyncAt)}` : null}
-        />
-
-        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 32px' }}>
+      <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 32px' }}>
 
           {/* hero row */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28, alignItems: 'end' }}>
@@ -245,14 +235,14 @@ export function DashboardDesktop() {
                   </span>
                 </div>
                 <pre className="ascii t-dim" style={{ marginTop: 12, fontSize: 12, lineHeight: 1.55 }}>
-                  {asciiChart(stats.playtimeByPlatform)}
+                  {platformChart}
                 </pre>
               </div>
 
               {/* heatmap */}
               <div className="panel" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
-                  <Marker>// activity · last 24 weeks</Marker>
+                  <Marker>// games last-played · 24 wk</Marker>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--paper-faint)' }}>
                     <span>less</span>
                     <div className="heat-cell" /><div className="heat-cell l1" /><div className="heat-cell l2" />
@@ -260,7 +250,7 @@ export function DashboardDesktop() {
                     <span>more</span>
                   </div>
                 </div>
-                <Heatmap weeks={24} days={7} density={0.6} />
+                <Heatmap weeks={activity.weeks} days={7} cells={activity.cells} />
               </div>
             </div>
 
@@ -364,8 +354,7 @@ export function DashboardDesktop() {
             </>
           )}
         </div>
-      </div>
-    </div>
+    </>
   );
 }
 

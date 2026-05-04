@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
 import { SettingsNav, SettingsRow, Toggle, Radio, PlatformDot } from '../settings';
 import type { PlatConnectStatus } from '../settings';
@@ -68,7 +67,7 @@ export function PlatformDetailDesktop() {
 
   if (!info) {
     return (
-      <div className="hoard-screen" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
         <span className="t-faint">Unknown platform</span>
       </div>
     );
@@ -86,13 +85,11 @@ export function PlatformDetailDesktop() {
   ];
 
   return (
-    <div className="hoard-screen hoard-noise" style={{ width: '100%', height: '100%', display: 'flex' }}>
-      <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar crumbs={['hoard', 'settings', 'platforms', info.name]} />
-        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <SettingsNav active="Platforms" />
-          <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '28px 40px 40px', maxWidth: 1080 }}>
+    <>
+      <TopBar crumbs={['hoard', 'settings', 'platforms', info.name]} />
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <SettingsNav active="Platforms" />
+        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '28px 40px 40px', maxWidth: 1080 }}>
 
             {/* back link */}
             <div
@@ -220,10 +217,9 @@ last sync   ${platform.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}
               <PsnConnectPanel npssoInput={npssoInput} setNpssoInput={setNpssoInput} />
             )}
 
-          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

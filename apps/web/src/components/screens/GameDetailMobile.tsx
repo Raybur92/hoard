@@ -1,5 +1,4 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { MobileFrame } from '../layout/MobileFrame';
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
@@ -25,20 +24,18 @@ export function GameDetailMobile() {
 
   if (loading || !ug) {
     return (
-      <MobileFrame>
-        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
-          {error
-            ? <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
-            : <>
-                <div className="skel" style={{ height: 180 }} />
-                <div className="skel" style={{ width: 200, height: 20 }} />
-                <div className="skel" style={{ width: 120, height: 11 }} />
-                <div className="skel" style={{ height: 80 }} />
-                <div className="skel" style={{ height: 100 }} />
-              </>
-          }
-        </div>
-      </MobileFrame>
+      <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+        {error
+          ? <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+          : <>
+              <div className="skel" style={{ height: 180 }} />
+              <div className="skel" style={{ width: 200, height: 20 }} />
+              <div className="skel" style={{ width: 120, height: 11 }} />
+              <div className="skel" style={{ height: 80 }} />
+              <div className="skel" style={{ height: 100 }} />
+            </>
+        }
+      </div>
     );
   }
 
@@ -65,7 +62,7 @@ export function GameDetailMobile() {
     .join('\n');
 
   return (
-    <MobileFrame>
+    <>
       {/* back-bar header */}
       <div style={{ padding: '8px 16px 10px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--ink)' }}>
         <span
@@ -189,6 +186,6 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
           </div>
         </div>
       </div>
-    </MobileFrame>
+    </>
   );
 }

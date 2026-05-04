@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { memo, useState, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../primitives/Icon';
 import { SearchOverlay } from '../screens/SearchOverlay';
@@ -18,7 +18,7 @@ const CRUMB_PATHS: Record<string, string> = {
   platforms: '/settings/platforms',
 };
 
-export function TopBar({ crumbs = [], right, syncedAt }: TopBarProps) {
+function TopBarImpl({ crumbs = [], right, syncedAt }: TopBarProps) {
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -78,3 +78,5 @@ export function TopBar({ crumbs = [], right, syncedAt }: TopBarProps) {
     </>
   );
 }
+
+export const TopBar = memo(TopBarImpl);

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Sidebar } from '../layout/Sidebar';
 import { TopBar } from '../layout/TopBar';
 import { SettingsNav, SettingsRow, Toggle, Radio, PlatformDot } from '../settings';
 import type { SettingsSection, PlatConnectStatus } from '../settings';
@@ -10,6 +9,7 @@ import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { Hr } from '../primitives/Hr';
 import { api } from '../../lib/api';
+import { useUser } from '../../contexts/UserContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import type { AuthUser, PlatformDetail, PlatformCode } from '@hoard/types';
 
@@ -45,34 +45,30 @@ export function SettingsDesktop() {
   const navSection = SECTION_TO_NAV[section] ?? 'Account';
   const crumbLabel = SECTION_LABELS[section] ?? section;
 
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const { user } = useUser();
   const [platforms, setPlatforms] = useState<PlatformDetail[]>([]);
 
   useEffect(() => {
-    void api.me().then((r) => setUser(r)).catch(() => null);
     void api.platformStatus().then((r) => setPlatforms(r.platforms)).catch(() => null);
   }, []);
 
   return (
-    <div className="hoard-screen hoard-noise" style={{ width: '100%', height: '100%', display: 'flex' }}>
-      <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar crumbs={['hoard', 'settings', crumbLabel]} />
-        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <SettingsNav active={navSection} />
-          <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '28px 40px 40px', maxWidth: 880 }}>
-            {section === 'account'       && <AccountSection user={user} />}
-            {section === 'platforms'     && <PlatformsSection platforms={platforms} />}
-            {section === 'appearance'    && <AppearanceSection />}
-            {section === 'danger'        && <DangerSection user={user} />}
-            {section === 'library'       && <StubSection title="library" />}
-            {section === 'notifications' && <StubSection title="notifications" />}
-            {section === 'privacy'       && <StubSection title="privacy" />}
-            {section === 'export'        && <StubSection title="data export" />}
-          </div>
+    <>
+      <TopBar crumbs={['hoard', 'settings', crumbLabel]} />
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <SettingsNav active={navSection} />
+        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '28px 40px 40px', maxWidth: 880 }}>
+          {section === 'account'       && <AccountSection user={user} />}
+          {section === 'platforms'     && <PlatformsSection platforms={platforms} />}
+          {section === 'appearance'    && <AppearanceSection />}
+          {section === 'danger'        && <DangerSection user={user} />}
+          {section === 'library'       && <StubSection title="library" />}
+          {section === 'notifications' && <StubSection title="notifications" />}
+          {section === 'privacy'       && <StubSection title="privacy" />}
+          {section === 'export'        && <StubSection title="data export" />}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

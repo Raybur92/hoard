@@ -104,6 +104,16 @@ export interface DashboardStats {
   genres: { name: string; count: number }[];
 }
 
+/** Activity heatmap cells, column-major (weeks × 7).
+ *  cells[col * 7 + row] = number of distinct games whose lastPlayedAt fell on
+ *  that day. Row 0 = Sunday … row 6 = Saturday. Column 0 = oldest week in the
+ *  window; column (weeks - 1) = current week.
+ *  Future cells (e.g. tomorrow's row in the rightmost column) stay at 0. */
+export interface ActivityHeatmap {
+  weeks: number;
+  cells: number[];
+}
+
 export interface DashboardResponse {
   stats: DashboardStats;
   nowPlaying: UserGameDetail[];
@@ -111,6 +121,7 @@ export interface DashboardResponse {
   backlogPick: UserGameDetail | null;
   backlogItems: UserGameDetail[];
   platforms: Platform[];
+  activity: ActivityHeatmap;
 }
 
 export interface GameListResponse {
@@ -119,6 +130,11 @@ export interface GameListResponse {
   page: number;
   limit: number;
   hasMore: boolean;
+}
+
+export interface ShelvesResponse {
+  shelves: Record<GameStatus, UserGameDetail[]>;
+  counts: Partial<Record<GameStatus, number>>;
 }
 
 export interface PatchGameBody {

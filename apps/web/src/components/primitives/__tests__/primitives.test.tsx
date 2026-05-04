@@ -83,6 +83,47 @@ describe('Cover', () => {
     const { container } = render(<Cover w={100} h={140} bright />);
     expect(container.querySelector('.cover-ph.bright')).toBeTruthy();
   });
+
+  it('sets loading="lazy", decoding="async", and intrinsic dimensions on the img (F7)', () => {
+    const { container } = render(
+      <Cover w={84} h={112} src="https://example.com/img.jpg" label="Test" />,
+    );
+    const img = container.querySelector('img');
+    expect(img?.getAttribute('loading')).toBe('lazy');
+    expect(img?.getAttribute('decoding')).toBe('async');
+    expect(img?.getAttribute('width')).toBe('84');
+    expect(img?.getAttribute('height')).toBe('112');
+  });
+
+  it('downscales IGDB cover URLs to t_cover_small for mobile-sized covers (F7)', () => {
+    const { container } = render(
+      <Cover
+        w={84}
+        h={112}
+        src="https://images.igdb.com/igdb/image/upload/t_cover_big/co5l9p.jpg"
+        label="Test"
+      />,
+    );
+    expect(container.querySelector('img')?.src).toContain('t_cover_small');
+  });
+
+  it('keeps t_cover_big for desktop-sized covers (F7)', () => {
+    const { container } = render(
+      <Cover
+        w={130}
+        h={174}
+        src="https://images.igdb.com/igdb/image/upload/t_cover_big/co5l9p.jpg"
+        label="Test"
+      />,
+    );
+    expect(container.querySelector('img')?.src).toContain('t_cover_big');
+  });
+
+  it('passes non-IGDB src through unchanged', () => {
+    const url = 'https://example.com/img.jpg';
+    const { container } = render(<Cover w={84} h={112} src={url} label="Test" />);
+    expect(container.querySelector('img')?.src).toBe(url);
+  });
 });
 
 describe('Hr', () => {

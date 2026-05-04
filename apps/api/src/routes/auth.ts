@@ -149,6 +149,7 @@ router.get('/auth/me', requireUser, async (req: Request, res: Response): Promise
     return;
   }
   const body: AuthResponse = { user: toAuthUser(user) };
+  res.set('Cache-Control', 'private, max-age=10');
   res.json(body);
 });
 

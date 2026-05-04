@@ -1,24 +1,41 @@
 import { render } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { Sidebar } from '../Sidebar';
 import { TopBar } from '../TopBar';
 import { MobileFrame } from '../MobileFrame';
 import { MobileTabBar } from '../MobileTabBar';
 import { MobileHeader } from '../MobileHeader';
+import { UserProvider } from '../../../contexts/UserContext';
+
+vi.mock('../../../lib/api', () => ({
+  api: {
+    me: vi.fn().mockRejectedValue(new Error('test: no user')),
+    platformStatus: vi.fn().mockResolvedValue({ platforms: [] }),
+    gameCounts: vi.fn().mockResolvedValue({ counts: {} }),
+    logout: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+function withProviders(ui: ReactNode, route = '/') {
+  return (
+    <MemoryRouter initialEntries={[route]}>
+      <UserProvider>{ui}</UserProvider>
+    </MemoryRouter>
+  );
+}
 
 describe('Sidebar', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
   it('renders without throwing', () => {
-    const { container } = render(
-      <MemoryRouter><Sidebar /></MemoryRouter>,
-    );
+    const { container } = render(withProviders(<Sidebar />));
     expect(container.querySelector('.sidebar')).toBeTruthy();
   });
 
   it('marks active route', () => {
-    const { container } = render(
-      <MemoryRouter initialEntries={['/library']}><Sidebar /></MemoryRouter>,
-    );
+    const { container } = render(withProviders(<Sidebar />, '/library'));
     const activeItem = container.querySelector('.item.active');
     expect(activeItem?.textContent).toContain('Library');
   });

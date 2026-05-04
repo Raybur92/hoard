@@ -189,6 +189,14 @@ describe('GET /api/auth/me', () => {
     const res = await request(app).get('/api/auth/me');
     expect(res.status).toBe(404);
   });
+
+  it('sets a short Cache-Control header on success (F8)', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+
+    const res = await request(app).get('/api/auth/me');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('private, max-age=10');
+  });
 });
 
 /* ── update me ── */

@@ -48,6 +48,14 @@ describe('GET /api/platforms/status', () => {
     expect(res.body.platforms).toEqual([]);
   });
 
+  it('sets a short Cache-Control header (F8)', async () => {
+    (prisma.platform.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([]);
+    const res = await request(app).get('/api/platforms/status');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('private, max-age=30');
+  });
+
   it('returns mapped PlatformDetail entries for connected platforms', async () => {
     (prisma.platform.findMany as jest.Mock).mockResolvedValue([
       {

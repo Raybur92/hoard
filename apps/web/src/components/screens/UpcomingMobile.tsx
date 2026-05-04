@@ -1,6 +1,4 @@
-import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
-import { MobileTabBar } from '../layout/MobileTabBar';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
 import { Icon } from '../primitives/Icon';
@@ -47,7 +45,7 @@ export function UpcomingMobile() {
 
   if (loading || !data) {
     return (
-      <MobileFrame>
+      <>
         <MobileHeader title="upcoming" />
         <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
           <div className="skel" style={{ height: 140 }} />
@@ -56,8 +54,7 @@ export function UpcomingMobile() {
           </div>
           {[0, 1, 2, 3].map(i => <div key={i} className="skel" style={{ height: 48 }} />)}
         </div>
-        <MobileTabBar />
-      </MobileFrame>
+      </>
     );
   }
 
@@ -75,7 +72,7 @@ export function UpcomingMobile() {
   const sub = `// ${items.length} releasing · next in ${nextDays < 9999 ? `${nextDays}d` : 'TBA'}`;
 
   return (
-    <MobileFrame>
+    <>
       <MobileHeader title="upcoming" sub={sub} />
 
       {/* month strip */}
@@ -174,7 +171,6 @@ export function UpcomingMobile() {
           ))}
         </div>
       </div>
-      <MobileTabBar />
-    </MobileFrame>
+    </>
   );
 }

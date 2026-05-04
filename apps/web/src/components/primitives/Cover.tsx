@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { igdbCoverSize } from '../../lib/igdbCover';
 
 export interface CoverProps {
   w: number | string;
@@ -14,11 +15,20 @@ export interface CoverProps {
 
 export function Cover({ w, h, src, label, year, dev, bright, style, children }: CoverProps) {
   if (src) {
+    // For numeric widths, downscale IGDB URLs to the smallest variant that
+    // covers the rendered size. Non-IGDB URLs pass through.
+    const sized = typeof w === 'number' ? igdbCoverSize(src, w) : src;
+    const widthAttr = typeof w === 'number' ? w : undefined;
+    const heightAttr = typeof h === 'number' ? h : undefined;
     return (
       <div style={{ width: w, height: h, overflow: 'hidden', flexShrink: 0, ...style }}>
         <img
-          src={src}
+          src={sized ?? src}
           alt={label ?? ''}
+          width={widthAttr}
+          height={heightAttr}
+          loading="lazy"
+          decoding="async"
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
       </div>
