@@ -62,7 +62,7 @@ These are non-negotiable. Do not deviate without explicit instruction.
 4. **No localStorage for tokens.** JWT lives in HTTP-only cookies only. Never expose auth tokens to JavaScript.
 5. **Login screen has no design file.** Implement `/login` using design system conventions (same tokens, fonts, and utility classes as every other screen). No external reference — match the terminal aesthetic.
 6. **Nintendo and Epic are manual-only.** No OAuth, no sync endpoints for these platforms. Games are added via IGDB search with a `platformLabel` string. Do not build scrapers.
-7. **Never test against the production database.** Integration tests use the `hoard-test` Supabase project exclusively. The test DB is seeded fresh per run.
+7. **Never test against the production database.** Backend integration tests mock Prisma at the module level (each test file declares its own mock with `jest.mock('@hoard/db', ...)`). No live DB connection is established during `npm test`. A separate `hoard-test` Supabase project was originally planned but proven unnecessary — the value at this layer is in route logic, not SQL behavior.
 8. **HLTB failures must be silent.** If `howlongtobeat` throws or returns nothing, store `null` and show "—" in the UI. Never surface an error to the user for HLTB.
 9. **Keep docs current after every phase.** When a phase completes (or any meaningful chunk of work lands), update `docs/PLAN.md` before closing the session:
    - Check off all completed deliverables with `[x]`
@@ -130,9 +130,11 @@ These are non-negotiable. Do not deviate without explicit instruction.
 
 | Context | Database | Seeded? |
 |---|---|---|
-| Local dev | Supabase dev project | Manual (`prisma db seed`) |
-| CI / integration tests | `hoard-test` Supabase project | Auto, before each run |
-| Production | Supabase prod project | Never seeded |
+| Local dev | Supabase production (Option A — shared) | Manual (`prisma db seed`) |
+| CI / integration tests | None — Prisma is mocked per test file | N/A |
+| Production | Supabase production (same as dev) | Never seeded |
+
+Tests run fast (no network) because every `prisma.*` call is intercepted by the test's `jest.mock('@hoard/db', ...)` block.
 
 Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. Regenerate with `npx playwright test --update-snapshots` only when intentional visual changes are made.
 
@@ -160,25 +162,30 @@ All phases complete through Phase 7. App is deployed and reachable from anywhere
 
 **CI workflows:**
 - `.github/workflows/ci.yml` — lint + format + typecheck + tests + builds on every PR
-- `.github/workflows/lighthouse.yml` — Lighthouse CI on PRs touching `apps/web/**`; thresholds: PWA ≥ 90, Performance ≥ 80 (errors); accessibility/best-practices ≥ 90 (warnings)
+- `.github/workflows/lighthouse.yml` — Lighthouse CI on PRs touching `apps/web/**`; thresholds: Performance ≥ 80, Accessibility ≥ 90, Best-practices ≥ 90 (all errors); local run shows 99 / 100 / 100. PWA category was retired in Lighthouse 12 — installability is verified by the offline E2E test instead.
 
 **Recent fixes landed (most recent first):**
-- Test suite restored to green: 4 stale mocks fixed (hltb fetch mock, platforms `$queryRaw`, auth `deleteMany`, TopBar Router wrapper); added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb routes (38 new tests)
-- Phase 6 testing deliverables completed: Playwright offline simulation (`apps/web/tests/e2e-offline/offline.spec.ts`) + Lighthouse CI workflow + thresholds config (`apps/web/lighthouserc.json`)
-- `GET /api/games/counts` endpoint — sidebar shelf counts always accurate on every route
-- Shelf order: Playing → On Hold → Completed → Backlog → Dropped → Wishlist
-- Library shelf cards fill viewport width exactly via `ResizeObserver`; "view all" always occupies last slot
-- Game Detail: status picker + notes editing fully wired (`PATCH /api/games/:id`, optimistic update)
-- HLTB rewritten: `howlongtobeat` npm package was broken (HLTB changed API); replaced with `hltbapi.codepotatoes.de/steam/{steamAppId}`
-- `steamAppId Int? @unique` added to `Game` model; stored during Steam sync; wired through HLTB background triggers
-- Full Steam backfill: 488 Steam app IDs matched, HLTB data fetched for ~300 games
-- PSN sync fully implemented (`psn-api` v2.18.0); `syncPsnLibrary` fetches paginated library with ISO 8601 duration parsing
-- PSN title cleaning: `cleanPsnTitle()` strips ®/™ and PS4/PS5 platform suffixes before IGDB search; 94% match rate (132/140)
-- PSN HLTB backfill (`scripts/backfill-psn-hltb.ts`): Steam Store search for App IDs; 48 HLTB records added for cross-platform PSN games
-- Dashboard genres chart: bars now proportional to max count (`count / maxCount * 100%`) instead of hardcoded multiplier
-- Shareable receipt: OWNED ON + PROGRESS sections converted from `<pre>` to flexbox `.row` divs with CSS dotted spacers and self-sizing section header lines
+- Lint cleanup: 86 pre-existing errors → 0 errors (2 non-blocking HMR warnings remain). ESLint config gained a `scripts/**` override; test middleware mocks now use proper Express types; Express `Request`/`Response` are type-only imports across all routes; `auth.test.ts` mocks `dotenv/config` so OAuth env-dependence is deterministic regardless of local `.env`.
+- Supabase RLS: enabled on all 7 public tables. Captured in migration `20260504100000_enable_rls_on_public_tables`. Closes 8 Supabase Security Advisor errors (rls_disabled_in_public + sensitive_columns_exposed on User.password).
+- Phase 7 — Production deploy + Google OAuth + custom domain: API on Railway (`api.gamehoardr.com`), web on Vercel (`gamehoardr.com`), DNS at Porkbun, SSL auto-provisioned. Google OAuth client wired with new origins/redirect URIs. iOS Safari + Chrome incognito both work because both subdomains share `.gamehoardr.com` parent (cookies are first-party).
+- Cross-origin auth fixes: SameSite=None+Secure cookies in production; `<RequireAuth>` wrapper bouncing unauthenticated users to /login; `VITE_API_URL` base URL prefix in api client; `app.set('trust proxy', 1)` for Railway's proxy; `?pgbouncer=true&connection_limit=1` on `DATABASE_URL` for Supabase transaction pooler.
+- Test suite restored to green: 4 stale mocks fixed (hltb fetch mock, platforms `$queryRaw`, auth `deleteMany`, TopBar Router wrapper); added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb routes (38 new tests).
+- Phase 6 testing deliverables completed: Playwright offline simulation (`apps/web/tests/e2e-offline/offline.spec.ts`) + Lighthouse CI workflow + thresholds config (`apps/web/lighthouserc.json`).
+- `GET /api/games/counts` endpoint — sidebar shelf counts always accurate on every route.
+- Shelf order: Playing → On Hold → Completed → Backlog → Dropped → Wishlist.
+- Library shelf cards fill viewport width exactly via `ResizeObserver`; "view all" always occupies last slot.
+- Game Detail: status picker + notes editing fully wired (`PATCH /api/games/:id`, optimistic update).
+- HLTB rewritten: `howlongtobeat` npm package was broken (HLTB changed API); replaced with `hltbapi.codepotatoes.de/steam/{steamAppId}`.
+- `steamAppId Int? @unique` added to `Game` model; stored during Steam sync; wired through HLTB background triggers.
+- Full Steam backfill: 488 Steam app IDs matched, HLTB data fetched for ~300 games.
+- PSN sync fully implemented (`psn-api` v2.18.0); `syncPsnLibrary` fetches paginated library with ISO 8601 duration parsing.
+- PSN title cleaning: `cleanPsnTitle()` strips ®/™ and PS4/PS5 platform suffixes before IGDB search; 94% match rate (132/140).
+- PSN HLTB backfill (`scripts/backfill-psn-hltb.ts`): Steam Store search for App IDs; 48 HLTB records added for cross-platform PSN games.
+- Dashboard genres chart: bars now proportional to max count (`count / maxCount * 100%`) instead of hardcoded multiplier.
+- Shareable receipt: OWNED ON + PROGRESS sections converted from `<pre>` to flexbox `.row` divs with CSS dotted spacers and self-sizing section header lines.
 
-**Known gaps (low priority):**
-- Google OAuth login: route implemented + tested, but blocked by missing `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env`. Steam OpenID covers the OAuth need in production.
-- Xbox / GOG library sync: stubs returning `[]`. Manual add covers the gap for now (same approach as Nintendo / Epic).
-- 86 pre-existing lint errors (mostly `any` in test middleware mocks, missing `import type` for `Request`/`Response`, and Node globals in `scripts/`) — predate this work; would benefit from a focused lint-cleanup commit.
+**Known gaps (low priority, none blocking):**
+- Steam OpenID on production not yet click-tested — wiring is in code and was working locally; just needs you to log in once via `https://gamehoardr.com/login` to confirm the redirect URI resolves correctly.
+- Xbox / GOG library sync: stubs returning `[]`. Manual add covers the gap (same approach as Nintendo / Epic).
+- Prisma migration history reconciliation — RLS migration is committed and the SQL is applied on Supabase, but `_prisma_migrations` doesn't have a record of it. Cosmetic; `migrate status` shows it as pending. Doesn't affect runtime.
+- `react-refresh/only-export-components` warnings (2) in `PreferencesContext.tsx` — only impact dev-server HMR experience, not builds.

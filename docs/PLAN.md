@@ -633,6 +633,34 @@ Google OAuth:
 
 ---
 
+### Post-Phase 7 — Lint Cleanup + Supabase RLS
+
+**Goal:** Bring the repo to a clean lint state so `.github/workflows/ci.yml` exits 0 reliably, and close the 8 Supabase Security Advisor errors flagged after the production deploy.
+
+**Fixes:**
+
+- [x] **Supabase Row-Level Security** — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on all 7 public tables (`User`, `Platform`, `Game`, `UserGame`, `HltbData`, `WishlistRelease`, `_prisma_migrations`). Captured in migration `20260504100000_enable_rls_on_public_tables`. Closes 8 advisor errors (7× `rls_disabled_in_public` + 1× `sensitive_columns_exposed` on `User.password`). Application queries are unaffected because the `postgres` role used by Prisma bypasses RLS — only the PostgREST anon/authenticated path is locked down.
+- [x] **ESLint scripts override** — added `files: ['scripts/**/*.{js,cjs,mjs}']` block with Node globals + disabled `no-require-imports`. Closes 20 errors in `scripts/generate-icons.cjs`.
+- [x] **Test middleware mocks** — replaced `(req: any, _res: any, next: any)` with proper `Request, Response, NextFunction` types in 7 API route test files. Cast to `Request & { userId: string }` since `userId` is set on the declaration-merged `Express.Request`. Closes 42 `no-explicit-any` errors.
+- [x] **Express type imports** — split `import { Router, Request, Response }` into runtime `import { Router }` plus `import type { Request, Response }` in 7 route source files plus `middleware/user.ts`. Closes 13 `consistent-type-imports` errors.
+- [x] **Misc unused vars** — removed unused imports (`formatRelative`, `MobileTabBar`, `shortYear`, `AuthUser`); renamed unused destructured props with `_` prefix; dropped unused `index` params from `.map` callbacks; replaced two `let result` with `const`; fixed `no-useless-escape` on `\[` inside character class in PSN title regex; replaced inline `import('...').Type` annotations with top-of-file `import type` declarations (e2e specs, dashboard `ReleaseDateCategory`).
+- [x] **`auth.test.ts` determinism** — `jest.mock('dotenv/config', () => ({}))` plus `delete process.env['GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET' | 'STEAM_API_KEY']` at the top of the file before any imports. The "501 when GOOGLE_CLIENT_ID is not configured" test now passes regardless of what's in the developer's local `.env` (previously failed locally as soon as the dev added Google OAuth credentials for local-mode testing).
+- [x] **`dev:web` / `dev:api` scripts** — added to root `package.json` to match the documented commands in CLAUDE.md (they had been documented but never defined).
+
+**Final state:**
+- `npm run lint` exits 0 (was: exit 1 with 86 errors). Two non-blocking HMR warnings remain in `PreferencesContext.tsx`.
+- `npm run typecheck` clean.
+- 103 API tests + 40 web tests passing.
+- Supabase Security Advisor: 0 errors (was: 8 errors).
+
+**Decisions:**
+- The CI lint job had been failing silently for the entire project history — commits went directly to `main` without PR review, so nobody noticed CI was red. Fixing the underlying lint errors is the right move (rather than masking them or removing the lint step) because `npm run lint` is now a useful guard for future PRs.
+- For test middleware mocks, the chosen pattern is `(req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = '...'; next(); }` — the cast acknowledges that `userId` is added via global declaration merging in `middleware/user.ts` but the type is otherwise plain `Request`. `unknown` would be too loose; a custom test-only `AuthedRequest` type adds boilerplate.
+- The `auth.test.ts` `dotenv/config` mock + env-deletion approach was chosen over per-test `jest.resetModules()` reloading — the OAuth env state needs to be fixed BEFORE the auth route module first loads, and the route is loaded transitively via `import { app } from '../index';` which runs before any `beforeAll` hook can fire.
+- Prisma migration history reconciliation deferred — the RLS migration's SQL is already applied to Supabase (run manually before the migration file existed), but `prisma migrate resolve --applied` hangs in this environment (likely a pgbouncer + migrate-resolve quirk over a slow connection). `prisma migrate status` will show this migration as pending, but the SQL is idempotent so any future `migrate deploy` is a no-op. Cosmetic, not functional.
+
+---
+
 ### Post-Phase 6 — PSN Sync Quality & HLTB Coverage
 
 These items were addressed after PSN was connected and real data revealed gaps.
@@ -709,5 +737,6 @@ These items were addressed after PSN was connected and real data revealed gaps.
 | Post-6 — PSN Sync Quality & HLTB | Done | PSN title cleaning (®/™/platform suffix strip, 94% IGDB match rate), PSN HLTB backfill via Steam Store search (48 records), genres chart proportional bars. |
 | Post-6 — Test Backfill & CI Hardening | Done | Fixed 4 stale test suites (hltb fetch mock, platforms `$queryRaw` mock, auth `deleteMany` mock, TopBar Router wrapper). Added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb. Added Playwright offline E2E (`test:e2e:offline`) + Lighthouse CI workflow with Performance ≥ 80 / Accessibility ≥ 90 / Best-practices ≥ 90 thresholds. Final: 103 API + 40 web tests passing; Lighthouse local Performance 99 / Accessibility 100 / Best-practices 100. |
 | 7 — Deploy + Google OAuth | Done | Railway + Vercel live behind custom domain `gamehoardr.com` (Porkbun registrar). API at `api.gamehoardr.com`, web at `gamehoardr.com`. Email/password + Google OAuth verified end-to-end on desktop Chrome (regular + incognito) and iOS Safari. Cross-origin cookie problem resolved — both subdomains share `.gamehoardr.com` parent so cookies are first-party. Steam OpenID still pending production verification. |
+| Post-7 — Lint Cleanup + Supabase RLS | Done | `npm run lint` 86 errors → 0 errors (CI lint job now actually green). RLS enabled on all public tables, closing 8 Supabase Security Advisor errors. Test suite still 103 API + 40 web all passing. `auth.test.ts` made deterministic via `dotenv/config` mock so it passes regardless of local OAuth env. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.

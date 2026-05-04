@@ -14,6 +14,11 @@ The name is intentional. A hoard is a collection that got out of hand — and th
 
 **This is a personal tool, not a SaaS product.** It is built for one user (andrea) and designed accordingly — dense, a little obsessive, and proud of it. Do not make it generic. Do not soften the aesthetic. Do not add features to appeal to a broader audience.
 
+**Live URLs:**
+- Web: `https://gamehoardr.com` (Vercel)
+- API: `https://api.gamehoardr.com` (Railway)
+- DB: Supabase (single shared project for dev + prod)
+
 ---
 
 ## Design Philosophy
@@ -195,6 +200,18 @@ Three at launch: email/password, Google OAuth 2.0, Steam OpenID. Steam OpenID in
 
 **6. Multi-user schema**
 Schema is multi-user-ready from day one (all records scoped to `userId`). No user-facing multi-user features in v1.
+
+**7. Production deployment**
+Web: Vercel at `gamehoardr.com`. API: Railway at `api.gamehoardr.com`. Database: Supabase (single project shared across dev and prod — Option A). Custom domain registered at Porkbun, DNS at Porkbun, SSL auto-provisioned by Vercel and Railway. Both subdomains share `.gamehoardr.com` parent so auth cookies are first-party — required for iOS Safari + Chrome incognito to work.
+
+**8. Cross-origin auth cookie strategy**
+JWT session cookie set with `SameSite=None; Secure` in production, `SameSite=Lax` in dev. Driven by `NODE_ENV === 'production'` check in `cookieOptions()` helper at `apps/api/src/routes/auth.ts`. The custom domain (key decision 7) makes cookies first-party regardless of these flags, but the SameSite=None config remains correct in case of future preview deployments under a different domain.
+
+**9. Test isolation strategy**
+Backend integration tests mock Prisma at the module level (each test file: `jest.mock('@hoard/db', () => ({ prisma: { ... } }))`). No live DB connection during `npm test`. The `hoard-test` Supabase project that earlier docs referenced was never provisioned — the value at this layer is in route logic, status code mapping, and request/response shape, not in exercising actual SQL.
+
+**10. Supabase RLS**
+RLS is enabled on every public table even though the codebase doesn't use Supabase's PostgREST API. Reason: Supabase's anon key is public (often leaked accidentally), and without RLS, anyone with the project URL + anon key can hit `https://<ref>.supabase.co/rest/v1/User` and read every row including `User.password`. Prisma uses the `postgres` role which bypasses RLS, so application queries are unaffected. Captured in migration `20260504100000_enable_rls_on_public_tables`.
 
 ---
 
