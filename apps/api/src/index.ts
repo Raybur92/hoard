@@ -46,7 +46,9 @@ function corsOrigin(
 ): void {
   if (!origin) { callback(null, true); return; } // server-to-server / health probes
   if (origin === WEB_URL || origin === DEV_URL) { callback(null, true); return; }
-  // Allow Vercel preview deployments (pattern: hoard*.vercel.app)
+  // Production domain (apex + any subdomain on the same parent)
+  if (/^https:\/\/(?:[a-z0-9-]+\.)?gamehoardr\.com$/.test(origin)) { callback(null, true); return; }
+  // Vercel preview deployments (pattern: hoard*.vercel.app)
   if (/^https:\/\/hoard[a-z0-9-]*\.vercel\.app$/.test(origin)) { callback(null, true); return; }
   callback(null, false);
 }
