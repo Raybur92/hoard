@@ -143,9 +143,11 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 **Active: No active phase — production deploy live**
 
 Production URLs:
-- Web: https://hoard-liard.vercel.app (Vercel)
-- API: https://hoardapi-production.up.railway.app (Railway)
+- Web: **https://gamehoardr.com** (Vercel)
+- API: **https://api.gamehoardr.com** (Railway)
 - Database: Supabase (single project shared with dev — Option A from Phase 7)
+- Domain: gamehoardr.com via Porkbun (DNS at Porkbun)
+- Fallback URLs (still active, for emergencies): `hoard-liard.vercel.app`, `hoardapi-production.up.railway.app`
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
