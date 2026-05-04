@@ -1,10 +1,20 @@
 # Hoard — Performance & UX Plan
 
-> **Scope:** Prioritized plan to fix the "clunky and slow" feel of the running app — both desktop and mobile. Each item carries the goal, the files involved, an implementation sketch, the tests we will add, and the success criteria we accept the work against.
+> **Scope:** Prioritized plan to fix the "clunky and slow" feel of the running app — both desktop and mobile. Each item carries the goal, the files involved, an implementation sketch, the tests we added, and the success criteria the work was accepted against.
 >
-> **Status:** Drafted 2026-05-04 after a full perf audit. None of these have been started yet.
+> **Status:** **Complete (2026-05-04)**. All 14 fix items shipped across 6 PRs the same day. Final results below.
 >
-> **Why a separate doc:** `docs/PLAN.md` covers feature phases and is already large. This file captures a focused workstream that we'll cross off independently and (eventually) fold a one-line summary back into `PLAN.md` when complete.
+> **Why a separate doc:** `docs/PLAN.md` covers feature phases and is already large. This file captures the focused workstream as a permanent record (status table in §6, decisions log in §7, commit references in CLAUDE.md / `git log`).
+>
+> **Final results — measured on production:**
+> - `/api/games/shelves?perStatus=12` — **10.6 s → 460 ms** (23×)
+> - `/api/dashboard` — **10.9 s → ~500 ms** (22×)
+> - `/health` (single `SELECT 1`) — **1.4 s → 130 ms** (10×)
+> - Initial JS bundle — **105.68 → 75.38 KB gzipped** (~30%)
+> - Mobile cover bandwidth — **~6× lower** (IGDB `t_cover_small` for ≤90 px targets)
+> - Test totals — **115 API + 69 web** passing (was 103 + 40)
+>
+> The bulk of the latency win came from two infra fixes discovered after the code work: moving Railway from `us-west` to `EU West (Amsterdam)` to match Supabase region, and bumping `connection_limit=1` to `connection_limit=5` in `DATABASE_URL`. Both documented in `CLAUDE.md` under "Operational gotchas."
 
 ---
 
