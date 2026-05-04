@@ -608,7 +608,7 @@ Google OAuth:
 - [x] Vercel deployment renders without console errors
 - [x] Email/password registration works end-to-end against the deployed API; cross-origin cookie persists across page loads
 - [ ] Steam OpenID login works end-to-end (needs the OpenID return URL re-pointed to the Railway domain — verify after deploy is fully settled)
-- [ ] Google OAuth login works end-to-end (next sub-step — needs Google Cloud Console setup)
+- [x] Google OAuth login works end-to-end — confirmed in regular Chrome; fails in Chrome incognito due to third-party cookie blocking (known limitation; see decisions)
 - [ ] Library sync (Steam + PSN) runs against the production API with no errors (test once Steam OpenID is connected on the prod account)
 - [ ] PWA install on iOS Safari succeeds (HTTPS available via Vercel)
 - [x] No CORS errors in browser console when web → api requests fire
@@ -626,6 +626,8 @@ Google OAuth:
 - `<RequireAuth>` wraps every protected route. It calls `api.me()` once on mount: success → render children, 401 → `<Navigate to="/login" replace state={{ from: pathname }} />`. Without it, an unauthenticated user landed on a blank dashboard because the dev fallback (`JWT_SECRET === 'dev-secret'`) auto-authenticated them locally.
 - `app.set('trust proxy', 1)` is required on Railway. Without it, `X-Forwarded-For` is ignored, `req.ip` returns the proxy IP, and `express-rate-limit` throws a `ValidationError` on every request. `1` (one hop) is the right value — `true` would trust any forwarded header, which is a spoofing risk.
 - `DATABASE_URL` on Railway must include `?pgbouncer=true&connection_limit=1` query params. Supabase's transaction-mode pooler (port 6543) doesn't support prepared statements, but Prisma uses them by default — every request crashes with `prepared statement "s0" already exists`. The `pgbouncer=true` flag tells Prisma to disable prepared statements for pgbouncer compatibility; `connection_limit=1` keeps Prisma from exhausting the per-tenant pgbouncer pool from a single Railway container.
+- Google OAuth uses three Railway env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI=https://hoardapi-production.up.railway.app/api/auth/google/callback`. The OAuth client in Google Cloud Console is in **Testing** mode (not Production) — that's intentional and indefinitely fine for a personal tool. Test mode requires either project-owner sign-in OR explicit Test Users; Production mode requires a multi-week verification process from Google. Project owners can sign in without being on the Test Users list.
+- Chrome **incognito** blocks third-party cookies even with `SameSite=None; Secure`, so the Google OAuth flow appears to succeed but `/api/auth/me` 401s on the next request — RequireAuth bounces back to /login. This is a Chrome privacy policy, not a bug. Regular Chrome and other browsers work. Long-term fix is one of: (a) Vercel `vercel.json` rewrites that proxy `/api/*` from Vercel domain to Railway (eliminates cross-site classification), (b) custom domain where web and API share a parent (`hoard.app` + `api.hoard.app` both first-party under `.hoard.app`). Deferred until a custom domain decision is made.
 
 ---
 
@@ -704,6 +706,6 @@ These items were addressed after PSN was connected and real data revealed gaps.
 | Post-6 — UX Fixes & Data Quality | Done | Settings game count, shelf counts, shelf order, game detail editing, viewport-filling shelves, HLTB rewrite (codepotatoes.de), steamAppId on Game, full HLTB + status backfill. |
 | Post-6 — PSN Sync Quality & HLTB | Done | PSN title cleaning (®/™/platform suffix strip, 94% IGDB match rate), PSN HLTB backfill via Steam Store search (48 records), genres chart proportional bars. |
 | Post-6 — Test Backfill & CI Hardening | Done | Fixed 4 stale test suites (hltb fetch mock, platforms `$queryRaw` mock, auth `deleteMany` mock, TopBar Router wrapper). Added Phase 3 integration tests for games/dashboard/stats/upcoming/igdb. Added Playwright offline E2E (`test:e2e:offline`) + Lighthouse CI workflow with Performance ≥ 80 / Accessibility ≥ 90 / Best-practices ≥ 90 thresholds. Final: 103 API + 40 web tests passing; Lighthouse local Performance 99 / Accessibility 100 / Best-practices 100. |
-| 7 — Deploy + Google OAuth | Active | Railway + Vercel deploys live (API at `hoardapi-production.up.railway.app`, web at `hoard-liard.vercel.app`). End-to-end auth verified with cross-origin cookies. Remaining: Google OAuth client setup + verify Steam OpenID on prod redirects correctly. |
+| 7 — Deploy + Google OAuth | Done | Railway + Vercel live (`hoardapi-production.up.railway.app`, `hoard-liard.vercel.app`). Email/password + Google OAuth verified end-to-end. Steam OpenID still pending production verification. Chrome incognito has a third-party cookie block on cross-domain auth (Vercel ↔ Railway) — known limitation; long-term fix via Vercel rewrites or custom domain deferred. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.

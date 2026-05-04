@@ -140,11 +140,16 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: Deployment + Google OAuth**
+**Active: No active phase — production deploy live**
+
+Production URLs:
+- Web: https://hoard-liard.vercel.app (Vercel)
+- API: https://hoardapi-production.up.railway.app (Railway)
+- Database: Supabase (single project shared with dev — Option A from Phase 7)
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
-All phases complete through Post-Phase 6 at the code level. The app is currently used locally (`npm run dev`); next step is deployment to Railway (API) + Vercel (web) and Google OAuth setup so it's reachable from anywhere.
+All phases complete through Phase 7. App is deployed and reachable from anywhere. Email/password and Google OAuth login both verified end-to-end. Steam OpenID still works locally and just needs the same redirect URI verification on prod.
 
 **Test commands:**
 - `npm run test` — 103 API tests + 40 web tests, all passing
