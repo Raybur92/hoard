@@ -177,17 +177,18 @@ export function LibraryDesktop() {
   const isFiltered = !!statusParam;
 
   // Shelves view: top N per status + counts in one round trip.
-  const { data: shelvesData, loading: shelvesLoading, refetch: refetchShelves } =
+  const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
     useShelves(12, { enabled: !isFiltered });
 
   // Filtered single-shelf view: paginated single-status fetch.
-  const { data: filteredData, loading: filteredLoading, refetch: refetchFiltered } =
+  const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
     useGames(
       isFiltered ? { status: statusParam as GameStatus, limit: 500 } : undefined,
       { enabled: isFiltered },
     );
 
   const loading = isFiltered ? filteredLoading : shelvesLoading;
+  const error = isFiltered ? filteredError : shelvesError;
   const refetch = isFiltered ? refetchFiltered : refetchShelves;
 
   const { prefs, updatePref } = usePreferences();
@@ -217,6 +218,19 @@ export function LibraryDesktop() {
     }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [shelvesData, applyFilters, JSON.stringify(shelfCounts)]);
+
+  if (error) {
+    return (
+      <>
+        <TopBar crumbs={['hoard', 'library']} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '32px' }}>
+          <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// failed to load library`}</span>
+          <span className="t-mono t-faint" style={{ fontSize: 11, maxWidth: 480, textAlign: 'center' }}>{error}</span>
+          <Btn sm onClick={() => refetch()}>retry</Btn>
+        </div>
+      </>
+    );
+  }
 
   if (loading || (!isFiltered && !shelvesData) || (isFiltered && !filteredData)) {
     // Skeleton mirrors the real layout (filter bar + 6 shelves with the

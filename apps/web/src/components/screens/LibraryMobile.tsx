@@ -112,15 +112,16 @@ export function LibraryMobile() {
   const { status: statusParam } = useParams<{ status?: string }>();
   const isFiltered = !!statusParam;
 
-  const { data: shelvesData, loading: shelvesLoading, refetch: refetchShelves } =
+  const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
     useShelves(4, { enabled: !isFiltered });
-  const { data: filteredData, loading: filteredLoading, refetch: refetchFiltered } =
+  const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
     useGames(
       isFiltered ? { status: statusParam as GameStatus, limit: 500 } : undefined,
       { enabled: isFiltered },
     );
 
   const loading = isFiltered ? filteredLoading : shelvesLoading;
+  const error = isFiltered ? filteredError : shelvesError;
   const refetch = isFiltered ? refetchFiltered : refetchShelves;
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -147,6 +148,19 @@ export function LibraryMobile() {
     }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [shelvesData, applyFilters, JSON.stringify(shelfCounts)]);
+
+  if (error) {
+    return (
+      <>
+        <MobileHeader title="shelves" sub="// load failed" />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '24px' }}>
+          <span className="t-mono t-red" style={{ fontSize: 11 }}>{`// failed to load library`}</span>
+          <span className="t-mono t-faint" style={{ fontSize: 10, maxWidth: 320, textAlign: 'center' }}>{error}</span>
+          <Btn sm onClick={() => refetch()}>retry</Btn>
+        </div>
+      </>
+    );
+  }
 
   if (loading || (!isFiltered && !shelvesData) || (isFiltered && !filteredData)) {
     // Skeleton mirrors the real layout (header + chip row + 6 shelves) so
