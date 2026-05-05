@@ -10,6 +10,7 @@ import { Heatmap } from '../primitives/Heatmap';
 import { Btn } from '../primitives/Btn';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { PullableScroll } from '../primitives/PullableScroll';
 import { minutesToHours, formatRelative, daysUntil, buildAsciiBar } from '../../lib/utils';
 import type { PlatformStat, UserGameDetail, WishlistRelease } from '@hoard/types';
 
@@ -48,13 +49,26 @@ function asciiChart(platforms: PlatformStat[]): string {
 export function DashboardMobile() {
   useDocumentTitle("Dashboard");
   const navigate = useNavigate();
-  const { data, loading } = useDashboard();
+  const { data, loading, error, refetch } = useDashboard();
   const user = useCurrentUser();
   const [pickIdx, setPickIdx] = useState(0);
   const platformChart = useMemo(
     () => (data ? asciiChart(data.stats.playtimeByPlatform) : ''),
     [data],
   );
+
+  if (error) {
+    return (
+      <>
+        <MobileHeader title="hoard" sub="// load failed" />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '24px' }}>
+          <span className="t-mono t-red" style={{ fontSize: "var(--text-2xs)" }}>{`// failed to load dashboard`}</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", maxWidth: 320, textAlign: 'center' }}>{error}</span>
+          <Btn sm onClick={() => refetch()}>retry</Btn>
+        </div>
+      </>
+    );
+  }
 
   if (loading || !data) {
     return (
@@ -77,6 +91,32 @@ export function DashboardMobile() {
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
   const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = data;
+
+  // First-run / empty state: zero games owned. Replace the full dashboard.
+  if (stats.totalGames === 0) {
+    return (
+      <>
+        <MobileHeader title="hoard" sub="// nothing here yet" />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="panel" style={{ padding: 24, width: '100%', textAlign: 'center' }}>
+            <Marker>// nothing here yet</Marker>
+            <h2 className="t-display" style={{ fontSize: "var(--text-md)", margin: '12px 0 0', color: 'var(--paper)', fontWeight: 'normal' }}>your hoard is empty</h2>
+            <p style={{ marginTop: 12, color: 'var(--paper-dim)', fontSize: "var(--text-xs)", lineHeight: 1.5 }}>
+              connect a platform to sync your library, or add a game manually.
+            </p>
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Btn variant="primary" onClick={() => navigate('/settings/platforms')}>
+                <Icon name="link" size={11} /> connect a platform
+              </Btn>
+              <Btn onClick={() => navigate('/library')}>
+                <Icon name="plus" size={11} /> add a game
+              </Btn>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
   const backlogPool: UserGameDetail[] = backlogItems.length > 0 ? backlogItems : [];
   const displayPick: UserGameDetail | null = backlogPool[pickIdx] ?? backlogPick;
   function shufflePick() {
@@ -115,11 +155,8 @@ export function DashboardMobile() {
           </>
         }
       />
-      {/* tabIndex on a scrollable region is the canonical Safari keyboard-scroll
-          fix (axe rule scrollable-region-focusable); jsx-a11y disagrees, but
-          the WCAG 2.1.1 requirement wins here. */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
-      <div className="thin-scroll" tabIndex={0} role="region" aria-label="Dashboard content" style={{ flex: 1, overflow: 'auto' }}>
+      <PullableScroll onRefresh={refetch} ariaLabel="Dashboard content">
+
 
         <div style={{ padding: '14px 16px 4px' }}>
           <Marker>// good {greeting()}, {(user?.name ?? user?.email?.split('@')[0] ?? 'hoard').toLowerCase()}</Marker>
@@ -289,7 +326,7 @@ export function DashboardMobile() {
           </div>
         )}
 
-      </div>
+      </PullableScroll>
     </>
   );
 }

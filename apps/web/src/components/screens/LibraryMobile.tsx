@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
 import { Cover } from '../primitives/Cover';
@@ -11,6 +11,7 @@ import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours } from '../../lib/utils';
+import { PullableScroll } from '../primitives/PullableScroll';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
 
@@ -150,7 +151,16 @@ export function LibraryMobile() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<SortBy>('lastPlayed');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sortBy: SortBy = (() => {
+    const v = searchParams.get('sort');
+    return v === 'title' || v === 'playtime' || v === 'lastPlayed' ? v : 'lastPlayed';
+  })();
+  const setSortBy = (s: SortBy) => {
+    const next = new URLSearchParams(searchParams);
+    if (s === 'lastPlayed') next.delete('sort'); else next.set('sort', s);
+    setSearchParams(next, { replace: true });
+  };
 
   const applyFilters = useCallback((games: UserGameDetail[]): UserGameDetail[] => {
     const result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
@@ -266,7 +276,7 @@ export function LibraryMobile() {
             <Icon name="arrowD" size={10} style={{ marginRight: 4 }} />{SORT_LABELS[sortBy]}
           </Chip>
         </div>
-        <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 20px' }}>
+        <PullableScroll onRefresh={refetch} ariaLabel={`${title} games`} style={{ padding: '12px 16px 20px' }}>
           {items.length === 0 ? (
             <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>// no titles in this shelf yet</span>
           ) : (
@@ -297,7 +307,7 @@ export function LibraryMobile() {
               ))}
             </div>
           )}
-        </div>
+        </PullableScroll>
       </>
     );
   }
@@ -325,11 +335,30 @@ export function LibraryMobile() {
           <Icon name="arrowD" size={10} style={{ marginRight: 4 }} />{SORT_LABELS[sortBy]}
         </Chip>
       </div>
-      <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', marginTop: 6 }}>
-        {shelves.map((s, i) => (
-          <MobileShelf key={s.status} idx={i + 1} shelf={s} coverW={coverW} coverH={coverH} />
-        ))}
-      </div>
+      <PullableScroll onRefresh={refetch} ariaLabel="Library shelves" style={{ marginTop: 6 }}>
+        {totalGames === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+            <div className="panel" style={{ padding: 20, width: '100%', textAlign: 'center' }}>
+              <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>// no titles yet</span>
+              <p style={{ marginTop: 10, color: 'var(--paper-dim)', fontSize: "var(--text-xs)", lineHeight: 1.5 }}>
+                your library is empty. connect a platform or add a game manually.
+              </p>
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Btn variant="primary" onClick={() => navigate('/settings/platforms')}>
+                  <Icon name="link" size={11} /> connect a platform
+                </Btn>
+                <Btn onClick={() => setShowAddModal(true)}>
+                  <Icon name="plus" size={11} /> add a game
+                </Btn>
+              </div>
+            </div>
+          </div>
+        ) : (
+          shelves.map((s, i) => (
+            <MobileShelf key={s.status} idx={i + 1} shelf={s} coverW={coverW} coverH={coverH} />
+          ))
+        )}
+      </PullableScroll>
     </>
   );
 }

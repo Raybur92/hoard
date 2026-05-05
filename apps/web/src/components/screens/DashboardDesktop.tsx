@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
+import { AddGameModal } from './AddGameModal';
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { Cover } from '../primitives/Cover';
@@ -59,9 +61,11 @@ function nowPlayingTitle(title: string) {
 
 export function DashboardDesktop() {
   useDocumentTitle("Dashboard");
-  const { data, loading, error } = useDashboard();
+  const navigate = useNavigate();
+  const { data, loading, error, refetch } = useDashboard();
   const user = useCurrentUser();
   const [pickIdx, setPickIdx] = useState(0);
+  const [showAddModal, setShowAddModal] = useState(false);
   const platformChart = useMemo(
     () => (data ? asciiChart(data.stats.playtimeByPlatform) : ''),
     [data],
@@ -72,8 +76,10 @@ export function DashboardDesktop() {
       <>
         <TopBar crumbs={['hoard', 'dashboard']} />
         {error
-          ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// error: ${error}`}</span>
+          ? <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14 }}>
+              <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// failed to load dashboard`}</span>
+              <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", maxWidth: 480, textAlign: 'center' }}>{error}</span>
+              <Btn sm onClick={() => refetch()}>retry</Btn>
             </div>
           : <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28 }}>
@@ -99,6 +105,36 @@ export function DashboardDesktop() {
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
   const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = data;
   const np = nowPlaying[0] ?? null;
+
+  // First-run / empty state: zero games owned. Replace the full dashboard
+  // with an onboarding panel instead of rendering empty stats.
+  if (stats.totalGames === 0) {
+    return (
+      <>
+        <TopBar crumbs={['hoard', 'dashboard']} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px' }}>
+          <div className="panel" style={{ padding: 40, maxWidth: 520, width: '100%', textAlign: 'center' }}>
+            <Marker>// nothing here yet</Marker>
+            <h2 className="t-display" style={{ fontSize: "var(--text-xl)", margin: '14px 0 0', color: 'var(--paper)', fontWeight: 'normal' }}>your hoard is empty</h2>
+            <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", lineHeight: 1.55 }}>
+              connect a gaming account to sync your library, or add a game manually if you want to start curating by hand.
+            </p>
+            <div style={{ marginTop: 22, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Btn variant="primary" onClick={() => navigate('/settings/platforms')}>
+                <Icon name="link" size={11} /> connect a platform
+              </Btn>
+              <Btn onClick={() => setShowAddModal(true)}>
+                <Icon name="plus" size={11} /> add a game
+              </Btn>
+            </div>
+          </div>
+        </div>
+        {showAddModal && (
+          <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { refetch(); setShowAddModal(false); }} />
+        )}
+      </>
+    );
+  }
 
   const backlogPool: UserGameDetail[] = backlogItems.length > 0 ? backlogItems : [];
   const displayPick: UserGameDetail | null = backlogPool[pickIdx] ?? backlogPick;

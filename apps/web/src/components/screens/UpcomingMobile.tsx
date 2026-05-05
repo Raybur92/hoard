@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { MobileHeader } from '../layout/MobileHeader';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
 import { Chip } from '../primitives/Chip';
+import { Btn } from '../primitives/Btn';
+import { PullableScroll } from '../primitives/PullableScroll';
 import { Icon } from '../primitives/Icon';
 import { useUpcoming } from '../../hooks/useUpcoming';
 import { api } from '../../lib/api';
@@ -38,8 +40,14 @@ function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
 
 export function UpcomingMobile() {
   useDocumentTitle("Upcoming");
-  const [scope, setScope] = useState<'my-platforms' | 'all'>('my-platforms');
-  const { data, loading, refetch } = useUpcoming(scope);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scope: 'my-platforms' | 'all' = searchParams.get('scope') === 'all' ? 'all' : 'my-platforms';
+  const setScope = (s: 'my-platforms' | 'all') => {
+    const next = new URLSearchParams(searchParams);
+    if (s === 'all') next.set('scope', 'all'); else next.delete('scope');
+    setSearchParams(next, { replace: true });
+  };
+  const { data, loading, error, refetch } = useUpcoming(scope);
 
   async function handleToggleWishlist(igdbId: number) {
     try {
@@ -48,6 +56,18 @@ export function UpcomingMobile() {
     } catch { /* silent */ }
   }
 
+  if (error) {
+    return (
+      <>
+        <MobileHeader title="upcoming" sub="// load failed" />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '24px' }}>
+          <span className="t-mono t-red" style={{ fontSize: "var(--text-2xs)" }}>{`// failed to load upcoming releases`}</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", maxWidth: 320, textAlign: 'center' }}>{error}</span>
+          <Btn sm onClick={() => refetch()}>retry</Btn>
+        </div>
+      </>
+    );
+  }
   if (loading || !data) {
     return (
       <>
@@ -65,6 +85,29 @@ export function UpcomingMobile() {
 
   const items = data.map(enrichItem).sort((a, b) => a.days - b.days);
   const featured = items[0];
+
+  // Empty state — no upcoming releases tracked
+  if (items.length === 0) {
+    return (
+      <>
+        <MobileHeader title="upcoming" sub="// nothing tracked" />
+        <div style={{ display: 'flex', gap: 6, padding: '8px 16px 0' }}>
+          <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}><Icon name="star" size={10} /> wishlist</Chip>
+          <Chip on={scope === 'all'} onClick={() => setScope('all')}>all releases</Chip>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="panel" style={{ padding: 20, width: '100%', textAlign: 'center' }}>
+            <Marker>// nothing on the horizon</Marker>
+            <p style={{ marginTop: 12, color: 'var(--paper-dim)', fontSize: "var(--text-xs)", lineHeight: 1.5 }}>
+              {scope === 'my-platforms'
+                ? 'no upcoming releases on your platforms. try "all releases".'
+                : 'no upcoming releases match. lower the hype threshold in settings.'}
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const monthGroups: Record<string, number> = {};
   for (const w of items) {
@@ -149,7 +192,7 @@ export function UpcomingMobile() {
       })()}
 
       {/* agenda list */}
-      <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '14px 16px 0' }}>
+      <PullableScroll onRefresh={refetch} ariaLabel="Upcoming releases" style={{ padding: '14px 16px 0' }}>
         <Marker>// the agenda</Marker>
         <div style={{ marginTop: 10 }}>
           {items.map((g, i) => (
@@ -193,7 +236,7 @@ export function UpcomingMobile() {
             </div>
           ))}
         </div>
-      </div>
+      </PullableScroll>
     </>
   );
 }

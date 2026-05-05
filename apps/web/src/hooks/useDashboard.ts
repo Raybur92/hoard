@@ -3,9 +3,9 @@ import { useQuery } from './useQuery';
 import type { DashboardResponse } from '@hoard/types';
 
 export function useDashboard() {
-  const { data, loading, error } = useQuery<DashboardResponse>(
+  const { data, loading, error, refetch } = useQuery<DashboardResponse>(
     'dashboard',
     () => api.dashboard(),
   );
-  return { data: data ?? null, loading, error };
+  return { data: data ?? null, loading, error, refetch };
 }

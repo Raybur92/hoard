@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { Cover } from '../primitives/Cover';
@@ -7,6 +7,7 @@ import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
+import { Marker } from '../primitives/Marker';
 import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -201,10 +202,31 @@ export function LibraryDesktop() {
   const refetch = isFiltered ? refetchFiltered : refetchShelves;
 
   const { prefs, updatePref } = usePreferences();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<SortBy>('lastPlayed');
-  const [viewMode, setViewMode] = useState<'shelves' | 'grid' | 'list'>(prefs.libraryView);
+  // Sort + view-mode persisted in URL so filtered views are shareable.
+  // URL trumps preferences when present; otherwise falls back to default / pref.
+  const sortBy: SortBy = (() => {
+    const v = searchParams.get('sort');
+    return v === 'title' || v === 'playtime' || v === 'lastPlayed' ? v : 'lastPlayed';
+  })();
+  const setSortBy = (s: SortBy) => {
+    const next = new URLSearchParams(searchParams);
+    if (s === 'lastPlayed') next.delete('sort'); else next.set('sort', s);
+    setSearchParams(next, { replace: true });
+  };
+  const viewMode: 'shelves' | 'grid' | 'list' = (() => {
+    const v = searchParams.get('view');
+    if (v === 'shelves' || v === 'grid' || v === 'list') return v;
+    return prefs.libraryView;
+  })();
+  const setViewMode = (m: 'shelves' | 'grid' | 'list') => {
+    const next = new URLSearchParams(searchParams);
+    if (m === prefs.libraryView) next.delete('view'); else next.set('view', m);
+    setSearchParams(next, { replace: true });
+    void updatePref({ libraryView: m });
+  };
   const coverDims = COVER_DIMS[prefs.coverDensity] ?? COVER_DIMS['standard']!;
 
   const applyFilters = useCallback((games: UserGameDetail[]): UserGameDetail[] => {
@@ -364,9 +386,9 @@ export function LibraryDesktop() {
           </div>
           <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
           <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>view</span>
-          <Chip on={viewMode === 'shelves'} onClick={() => { setViewMode('shelves'); void updatePref({ libraryView: 'shelves' }); }}>shelves</Chip>
-          <Chip on={viewMode === 'grid'}    onClick={() => { setViewMode('grid');    void updatePref({ libraryView: 'grid' }); }}>grid</Chip>
-          <Chip on={viewMode === 'list'}    onClick={() => { setViewMode('list');    void updatePref({ libraryView: 'list' }); }}>list</Chip>
+          <Chip on={viewMode === 'shelves'} onClick={() => setViewMode('shelves')}>shelves</Chip>
+          <Chip on={viewMode === 'grid'}    onClick={() => setViewMode('grid')}>grid</Chip>
+          <Chip on={viewMode === 'list'}    onClick={() => setViewMode('list')}>list</Chip>
           <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
           <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
           <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
@@ -395,11 +417,30 @@ export function LibraryDesktop() {
           />
         )}
 
-      {/* shelves */}
+      {/* shelves OR empty-state CTA */}
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '0 32px 40px' }}>
-        {shelves.map((s, i) => (
-          <Shelf key={s.status} idx={i + 1} shelf={s} coverW={coverDims.w} coverH={coverDims.h} showHltb={prefs.showHltb} />
-        ))}
+        {totalGames === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 0' }}>
+            <div className="panel" style={{ padding: 32, maxWidth: 480, width: '100%', textAlign: 'center' }}>
+              <Marker>// no titles yet</Marker>
+              <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", lineHeight: 1.55 }}>
+                your library is empty. connect a platform to sync your games, or add one manually.
+              </p>
+              <div style={{ marginTop: 18, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Btn variant="primary" onClick={() => navigate('/settings/platforms')}>
+                  <Icon name="link" size={11} /> connect a platform
+                </Btn>
+                <Btn onClick={() => setShowAddModal(true)}>
+                  <Icon name="plus" size={11} /> add a game
+                </Btn>
+              </div>
+            </div>
+          </div>
+        ) : (
+          shelves.map((s, i) => (
+            <Shelf key={s.status} idx={i + 1} shelf={s} coverW={coverDims.w} coverH={coverDims.h} showHltb={prefs.showHltb} />
+          ))
+        )}
       </div>
     </>
   );

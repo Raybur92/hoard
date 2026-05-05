@@ -5,7 +5,7 @@ import type { UserGameDetail } from '@hoard/types';
 
 export function useGame(id: string | undefined) {
   const key = id ? `game:${id}` : '';
-  const { data, loading, error } = useQuery<UserGameDetail>(
+  const { data, loading, error, refetch } = useQuery<UserGameDetail>(
     key,
     () => api.game(id!),
     { enabled: !!id },
@@ -16,5 +16,5 @@ export function useGame(id: string | undefined) {
     cache.set(`game:${id}`, { ...data, ...patch });
   }
 
-  return { data: data ?? null, loading: !!id && loading, error, update };
+  return { data: data ?? null, loading: !!id && loading, error, update, refetch };
 }

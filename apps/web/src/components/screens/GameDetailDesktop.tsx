@@ -27,7 +27,7 @@ const ALL_STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold'
 
 export function GameDetailDesktop() {
   const { id } = useParams<{ id: string }>();
-  const { data: ug, loading, error, update } = useGame(id);
+  const { data: ug, loading, error, update, refetch } = useGame(id);
   useDocumentTitle(ug?.game.title ?? 'Game');
   const [statusOpen, setStatusOpen] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -62,8 +62,10 @@ export function GameDetailDesktop() {
       <>
         <TopBar crumbs={['hoard', 'library', '…']} />
         {error
-          ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// error: ${error}`}</span>
+          ? <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14 }}>
+              <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// failed to load game`}</span>
+              <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", maxWidth: 480, textAlign: 'center' }}>{error}</span>
+              <Btn sm onClick={() => refetch()}>retry</Btn>
             </div>
           : <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32 }}>
               <div className="skel" style={{ height: 347 }} />

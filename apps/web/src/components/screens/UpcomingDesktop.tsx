@@ -5,7 +5,7 @@ import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
 import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
-import { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useUpcoming } from '../../hooks/useUpcoming';
 import { daysUntil, upcomingDateParts, countdownParts } from '../../lib/utils';
@@ -40,8 +40,15 @@ function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
 
 export function UpcomingDesktop() {
   useDocumentTitle("Upcoming");
-  const [scope, setScope] = useState<'my-platforms' | 'all'>('my-platforms');
-  const { data, loading, refetch } = useUpcoming(scope);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scope: 'my-platforms' | 'all' = searchParams.get('scope') === 'all' ? 'all' : 'my-platforms';
+  const setScope = (s: 'my-platforms' | 'all') => {
+    const next = new URLSearchParams(searchParams);
+    if (s === 'all') next.set('scope', 'all'); else next.delete('scope');
+    setSearchParams(next, { replace: true });
+  };
+  const { data, loading, error, refetch } = useUpcoming(scope);
 
   async function handleToggleWishlist(igdbId: number) {
     try {
@@ -50,6 +57,18 @@ export function UpcomingDesktop() {
     } catch { /* silent */ }
   }
 
+  if (error) {
+    return (
+      <>
+        <TopBar crumbs={['hoard', 'upcoming']} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '32px' }}>
+          <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// failed to load upcoming releases`}</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", maxWidth: 480, textAlign: 'center' }}>{error}</span>
+          <Btn sm onClick={() => refetch()}>retry</Btn>
+        </div>
+      </>
+    );
+  }
   if (loading || !data) {
     return (
       <>
@@ -69,6 +88,37 @@ export function UpcomingDesktop() {
 
   const items = data.map(enrichItem).sort((a, b) => a.days - b.days);
   const featured = items[0];
+
+  // Empty state — no upcoming releases tracked at all (or none in scope).
+  if (items.length === 0) {
+    return (
+      <>
+        <TopBar crumbs={['hoard', 'upcoming']} />
+        <div style={{ padding: '16px 32px 0', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 6, alignItems: 'baseline' }}>
+          <span style={{ flex: 1 }} />
+          <div style={{ padding: '6px 0', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}><Icon name="star" size={11} /> wishlist · 0</Chip>
+            <Chip on={scope === 'all'} onClick={() => setScope(scope === 'all' ? 'my-platforms' : 'all')}>all releases</Chip>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 32px' }}>
+          <div className="panel" style={{ padding: 32, maxWidth: 480, width: '100%', textAlign: 'center' }}>
+            <Marker>// nothing on the horizon</Marker>
+            <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", lineHeight: 1.55 }}>
+              {scope === 'my-platforms'
+                ? 'no upcoming releases on your connected platforms. switch to "all releases" or wishlist a game from there.'
+                : 'no upcoming releases match the current hype threshold. lower it in settings → appearance.'}
+            </p>
+            <div style={{ marginTop: 18, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {scope === 'my-platforms'
+                ? <Btn variant="primary" onClick={() => setScope('all')}>show all releases</Btn>
+                : <Btn variant="primary" onClick={() => navigate('/settings/appearance')}><Icon name="cog" size={11} /> tune hype threshold</Btn>}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const monthGroups: Record<string, number> = {};
   for (const w of items) {
