@@ -143,25 +143,30 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: Phase 8 — Mobile Parity, iOS-HIG & Accessibility (planned 2026-05-05).**
+**Active: Phase 8 — Mobile Parity, iOS-HIG & Accessibility (started 2026-05-05).**
 
-Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics, iOS HIG, typography, touch targets, and full accessibility. Composite mobile UX score: ~3/10 baseline → target 8/10. See `docs/PLAN.md` → Phase 8 for the complete 5-PR breakdown.
+Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics, iOS HIG, typography, touch targets, and full accessibility. Composite mobile UX score: ~3/10 baseline → target 8/10. See `docs/PLAN.md` → Phase 8 for the complete 5-PR breakdown with deliverables, success criteria, and decisions per PR.
 
-**Audit headline findings:**
-- ~290 uses of 9–12 px text; no `--text-*` token scale exists
+**Audit headline findings (the things being fixed):**
+- ~290 uses of 9–12 px text; no `--text-*` token scale existed
 - Zero `:focus-visible` styles anywhere; ~50 `<div onClick>` without keyboard support
 - Zero semantic `<h1>` / `<h2>` / `<h3>` across the app
-- Mobile shell renders a fake hardcoded "9:41 / 100 %" status bar (`MobileFrame.tsx:11–19`)
-- Mobile tab bar grid is `repeat(5, 1fr)` for 4 tabs (`global.css:516`)
+- Mobile shell rendered a fake hardcoded "9:41 / 100 %" status bar over the real iOS one
+- Mobile tab bar grid was `repeat(5, 1fr)` for 4 tabs
 - No `viewport-fit=cover` / `env(safe-area-inset-*)` / `100dvh`
 - Mobile components don't read `usePreferences()` and don't call `update()` — ~50 % of desktop interactivity missing on mobile equivalents
 
-**Phase 8 PR sequence:**
-1. **PR 1 — Foundation:** typography scale tokens, `:focus-visible` styles globally, `prefers-reduced-motion`, line-height tokens, raise minimum chip / btn.sm sizes, ban `--paper-faint` for body text under 17 px.
-2. **PR 2 — Mobile shell (iOS HIG):** delete fake status bar, fix tab bar grid, add `viewport-fit=cover` + safe-area insets + `100dvh`, active-tab indicator, press feedback, replace placeholder icons, wire MobileHeader's search.
-3. **PR 3 — Accessibility (WCAG 2.1 AA):** convert ~50 `<div onClick>` → `<button>`; add semantic `<h1>`–`<h3>` and ARIA landmarks; `<label htmlFor>` on every input; `role="dialog"` + focus trap on every modal; `useDocumentTitle` per route; skip-to-content link; `eslint-plugin-jsx-a11y`; axe-core in Playwright; Lighthouse a11y threshold raised to 95.
-4. **PR 4 — Mobile parity (scope TBD):** wire GameDetailMobile interactions, add backlog picker / now-playing actions to DashboardMobile, platform filter / sort to LibraryMobile, scope toggle to UpcomingMobile, sync-frequency to PlatformDetailMobile. Per-feature scope decision pending before implementation.
-5. **PR 5 — IA & polish:** empty / first-run states with CTAs, retry buttons on errors, `navigate(-1)` audit, URL state for sort / view / scope, pull-to-refresh on mobile data screens.
+**Phase 8 progress:**
+
+- **PR 1 — Foundation: done** (commit `9d3ab31`). 11-step typography scale (`--text-3xs` → `--text-display`) + 4-step line-height scale; global `:focus-visible` amber ring + `prefers-reduced-motion` block + skip-link CSS; chip/btn/field heights raised; `--paper-faint` text under 17 px replaced with `--paper-dim` (passes WCAG AA). Inline `fontSize` literal sweep across 24 components — sub-floor sizes (7/8/9 px) bumped, 16/18 collapsed to `--text-md`. Bonus: `GameDetailDesktop` quick-stats + HLTB grids restructured so labels anchor to cell bottoms instead of clipping into the value row.
+
+- **PR 2 — Mobile shell (iOS HIG): done** (commit `b31fa5d`). Fake status bar deleted; mobile tab bar fixed (`repeat(4, 1fr)` grid, `padding-bottom: env(safe-area-inset-bottom)`, 2 px amber top-border active state with `margin-top: -2px` so the row doesn't shift, `:active` press feedback, `navigator.vibrate?.(8)` haptic tick); `viewport-fit=cover` + `100dvh` + `padding-top: env(safe-area-inset-top)`; `MobileHeader` search icon wired to `SearchOverlay`; tab-bar icons replaced with meaningful glyphs (`home` / `rows` / `clock` / `user`). Bonus: `SearchOverlay` state lifted out of `TopBar` into a new `SearchModalProvider` mounted at `AppShell`; `MobileTabBar` rewritten as semantic `<nav><button>` with `aria-current="page"` (head start on PR 3 a11y).
+
+- **PR 3 — Accessibility (WCAG 2.1 AA): pending.** The heaviest PR. Convert remaining ~50 `<div onClick>` → `<button>`; add semantic `<h1>` – `<h3>` and ARIA landmarks; `<label htmlFor>` on every input; `role="dialog"` + focus trap on every modal; `useDocumentTitle` per route; `.skip-link` actually wired; `eslint-plugin-jsx-a11y` recommended ruleset; `axe-core` injected into Playwright tests; Lighthouse Accessibility threshold raised 90 → 95.
+
+- **PR 4 — Mobile parity: pending. Scope decision still open.** Wire `GameDetailMobile` interactions (status picker, notes editor, action buttons), port the backlog picker + now-playing actions to `DashboardMobile`, add platform filter / sort to `LibraryMobile`, scope toggle to `UpcomingMobile`, sync-frequency picker to `PlatformDetailMobile`. Per-feature decision needed before implementation: which Desktop features genuinely belong on mobile vs. which should stay desktop-only.
+
+- **PR 5 — IA & polish: pending.** First-run / empty-state CTAs, retry buttons on errors, `navigate(-1)` audit, URL-persisted sort/view/scope, pull-to-refresh on mobile data screens.
 
 WCAG 2.1 AA is the bar (Hoard may be released as a product later, so accessibility is a hard prerequisite, not a personal-tool nicety).
 

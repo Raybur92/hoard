@@ -705,69 +705,81 @@ These items were addressed after PSN was connected and real data revealed gaps.
 #### PR 1 — Foundation: typography scale, focus styles, motion tokens
 
 **Risk:** low. Pure CSS / tokens. No logic changes.
+**Status:** Done (commit `9d3ab31`, 2026-05-05).
 
 **Deliverables:**
-- [ ] `--text-3xs: 10px` through `--text-display: 96px` typography scale added to `apps/web/src/styles/tokens.css` (8-step scale)
-- [ ] `--lh-tight: 1.15` / `--lh-snug: 1.3` / `--lh-normal: 1.5` / `--lh-relaxed: 1.7` line-height tokens added
-- [ ] Global `:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }` applied via `apps/web/src/styles/global.css`
-- [ ] `@media (prefers-reduced-motion: reduce)` block added to `global.css` — disables `.skel` pulse animation, neutralises `transition` on `Toggle` and any future component animations
-- [ ] `.chip` minimum height raised from 22 px → 28 px; `.chip` text from 10 px → `var(--text-xs)` (12 px)
-- [ ] `.btn.sm` minimum height raised from 24 px → 32 px; text from 10 px → `var(--text-xs)`
-- [ ] `.btn` text from 11 px → `var(--text-sm)` (13 px); height stays 32 px (acceptable on desktop, will be revisited on mobile in PR 2)
-- [ ] `.field` height raised from 30 px → 36 px
-- [ ] `--paper-faint` removed as text color anywhere font-size < `--text-md` (17 px); replaced with `--paper-dim` (`#a9a89e`, ~9.4:1 contrast)
-- [ ] All `lineHeight: 1` / `lineHeight: 0.85–1.05` inline styles audited; replaced with `--lh-snug` minimum unless on `.bignum` / `.barcode` / single-glyph display
-- [ ] Sweep all inline `fontSize:` values across `apps/web/src/components/screens/` and `apps/web/src/components/layout/` — replace literals with the new scale tokens (var refs preferred over magic numbers)
+- [x] Typography scale added to `apps/web/src/styles/tokens.css` — final shape is 11 steps (`--text-3xs` 10 → `--text-display` 96), broader than the 8-step plan because mid-tier display sizes (14, 22, 44, 56) showed up frequently enough in the inline-fontSize audit to deserve scale slots
+- [x] `--lh-tight: 1.15` / `--lh-snug: 1.3` / `--lh-normal: 1.5` / `--lh-relaxed: 1.7` line-height tokens added
+- [x] Global `:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }` applied via `apps/web/src/styles/global.css`; inputs/textareas/selects get a thicker box-shadow ring
+- [x] `@media (prefers-reduced-motion: reduce)` block neutralizes all animation/transition durations
+- [x] `.chip` 22 → 28 px / font 10 → `var(--text-xs)` (12 px)
+- [x] `.btn.sm` 24 → 32 px / font 10 → `var(--text-xs)`
+- [x] `.btn` text 11 → `var(--text-sm)` (13 px); height stays 32 px
+- [x] `.field` 30 → 36 px / font 12 → `var(--text-sm)`
+- [x] `--paper-faint` removed as text color anywhere font-size < `--text-md` (17 px); replaced with `--paper-dim` — fixes WCAG AA contrast for all small body text
+- [x] All component CSS classes (kv, marker, shelf-label, sidebar, topbar, m-tabbar, status-sigil, bignum, receipt internals) migrated to scale tokens
+- [x] Inline `fontSize` literal sweep across 24 components — sub-floor sizes (7/8/9 px) bumped to 10/11 px; 16/18 collapsed to `var(--text-md)` (17); hero/display tier (20–48 px) left as documented exceptions
+- [x] `.skip-link` CSS placeholder added (PR 3 wires the actual link)
+
+**Bonus (not in original deliverables, surfaced during PR 1):**
+- [x] `GameDetailDesktop` quick-stats grid restructured: rigid `gridTemplateRows: '28px 12px'` replaced with flex column + `justifyContent: space-between`. "LAST TOUCHED" no longer wraps into the value row.
+- [x] `GameDetailDesktop` HLTB compare grid restructured: value+sub grouped as a single anchored block at the cell bottom, label pinned to top — eliminates the "floaty middle value" feel.
 
 **Success Criteria:**
-- [ ] Tab through every screen with keyboard — focus indicator visible at every interactive element
-- [ ] WebAIM contrast checker: every text/background pair scores ≥ 4.5:1 (or ≥ 3:1 for large text ≥ 18 px regular / ≥ 14 px bold)
-- [ ] No `font-size: <number>` magic-number declarations remaining outside the `.receipt` / `.barcode` / `.bignum` exception list
-- [ ] Toggling System Settings → Accessibility → Reduce Motion (macOS) / Settings → Accessibility → Motion (iOS) suppresses skeleton pulse and toggle slide
-- [ ] All Vitest + Jest tests still pass; visual regression snapshots regenerated and reviewed before commit
+- [x] Tab through every screen with keyboard — focus indicator visible at every interactive element (verified locally on Chrome)
+- [ ] WebAIM contrast checker: every text/background pair scores ≥ 4.5:1 (deferred to PR 3 axe-core integration which catches contrast violations programmatically across every component)
+- [x] No `font-size: <number>` magic-number declarations outside the documented hero/display tier (20–48 px) and receipt/barcode/bignum exceptions
+- [ ] Toggling Reduce Motion suppresses skeleton pulse — CSS rule in place; not yet verified on real iOS/macOS device
+- [x] All Vitest + Jest tests still pass (115 API + 69 web); visual regression snapshots regenerated against the live API
 
-**Testing:**
-- [ ] Manual contrast audit using the macOS Digital Color Meter or Chrome DevTools' contrast picker on every text/background combination
-- [ ] Manual focus-visible audit: Tab through Dashboard / Library / GameDetail / Settings / Login on Chrome desktop and confirm visible amber outline on every focusable element
-- [ ] Reduced-motion verification on macOS Safari and iOS Safari
-- [ ] Visual regression: Playwright snapshots regenerated; reviewer compares old vs new for unintended visual drift
-
-**Decisions:** _(populated as PR lands)_
+**Decisions:**
+- Typography scale ended up at 11 steps (not 8) because the in-between display sizes (14, 22, 44, 56 px) appeared often enough in the inline-fontSize audit that adding scale slots was cleaner than leaving them as magic numbers. The display tier (28 / 44 / 56 / 96) is allowed to skip slots; only the body tier is constrained.
+- Inline fontSize values 16 and 18 px both collapsed to `var(--text-md)` (17 px) — a ±1 px nudge that's barely perceptible but eliminates two near-duplicate magic numbers. The 20+ px tier is left as one-off magic numbers because each instance is a deliberate hero-weight choice.
+- `.plat` badge font-size 9 px kept as a documented exception — the badge geometry (14 px tall, 18 px wide) is the constraint, not the font size; bumping to 11 px would force a redesign of every cover thumbnail.
+- `--paper-faint` is now banned only for *text* under 17 px. It's still used for decorative borders / dividers / heatmap empty cells where contrast rules don't apply.
+- The receipt block on `GameDetailMobile` uses 10 px (`--text-3xs`) lines as a documented dense-mono exception — the "receipt" stylization depends on tight line-spacing.
+- GameDetailDesktop grid restructure was unplanned but landed during PR 1 because Andrea spotted the "LAST TOUCHED" wrap during the visual review. Same fix applied to the HLTB compare grid for visual consistency. Both grids switched from rigid `gridTemplateRows` with fixed pixel slots to flexbox columns with `justifyContent: space-between`, anchoring labels/sub-text to the bottom of their cells.
 
 ---
 
 #### PR 2 — Mobile shell: iOS HIG correctness
 
 **Risk:** low–medium. Mostly CSS; one icon-set decision.
+**Status:** Done (commit `b31fa5d`, 2026-05-05).
 
 **Deliverables:**
-- [ ] `MobileFrame.tsx:11–19` — delete the fake `.m-status` status bar block entirely; remove `--statusbar-h` from `tokens.css:46`
-- [ ] `apps/web/index.html:5` — viewport meta updated to `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`
-- [ ] `.app-mobile` rules updated: `height: 100dvh` (was `100vh`); `padding-top: env(safe-area-inset-top)` to clear notch / Dynamic Island
-- [ ] `.m-tabbar` rules updated: `grid-template-columns: repeat(4, 1fr)` (was `repeat(5, 1fr)`); `padding-bottom: max(8px, env(safe-area-inset-bottom))` to clear home indicator
-- [ ] `.m-tabbar .item` updated: padding `12px 0 max(14px, env(safe-area-inset-bottom))`; glyph size 14 px → 18 px; label size 9 px → `var(--text-2xs)` (11 px)
-- [ ] Active-tab indicator added: `2px solid var(--amber)` top border on `.m-tabbar .item.active` (color-shift alone is insufficient cue)
-- [ ] Press feedback added: `.m-tabbar .item:active { background: var(--ink-2); }`
-- [ ] Light haptic on tap: `navigator.vibrate?.(8)` in `MobileTabBar.tsx` `onClick` handler (gracefully no-op on iOS Safari, fires on Android Chrome)
-- [ ] `MobileHeader.tsx:43–48` — wire the search icon to open `SearchOverlay` (lift state up to `AppShell` if needed); decide on the menu icon (either wire to a contextual sheet, or remove)
-- [ ] `MobileTabBar.tsx:6–11` — replace placeholder icons with destination-meaningful glyphs: Dashboard → grid/dashboard, Library → stacked-rows, Soon → clock, Me → user (must remain consistent with existing terminal aesthetic — extend `Icon.tsx` `ICON_PATHS` if needed)
+- [x] `MobileFrame.tsx` — fake `.m-status` status bar block deleted entirely; `--statusbar-h` removed from `tokens.css`
+- [x] `apps/web/index.html` viewport meta updated to `viewport-fit=cover`
+- [x] `.app-mobile` and `.app-shell` use `height: 100dvh` (with `100vh` fallback); `.app-mobile` adds `padding-top: env(safe-area-inset-top)` for notch / Dynamic Island
+- [x] `.m-tabbar` updated: `repeat(4, 1fr)` grid; `padding-bottom: env(safe-area-inset-bottom)` for home indicator
+- [x] `.m-tabbar .item` updated: padding `12px 0 14px`, glyph 14 → 18 px, label uses `var(--text-2xs)`, inactive color paper-faint → paper-dim
+- [x] Active-tab indicator: `2px solid var(--amber)` top border with `margin-top: -2px` so the row doesn't shift on activation
+- [x] Press feedback: `.m-tabbar .item:active { background: var(--ink-2); }`
+- [x] Light haptic on tap: `navigator.vibrate?.(8)` in `MobileTabBar.tsx` `onClick` handler
+- [x] `MobileHeader.tsx` search icon wired (proper `<button>` with `aria-label="Search games"` opens `SearchOverlay`); decorative menu icon removed (no clear purpose)
+- [x] `MobileTabBar.tsx` icons replaced with destination-meaningful glyphs: Dashboard → `home`, Library → `rows`, Soon → `clock`, Me → `user`. Three new SVG paths added to `ICON_PATHS` (`home`, `rows`, `clock`).
+
+**Bonus (not in original deliverables, surfaced during PR 2):**
+- [x] `SearchOverlay` state lifted out of `TopBar` into a new `SearchModalProvider` ([hooks/useSearchModal.tsx](apps/web/src/hooks/useSearchModal.tsx)) mounted at `AppShell` level. Both `TopBar` and `MobileHeader` consume `useSearchModal()` for open. ⌘K binding moved to the provider. Single source of truth, single render of `<SearchOverlay/>`.
+- [x] `MobileTabBar` rewritten as semantic `<nav aria-label="primary">` with `<button>` items and `aria-current="page"` on the active tab — head start on PR 3 a11y deliverables.
 
 **Success Criteria:**
-- [ ] On iOS Safari (real device or BrowserStack), no double clock / battery indicator visible
-- [ ] On a notched device, content does not slide under the notch
-- [ ] On a device with home indicator, the tab bar does not collide with the home indicator hint line
-- [ ] Tab bar fills the full screen width with no empty column
-- [ ] Active tab is identifiable at a glance from across the room (color + top border, not color alone)
-- [ ] Tapping a tab gives a visible press state and (on supporting devices) a haptic tick
-- [ ] Search icon in mobile header opens `SearchOverlay`; menu icon either has clear purpose or is gone
+- [ ] On iOS Safari real device, no double clock / battery indicator visible (CSS removed; needs real-device confirmation when Andrea opens the PWA next)
+- [ ] On a notched device, content does not slide under the notch (CSS in place; needs real-device confirmation)
+- [ ] On a device with home indicator, the tab bar does not collide with the gesture region (CSS in place; needs real-device confirmation)
+- [x] Tab bar fills the full screen width with no empty column (verified via Playwright mobile snapshots)
+- [x] Active tab is identifiable from across the room — color + top border (verified via Playwright mobile snapshots)
+- [ ] Tapping a tab gives a visible press state and a haptic tick — `:active { background }` and `vibrate(8)` in place; haptic only verifiable on Android (iOS Safari ignores `navigator.vibrate`)
+- [x] Search icon in mobile header opens `SearchOverlay`; menu icon removed
+- [x] All Vitest + Jest tests still pass (115 API + 69 web); 4 mobile visual snapshots regenerated against the live API
 
-**Testing:**
-- [ ] Real-device test on iOS Safari (iPhone 13+ recommended for Dynamic Island and home indicator)
-- [ ] Real-device test on a non-Dynamic-Island iPhone (SE / 2nd gen) to confirm safe-area math works for the older notch geometry too
-- [ ] Real-device test on Android Chrome to confirm haptic tick fires
-- [ ] Playwright mobile viewport snapshot regenerated; tab bar layout verified
-
-**Decisions:** _(populated as PR lands)_
+**Decisions:**
+- The `MobileHeader` decorative menu icon was removed entirely rather than wired to a contextual sheet. PR 5 (IA & polish) can revisit if a real per-screen contextual action set emerges; speculatively wiring it now would be design-without-purpose.
+- Three new SVG icon paths added to `Icon.tsx`: `home` (house outline), `rows` (3 staggered horizontal bars), `clock` (circle + hands). Kept consistent with the existing terminal aesthetic — outline-stroke style at 1.5 px, 24×24 viewBox.
+- `SearchModalProvider` is the chosen pattern for cross-shell shared overlay state. Clean React idiom; avoids prop drilling through `<Outlet>` context. The same pattern can be reused in PR 4 / PR 5 if other modal-class overlays need shared open state (e.g., a global "add game" button).
+- `MobileTabBar` was upgraded to semantic HTML (`<nav>` + `<button>` + `aria-current`) inside PR 2 rather than waiting for PR 3 — the rewrite was already happening, so doing it once was cheaper than refactoring twice.
+- `padding-bottom` on `.m-tabbar` uses raw `env(safe-area-inset-bottom)` rather than `max(8px, env(...))` — when the inset is 0 (browsers, non-PWA, non-notched devices) we want zero extra padding, not a hardcoded 8 px. The original plan note suggested `max(8px, ...)` defensively but it would over-pad in the most common case.
+- `.m-tabbar .item` uses `margin-top: -2px` to absorb the 2 px active-indicator border — without this, activating a tab visibly shifts the row 2 px down. Subtle but felt cheap.
 
 ---
 
@@ -1043,6 +1055,6 @@ Discoverability:
 | 7 — Deploy + Google OAuth | Done | Railway + Vercel live behind custom domain `gamehoardr.com` (Porkbun registrar). API at `api.gamehoardr.com`, web at `gamehoardr.com`. Email/password + Google OAuth verified end-to-end on desktop Chrome (regular + incognito) and iOS Safari. Cross-origin cookie problem resolved — both subdomains share `.gamehoardr.com` parent so cookies are first-party. Steam OpenID still pending production verification. |
 | Post-7 — Lint Cleanup + Supabase RLS | Done | `npm run lint` 86 errors → 0 errors (CI lint job now actually green). RLS enabled on all public tables, closing 8 Supabase Security Advisor errors. Test suite still 103 API + 40 web all passing. `auth.test.ts` made deterministic via `dotenv/config` mock so it passes regardless of local OAuth env. |
 | Post-7 — Performance & UX | Done | Drafted in `docs/PERFORMANCE_PLAN.md` 2026-05-04. 14 fix items across architecture (shell-as-layout, UserProvider, SWR cache), backend (slim `/api/dashboard`, `/api/games/shelves`, indexes, cache headers), images (lazy + IGDB sizes), and SW. **All 6 PRs landed 2026-05-04** (commits `c11fc29`, `624a380`, `8e31e46`). Persistent shell + UserProvider + SWR cache + slim dashboard + per-shelf endpoint + cover lazy-load + IGDB size variants + preconnect + memoization + screen code-splitting + DB indexes live + real activity heatmap. Initial JS bundle 105.68 → 75.38 KB gzipped (~30%). 115 API + 69 web tests passing. **Plus infra fixes via Railway dashboard (same day):** region us-west → EU West (Amsterdam) to match Supabase eu-west-1, `connection_limit=1` → `5` in `DATABASE_URL`, fixed Railway Watch Paths format. Production `/api/games/shelves` 10.6 s → 460 ms (23×); `/api/dashboard` 10.9 s → ~500 ms (22×). All gotchas recorded in `CLAUDE.md`. |
-| 8 — Mobile Parity, iOS-HIG & Accessibility | In progress (planned 2026-05-05) | Drafted from May 2026 multi-pass UX audit (parity, Nielsen, iOS HIG, typography, accessibility). 5 PRs: foundation tokens & focus styles → mobile shell HIG correctness → WCAG 2.1 AA pass → mobile parity bug fixes → IA & polish. Composite mobile UX score 3/10 → target 8/10. PR 4 scope (which Desktop features port to Mobile) deferred — to be decided before implementation. PR 3 targets full WCAG 2.1 AA in anticipation of possible product release. |
+| 8 — Mobile Parity, iOS-HIG & Accessibility | In progress (started 2026-05-05) | **PR 1 done** (commit `9d3ab31`): typography scale + line-height tokens, `:focus-visible` + reduced-motion CSS, chip/btn/field minimums raised, `--paper-faint` body-text contrast fixed (4.2:1 → 9.4:1), inline `fontSize` literal sweep across 24 components, GameDetail quick-stats + HLTB grids restructured. **PR 2 done** (commit `b31fa5d`): fake "9:41" status bar killed, mobile tab bar fixed (4-col grid, safe-area insets, 2 px amber active border, press feedback, haptic tick), `viewport-fit=cover` + `100dvh`, MobileHeader search wired, `SearchModalProvider` lifted to AppShell, MobileTabBar rewritten as semantic `<nav><button>` (head-start on PR 3 a11y), tab-bar icons replaced with meaningful glyphs. **Pending: PR 3** WCAG 2.1 AA pass (the heaviest PR — semantic HTML + ARIA + form labels + focus traps + page titles + axe-core CI), **PR 4** mobile parity (scope decision pending), **PR 5** IA & polish. Composite mobile UX score 3/10 → target 8/10. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.
