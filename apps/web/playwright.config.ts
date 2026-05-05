@@ -35,10 +35,24 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  // Start BOTH the API (port 3001) and the web Vite server (port 5173).
+  // Without the API, every authenticated route 401s and <RequireAuth>
+  // redirects to /login — which used to silently corrupt visual snapshots.
+  // `reuseExistingServer: !CI` means an already-running dev:api / dev:web
+  // is reused locally; CI gets fresh ones.
+  webServer: [
+    {
+      command: 'npm run dev:api',
+      cwd: '../..',
+      url: 'http://localhost:3001/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 });
