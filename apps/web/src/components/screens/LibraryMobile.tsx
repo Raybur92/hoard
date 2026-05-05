@@ -236,7 +236,7 @@ export function LibraryMobile() {
           sub={`// ${items.length} titles`}
           back
           onBack={() => navigate('/library')}
-          right={<Btn sm variant="primary" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
+          right={<Btn sm variant="primary" ariaLabel="Add game" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
         />
         {showAddModal && (
           <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
@@ -282,7 +282,7 @@ export function LibraryMobile() {
       <MobileHeader
         title="shelves"
         sub={`// ${totalGames} titles`}
-        right={<Btn sm variant="primary" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
+        right={<Btn sm variant="primary" ariaLabel="Add game" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
       />
       {showAddModal && (
         <AddGameModal

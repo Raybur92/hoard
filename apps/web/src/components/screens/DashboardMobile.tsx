@@ -105,7 +105,11 @@ export function DashboardMobile() {
           </>
         }
       />
-      <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
+      {/* tabIndex on a scrollable region is the canonical Safari keyboard-scroll
+          fix (axe rule scrollable-region-focusable); jsx-a11y disagrees, but
+          the WCAG 2.1.1 requirement wins here. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+      <div className="thin-scroll" tabIndex={0} role="region" aria-label="Dashboard content" style={{ flex: 1, overflow: 'auto' }}>
 
         <div style={{ padding: '14px 16px 4px' }}>
           <Marker>// good {greeting()}, {(user?.name ?? user?.email?.split('@')[0] ?? 'hoard').toLowerCase()}</Marker>
