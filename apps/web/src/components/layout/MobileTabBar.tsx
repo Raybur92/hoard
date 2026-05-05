@@ -4,10 +4,10 @@ import { Icon } from '../primitives/Icon';
 import type { IconName } from '../primitives/Icon';
 
 const TABS: { label: string; icon: IconName; path: string }[] = [
-  { label: 'Dash',    icon: 'dotO',   path: '/' },
-  { label: 'Library', icon: 'menu',   path: '/library' },
-  { label: 'Soon',    icon: 'star',   path: '/upcoming' },
-  { label: 'Me',      icon: 'circle', path: '/settings' },
+  { label: 'Dash',    icon: 'home',  path: '/' },
+  { label: 'Library', icon: 'rows',  path: '/library' },
+  { label: 'Soon',    icon: 'clock', path: '/upcoming' },
+  { label: 'Me',      icon: 'user',  path: '/settings' },
 ];
 
 function MobileTabBarImpl() {
@@ -17,19 +17,26 @@ function MobileTabBarImpl() {
   const isActive = (path: string) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
 
+  const handleTap = (path: string) => {
+    navigator.vibrate?.(8);
+    navigate(path);
+  };
+
   return (
-    <div className="m-tabbar">
+    <nav className="m-tabbar" aria-label="primary">
       {TABS.map(({ label, icon, path }) => (
-        <div
+        <button
           key={label}
+          type="button"
           className={`item${isActive(path) ? ' active' : ''}`}
-          onClick={() => navigate(path)}
+          onClick={() => handleTap(path)}
+          aria-current={isActive(path) ? 'page' : undefined}
         >
-          <span className="glyph"><Icon name={icon} size={14} /></span>
+          <span className="glyph"><Icon name={icon} size={18} /></span>
           <span>{label}</span>
-        </div>
+        </button>
       ))}
-    </div>
+    </nav>
   );
 }
 

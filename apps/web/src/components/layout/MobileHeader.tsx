@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Icon } from '../primitives/Icon';
+import { useSearchModal } from '../../hooks/useSearchModal';
 
 export interface MobileHeaderProps {
   title: string;
@@ -10,6 +11,8 @@ export interface MobileHeaderProps {
 }
 
 export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderProps) {
+  const search = useSearchModal();
+
   return (
     <div style={{
       padding: '8px 16px 14px',
@@ -33,7 +36,7 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
             {title}
           </div>
           {sub && (
-            <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 4 }}>
+            <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 4 }}>
               {sub}
             </div>
           )}
@@ -41,10 +44,23 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
       </div>
       <div style={{ display: 'flex', gap: 12, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", alignItems: 'center' }}>
         {right ?? (
-          <>
-            <Icon name="search" size={14} />
-            <Icon name="menu" size={14} />
-          </>
+          <button
+            type="button"
+            onClick={() => search.open()}
+            aria-label="Search games"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 8,
+              margin: -8,
+              color: 'inherit',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+          >
+            <Icon name="search" size={18} />
+          </button>
         )}
       </div>
     </div>

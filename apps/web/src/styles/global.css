@@ -557,35 +557,23 @@ select:focus-visible {
 .topbar .crumbs b { color: var(--paper); font-weight: 500; }
 .topbar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; color: var(--paper-dim); }
 
-/* ---------- mobile status bar ---------- */
-
-.m-status {
-  height: var(--statusbar-h);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--paper-dim);
-  flex-shrink: 0;
-}
-
 /* ---------- mobile tab bar ---------- */
 
 .m-tabbar {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   border-top: 1px solid var(--rule);
   background: var(--ink);
   flex-shrink: 0;
+  /* clear the iOS home-indicator gesture region */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .m-tabbar .item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 10px 0 14px;
+  gap: 4px;
+  padding: 12px 0 14px;
   color: var(--paper-dim);
   font-family: var(--mono);
   font-size: var(--text-2xs);
@@ -593,15 +581,24 @@ select:focus-visible {
   letter-spacing: 0.1em;
   cursor: pointer;
   user-select: none;
+  /* override default <button> styling */
+  background: transparent;
+  border: none;
+  border-top: 2px solid transparent;
+  /* keep the active top-border from shifting the row */
+  margin-top: -2px;
 }
-.m-tabbar .item.active { color: var(--paper); }
-.m-tabbar .item .glyph { font-size: 14px; line-height: 1; display: flex; align-items: center; }
+.m-tabbar .item:active   { background: var(--ink-2); }
+.m-tabbar .item.active   { color: var(--paper); border-top-color: var(--amber); }
+.m-tabbar .item .glyph   { line-height: 1; display: flex; align-items: center; }
 
 /* ---------- app shell layout ---------- */
 
 .app-shell {
   display: flex;
+  /* dvh accounts for retracted iOS Safari URL bar; vh kept as fallback */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--void);
 }
@@ -620,9 +617,14 @@ select:focus-visible {
 .app-mobile {
   display: flex;
   flex-direction: column;
+  /* dvh accounts for retracted iOS Safari URL bar */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--void);
+  /* clear the notch / Dynamic Island; the OS already paints its own
+     status bar via apple-mobile-web-app-status-bar-style=black-translucent */
+  padding-top: env(safe-area-inset-top);
 }
 .app-mobile-content {
   flex: 1;

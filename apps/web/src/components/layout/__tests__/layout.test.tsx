@@ -8,6 +8,7 @@ import { MobileFrame } from '../MobileFrame';
 import { MobileTabBar } from '../MobileTabBar';
 import { MobileHeader } from '../MobileHeader';
 import { UserProvider } from '../../../contexts/UserContext';
+import { SearchModalProvider } from '../../../hooks/useSearchModal';
 
 vi.mock('../../../lib/api', () => ({
   api: {
@@ -44,14 +45,14 @@ describe('Sidebar', () => {
 describe('TopBar', () => {
   it('renders without throwing', () => {
     const { container } = render(
-      <MemoryRouter><TopBar crumbs={['hoard', 'Library']} /></MemoryRouter>,
+      <MemoryRouter><SearchModalProvider><TopBar crumbs={['hoard', 'Library']} /></SearchModalProvider></MemoryRouter>,
     );
     expect(container.querySelector('.topbar')).toBeTruthy();
   });
 
   it('renders crumbs', () => {
     const { getByText } = render(
-      <MemoryRouter><TopBar crumbs={['hoard', 'Library']} /></MemoryRouter>,
+      <MemoryRouter><SearchModalProvider><TopBar crumbs={['hoard', 'Library']} /></SearchModalProvider></MemoryRouter>,
     );
     expect(getByText('hoard')).toBeTruthy();
     expect(getByText('Library')).toBeTruthy();
@@ -66,11 +67,11 @@ describe('MobileFrame', () => {
     expect(getByText('content')).toBeTruthy();
   });
 
-  it('renders status bar', () => {
+  it('uses the .app-mobile container', () => {
     const { container } = render(
       <MobileFrame><div /></MobileFrame>,
     );
-    expect(container.querySelector('.m-status')).toBeTruthy();
+    expect(container.querySelector('.app-mobile')).toBeTruthy();
   });
 });
 
@@ -92,12 +93,16 @@ describe('MobileTabBar', () => {
 
 describe('MobileHeader', () => {
   it('renders title', () => {
-    const { getByText } = render(<MobileHeader title="Library" />);
+    const { getByText } = render(
+      <MemoryRouter><SearchModalProvider><MobileHeader title="Library" /></SearchModalProvider></MemoryRouter>,
+    );
     expect(getByText('Library')).toBeTruthy();
   });
 
   it('renders subtitle when provided', () => {
-    const { getByText } = render(<MobileHeader title="Library" sub="286 games" />);
+    const { getByText } = render(
+      <MemoryRouter><SearchModalProvider><MobileHeader title="Library" sub="286 games" /></SearchModalProvider></MemoryRouter>,
+    );
     expect(getByText('286 games')).toBeTruthy();
   });
 });
