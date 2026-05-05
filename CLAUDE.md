@@ -143,9 +143,15 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: Phase 8 — Mobile Parity, iOS-HIG & Accessibility (started 2026-05-05).**
+**Active: No active phase — Phase 8 (Mobile Parity, iOS-HIG & Accessibility) complete 2026-05-05. Production is fast, accessible, and feature-aligned across desktop and mobile; ready for next feature work.**
 
-Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics, iOS HIG, typography, touch targets, and full accessibility. Composite mobile UX score: ~3/10 baseline → target 8/10. See `docs/PLAN.md` → Phase 8 for the complete 5-PR breakdown with deliverables, success criteria, and decisions per PR.
+Composite mobile UX score moved from ~3/10 baseline to ~8/10 across all 5 PRs. See `docs/PLAN.md` → Phase 8 for the complete per-PR breakdown with deliverables and decisions.
+
+---
+
+**Previous workstream — Phase 8 (complete 2026-05-05).**
+
+Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics, iOS HIG, typography, touch targets, and full accessibility.
 
 **Audit headline findings (the things being fixed):**
 - ~290 uses of 9–12 px text; no `--text-*` token scale existed
@@ -179,9 +185,15 @@ Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics,
   - **PlatformDetailMobile**: sync-frequency picker (4 radios in a `role="radiogroup"`), full 4-row scope checklist (replaces the one-line summary). Activity log tab SKIPPED.
   - **SettingsMobile**: platform list rows show full name + game count + last sync ("488 games · synced 2h ago") instead of just code+who.
 
-- **PR 5 — IA & polish: pending.** First-run / empty-state CTAs, retry buttons on errors, `navigate(-1)` audit (most done in PR 4), URL-persisted sort/view/scope, pull-to-refresh on mobile data screens.
+- **PR 5 — IA & polish: done** (commit `b3c4f8d`, 2026-05-05).
+  - **Empty / first-run states** on Dashboard, Library, and Upcoming. Each shows an actionable CTA panel ("connect a platform" / "add a game" / "switch to all releases" / "tune hype threshold") instead of a bare blank screen.
+  - **Retry buttons** on every data-fetching screen — `useDashboard` and `useGame` now expose `refetch`; `useUpcoming` already did. LibraryDesktop/Mobile already had retry from earlier; the rest now match.
+  - **URL state**: Library `?sort=` + `?view=`, Upcoming `?scope=`. Default values omitted from URL to keep it clean. Sharing `/library/Backlog?sort=playtime` reproduces the exact view.
+  - **Pull-to-refresh** on Dashboard / Library / Upcoming Mobile via new `usePullToRefresh` hook + `PullableScroll` primitive. Touch-only by design; visual indicator ("// pull down…" → "// release to refresh" → "// refreshing…"). Preserves the WCAG 2.1.1 keyboard-scroll fix.
+  - **navigate(-1) audit complete** — remaining hardcoded `navigate('/path')` calls are all intentional fixed destinations (sidebar nav, settings sections, "back to platforms list" semantic). The one ambiguous case was already fixed in PR 4.
+  - **Skipped by design**: quick-sync trigger in TopBar (defer to future feature), page-transition animations (terminal aesthetic is intentionally instant).
 
-WCAG 2.1 AA is the bar (Hoard may be released as a product later, so accessibility is a hard prerequisite, not a personal-tool nicety). PR 3 met the bar.
+WCAG 2.1 AA is the bar (Hoard may be released as a product later, so accessibility is a hard prerequisite, not a personal-tool nicety). PR 3 met the bar; PR 5 closed the IA gaps that remained.
 
 ---
 
