@@ -44,9 +44,9 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
           </button>
         )}
         <div>
-          <div className="t-display" style={{ fontSize: "var(--text-md)", lineHeight: 1, letterSpacing: '0.04em' }}>
+          <h1 className="t-display" style={{ fontSize: "var(--text-md)", lineHeight: 1, letterSpacing: '0.04em', margin: 0, fontWeight: 'normal' }}>
             {title}
-          </div>
+          </h1>
           {sub && (
             <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 4 }}>
               {sub}

@@ -51,11 +51,13 @@ describe('TopBar', () => {
   });
 
   it('renders crumbs', () => {
-    const { getByText } = render(
+    const { getByText, getAllByText } = render(
       <MemoryRouter><SearchModalProvider><TopBar crumbs={['hoard', 'Library']} /></SearchModalProvider></MemoryRouter>,
     );
     expect(getByText('hoard')).toBeTruthy();
-    expect(getByText('Library')).toBeTruthy();
+    // "Library" appears twice: once in the visible breadcrumb, once in the
+    // sr-only <h1> (Phase 8 PR 3 part 2 — semantic page heading).
+    expect(getAllByText('Library').length).toBeGreaterThanOrEqual(1);
   });
 });
 

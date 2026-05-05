@@ -66,9 +66,9 @@ export function PsnGuidedFlowDesktop() {
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
             <Marker>// connect / playstation network · step {step} of {PSN_STEPS.length}</Marker>
-            <div className="t-display" style={{ fontSize: 30, marginTop: 8, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
+            <h1 className="t-display" style={{ fontSize: 30, marginTop: 8, color: 'var(--paper)', letterSpacing: '-0.01em', margin: 0, fontWeight: 'normal' }}>
               get your psn token
-            </div>
+            </h1>
             <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 4 }}>
               psn has no public api. we pass-through the same cookie your browser uses. hoard never sees your password.
             </div>

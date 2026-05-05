@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { TopBar } from '../layout/TopBar';
 import { SettingsNav, SettingsRow, Toggle, Radio, PlatformDot } from '../settings';
 import type { SettingsSection, PlatConnectStatus } from '../settings';
@@ -125,7 +126,7 @@ function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
               onBlur={() => void saveField('name', name)}
               placeholder="display name"
             />
-            {saved === 'name' && <span className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>// saved</span>}
+            {saved === 'name' && <span role="status" aria-live="polite" className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>// saved</span>}
           </div>
         </SettingsRow>
 
@@ -141,7 +142,7 @@ function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
               placeholder="email address"
             />
             {saved === 'email'
-              ? <span className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>// saved</span>
+              ? <span role="status" aria-live="polite" className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>// saved</span>
               : <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)' }}>
                   <Icon name="check" size={10} /> verified
                 </span>
@@ -486,13 +487,14 @@ interface DeleteModalProps {
 }
 
 function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange, onConfirm, onCancel }: DeleteModalProps) {
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onCancel]);
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="delete-account-title" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby="delete-account-title" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <button type="button" aria-label="Close" onClick={onCancel} style={{ position: 'absolute', inset: 0, background: 'rgba(8,9,10,0.72)', border: 'none', cursor: 'default' }} />
       <div className="panel" style={{
         position: 'relative',
@@ -515,9 +517,9 @@ function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange,
               // destructive · permanent · cannot be undone
             </span>
           </div>
-          <div className="t-display" style={{ fontSize: 26, marginTop: 14, color: 'var(--paper)', letterSpacing: '-0.01em', lineHeight: 1.1 }}>
+          <h2 id="delete-account-title" className="t-display" style={{ fontSize: 26, marginTop: 14, color: 'var(--paper)', letterSpacing: '-0.01em', lineHeight: 1.1, margin: '14px 0 0', fontWeight: 'normal' }}>
             delete {userName}<br />and everything in it.
-          </div>
+          </h2>
           <div style={{ marginTop: 16, fontSize: "var(--text-xs)", color: 'var(--paper-dim)', lineHeight: 1.55 }}>
             this will permanently erase your hoard. there is no recovery, no soft-delete window, no support ticket that brings it back.
           </div>

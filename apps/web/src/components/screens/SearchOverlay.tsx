@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Icon } from '../primitives/Icon';
 import { Cover } from '../primitives/Cover';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { UserGameDetail } from '@hoard/types';
 
 interface Props {
@@ -26,6 +27,7 @@ export function SearchOverlay({ onClose }: Props) {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -69,6 +71,7 @@ export function SearchOverlay({ onClose }: Props) {
 
   return (
     <div
+      ref={trapRef}
       role="dialog"
       aria-modal="true"
       aria-label="Search games"

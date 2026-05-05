@@ -22,6 +22,7 @@ function TopBarImpl({ crumbs = [], right, syncedAt }: TopBarProps) {
   const navigate = useNavigate();
   const search = useSearchModal();
 
+  const lastCrumb = crumbs[crumbs.length - 1];
   return (
     <header className="topbar">
       <nav className="crumbs" aria-label="Breadcrumb">
@@ -32,7 +33,7 @@ function TopBarImpl({ crumbs = [], right, syncedAt }: TopBarProps) {
             <span key={i}>
               {i > 0 && <span style={{ margin: '0 8px', color: 'var(--paper-ghost)' }} aria-hidden="true">/</span>}
               {isLast
-                ? <b aria-current="page">{c}</b>
+                ? <span aria-current="page" style={{ color: 'var(--paper)', fontWeight: 500 }}>{c}</span>
                 : to
                   ? <button type="button" className="crumb-link" onClick={() => navigate(to)}>{c}</button>
                   : <span style={{ color: 'var(--paper-dim)' }}>{c}</span>
@@ -41,6 +42,7 @@ function TopBarImpl({ crumbs = [], right, syncedAt }: TopBarProps) {
           );
         })}
       </nav>
+      {lastCrumb && <h1 className="sr-only">{lastCrumb}</h1>}
       <div className="right">
         {right ?? (
           <>

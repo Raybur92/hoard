@@ -55,9 +55,9 @@ export function LoginScreen() {
 
         {/* logo */}
         <div style={{ marginBottom: 32, textAlign: 'center' }}>
-          <div className="t-display" style={{ fontSize: 42, color: 'var(--paper)', letterSpacing: '0.04em' }}>
+          <h1 className="t-display" style={{ fontSize: 42, color: 'var(--paper)', letterSpacing: '0.04em', margin: 0, fontWeight: 'normal' }}>
             hoard
-          </div>
+          </h1>
           <div className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>
             // your games. all of them.
           </div>
@@ -145,7 +145,7 @@ export function LoginScreen() {
           </div>
 
           {error && (
-            <div style={{
+            <div role="alert" aria-live="assertive" style={{
               marginBottom: 14, padding: '10px 14px',
               border: '1px solid var(--red)', background: 'rgba(226,85,58,0.06)',
               fontSize: "var(--text-xs)", color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,

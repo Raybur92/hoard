@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Cover } from '../primitives/Cover';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import type { IgdbSearchResult, GameStatus } from '@hoard/types';
 
 const STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist'];
@@ -30,6 +31,7 @@ export function AddGameModal({ onClose, onAdded }: Props) {
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -79,6 +81,7 @@ export function AddGameModal({ onClose, onAdded }: Props) {
 
   return (
     <div
+      ref={trapRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-game-title"

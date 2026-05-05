@@ -145,7 +145,7 @@ export function SettingsMobile() {
                 onBlur={() => void saveField('name', draftName)}
                 placeholder="display name"
               />
-              {saved === 'name' && <span className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>ok</span>}
+              {saved === 'name' && <span role="status" aria-live="polite" className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>ok</span>}
             </div>
           </div>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
@@ -161,7 +161,7 @@ export function SettingsMobile() {
                 placeholder="email address"
               />
               {saved === 'email'
-                ? <span className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>ok</span>
+                ? <span role="status" aria-live="polite" className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>ok</span>
                 : <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)', fontSize: "var(--text-3xs)" }}>
                     <Icon name="check" size={9} /> ok
                   </span>
