@@ -83,7 +83,7 @@ export function PsnGuidedFlowMobile() {
                 border: `1px solid ${c}`,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 background: done ? c : 'transparent',
-                fontSize: 9, color: done ? 'var(--void)' : c,
+                fontSize: "var(--text-2xs)", color: done ? 'var(--void)' : c,
                 fontFamily: 'var(--mono)',
                 flexShrink: 0,
               }}>
@@ -99,16 +99,16 @@ export function PsnGuidedFlowMobile() {
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 16px 20px' }}>
         <Marker>// step {step} · {PSN_STEPS[step - 1]!.t}</Marker>
-        <div style={{ marginTop: 8, fontSize: 16, lineHeight: 1.25, color: 'var(--paper)' }}>
+        <div style={{ marginTop: 8, fontSize: "var(--text-md)", lineHeight: 1.25, color: 'var(--paper)' }}>
           {PSN_STEPS[step - 1]!.t}
         </div>
-        <div className="t-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
+        <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 8, lineHeight: 1.5 }}>
           {PSN_STEPS[step - 1]!.d}
         </div>
 
         {step === 2 && (
           <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <a href={SONY_LOGIN_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--paper)', fontSize: 12 }}>
+            <a href={SONY_LOGIN_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--paper)', fontSize: "var(--text-xs)" }}>
               <div className="field">
                 <span className="pre">https://</span>
                 <span className="t-dim">my.account.sony.com — sign in</span>
@@ -116,7 +116,7 @@ export function PsnGuidedFlowMobile() {
                 <Icon name="ext" size={11} />
               </div>
             </a>
-            <a href={SONY_AUTH_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--amber)', fontSize: 12 }}>
+            <a href={SONY_AUTH_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--amber)', fontSize: "var(--text-xs)" }}>
               <div className="field" style={{ borderColor: 'var(--amber)' }}>
                 <span className="pre">https://</span>
                 <span style={{ color: 'var(--paper-dim)' }}>ca.account.sony.com/…</span>
@@ -129,8 +129,8 @@ export function PsnGuidedFlowMobile() {
 
         {step === 3 && (
           <div style={{ marginTop: 14, border: '1px solid var(--rule-bright)', background: 'var(--ink-2)', padding: 12 }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// what you'll see</div>
-            <pre className="ascii" style={{ marginTop: 8, fontSize: 11, lineHeight: 1.65, color: 'var(--paper-dim)' }}>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// what you'll see</div>
+            <pre className="ascii" style={{ marginTop: 8, fontSize: "var(--text-2xs)", lineHeight: 1.65, color: 'var(--paper-dim)' }}>
               {'{\n  "npsso": '}<span style={{ background: 'var(--green)', color: 'var(--void)', padding: '1px 3px' }}>"aB3kF9..8e2f"</span>{'\n}'}
             </pre>
           </div>
@@ -138,7 +138,7 @@ export function PsnGuidedFlowMobile() {
 
         {step === 4 && (
           <div style={{ marginTop: 18 }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// paste here</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// paste here</div>
             <input
               autoFocus
               className="field"
@@ -146,31 +146,31 @@ export function PsnGuidedFlowMobile() {
               onChange={(e) => setNpsso(e.target.value.trim())}
               placeholder="paste 64-char token…"
               style={{
-                display: 'block', width: '100%', marginTop: 8, height: 38, fontSize: 11,
+                display: 'block', width: '100%', marginTop: 8, height: 38, fontSize: "var(--text-2xs)",
                 fontFamily: 'var(--mono)',
                 background: 'var(--ink-2)', border: '1px solid var(--rule-bright)',
                 color: 'var(--paper)', padding: '0 12px', outline: 'none',
               }}
               maxLength={64}
             />
-            <div className="t-faint" style={{ fontSize: 10, marginTop: 6 }}>
+            <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6 }}>
               {npsso.length}/64 · hoard validates locally · nothing sent yet.
             </div>
-            {error && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 8 }}>{error}</div>}
+            {error && <div style={{ fontSize: "var(--text-2xs)", color: 'var(--red)', marginTop: 8 }}>{error}</div>}
           </div>
         )}
 
         {step === 5 && (
           <div className="panel" style={{ marginTop: 16, padding: 14, background: 'var(--ink-2)', borderColor: 'var(--green)', display: 'flex', gap: 10 }}>
             <Icon name="check" size={14} style={{ color: 'var(--green)', marginTop: 1 }} />
-            <div style={{ fontSize: 12, color: 'var(--green)' }}>PSN connected! Library syncing…</div>
+            <div style={{ fontSize: "var(--text-xs)", color: 'var(--green)' }}>PSN connected! Library syncing…</div>
           </div>
         )}
 
         {step < 5 && (
           <div className="panel" style={{ marginTop: 18, padding: 12, background: 'var(--ink-2)', display: 'flex', gap: 10 }}>
             <Icon name="shield" size={13} style={{ color: 'var(--green)', marginTop: 1 }} />
-            <div className="t-faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+            <div className="t-faint" style={{ fontSize: "var(--text-2xs)", lineHeight: 1.5 }}>
               <span style={{ color: 'var(--paper)' }}>encrypted at rest.</span> we never see your password.
             </div>
           </div>

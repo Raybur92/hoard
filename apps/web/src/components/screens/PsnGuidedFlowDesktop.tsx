@@ -67,13 +67,13 @@ export function PsnGuidedFlowDesktop() {
             <div className="t-display" style={{ fontSize: 30, marginTop: 8, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
               get your psn token
             </div>
-            <div className="t-faint" style={{ fontSize: 12, marginTop: 4 }}>
+            <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 4 }}>
               psn has no public api. we pass-through the same cookie your browser uses. hoard never sees your password.
             </div>
           </div>
           <span
             className="t-faint"
-            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
+            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
             onClick={() => navigate('/settings/platforms/ps')}
           >
             <Icon name="x" size={11} /> cancel
@@ -89,9 +89,9 @@ export function PsnGuidedFlowDesktop() {
               return (
                 <div key={s.n} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ height: 2, background: done || active ? c : 'var(--rule)' }} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: c, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: "var(--text-3xs)", color: c, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                     <span style={{ width: 14, height: 14, border: `1px solid ${c}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: done ? c : 'transparent', flexShrink: 0 }}>
-                      {done ? <Icon name="check" size={9} style={{ color: 'var(--void)' }} /> : <span style={{ fontSize: 9 }}>{s.n}</span>}
+                      {done ? <Icon name="check" size={9} style={{ color: 'var(--void)' }} /> : <span style={{ fontSize: "var(--text-2xs)" }}>{s.n}</span>}
                     </span>
                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.t}</span>
                   </div>
@@ -107,21 +107,21 @@ export function PsnGuidedFlowDesktop() {
           {/* LEFT — instruction */}
           <div style={{ padding: 28, borderRight: '1px solid var(--rule)', display: 'flex', flexDirection: 'column' }}>
             <Marker>// step {step} · {PSN_STEPS[step - 1]!.t}</Marker>
-            <div className="t-display" style={{ fontSize: 22, marginTop: 8, color: 'var(--paper)' }}>
+            <div className="t-display" style={{ fontSize: "var(--text-lg)", marginTop: 8, color: 'var(--paper)' }}>
               {PSN_STEPS[step - 1]!.t}
             </div>
-            <div style={{ marginTop: 10, color: 'var(--paper-dim)', fontSize: 13, lineHeight: 1.55 }}>
+            <div style={{ marginTop: 10, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", lineHeight: 1.55 }}>
               {PSN_STEPS[step - 1]!.d}
             </div>
 
             {step === 2 && (
               <div style={{ marginTop: 14 }}>
-                <div className="t-up t-faint" style={{ fontSize: 10, marginBottom: 8 }}>// open these links in order</div>
+                <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)", marginBottom: 8 }}>// open these links in order</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <a href={SONY_LOGIN_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--paper)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <a href={SONY_LOGIN_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--paper)', fontSize: "var(--text-xs)", display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Icon name="ext" size={11} /> 1. Sign in to PlayStation
                   </a>
-                  <a href={SONY_AUTH_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--amber)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <a href={SONY_AUTH_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--amber)', fontSize: "var(--text-xs)", display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Icon name="ext" size={11} /> 2. Open auth endpoint (copy from here)
                   </a>
                 </div>
@@ -132,7 +132,7 @@ export function PsnGuidedFlowDesktop() {
               <pre className="ascii" style={{
                 marginTop: 14, padding: 14,
                 background: 'var(--ink-2)', border: '1px solid var(--rule)',
-                fontSize: 12, lineHeight: 1.65,
+                fontSize: "var(--text-xs)", lineHeight: 1.65,
                 color: 'var(--paper-dim)', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
               }}>
                 {'{\n  "npsso": '}<span style={{ color: 'var(--green)' }}>"aB3kF9...x2eP8e2f"</span>{'\n}'}
@@ -141,7 +141,7 @@ export function PsnGuidedFlowDesktop() {
 
             {step === 4 && (
               <div style={{ marginTop: 18 }}>
-                <div className="t-up t-faint" style={{ fontSize: 10 }}>// paste token here</div>
+                <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// paste token here</div>
                 <input
                   autoFocus
                   className="field"
@@ -149,18 +149,18 @@ export function PsnGuidedFlowDesktop() {
                   onChange={(e) => setNpsso(e.target.value.trim())}
                   placeholder="aB3kF9...x2eP8e2f  (64 chars)"
                   style={{
-                    marginTop: 8, width: '100%', height: 38, fontSize: 12,
+                    marginTop: 8, width: '100%', height: 38, fontSize: "var(--text-xs)",
                     fontFamily: 'var(--mono)', letterSpacing: '0.04em',
                     background: 'var(--ink-2)', border: '1px solid var(--rule-bright)',
                     color: 'var(--paper)', padding: '0 12px', outline: 'none',
                   }}
                   maxLength={64}
                 />
-                <div className="t-faint" style={{ fontSize: 10, marginTop: 6 }}>
+                <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6 }}>
                   {npsso.length}/64 · hoard validates locally before sending.
                 </div>
                 {error && (
-                  <div className="t-red" style={{ fontSize: 11, marginTop: 8, color: 'var(--red)' }}>{error}</div>
+                  <div className="t-red" style={{ fontSize: "var(--text-2xs)", marginTop: 8, color: 'var(--red)' }}>{error}</div>
                 )}
               </div>
             )}
@@ -169,8 +169,8 @@ export function PsnGuidedFlowDesktop() {
               <div className="panel" style={{ marginTop: 16, padding: 14, background: 'var(--ink-2)', borderColor: 'var(--green)', display: 'flex', gap: 10 }}>
                 <Icon name="check" size={16} style={{ color: 'var(--green)', marginTop: 1 }} />
                 <div>
-                  <div style={{ fontSize: 13, color: 'var(--green)' }}>PSN connected!</div>
-                  <div className="t-faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
+                  <div style={{ fontSize: "var(--text-sm)", color: 'var(--green)' }}>PSN connected!</div>
+                  <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4, lineHeight: 1.4 }}>
                     Your library is syncing in the background. Check the Platforms page in a few moments.
                   </div>
                 </div>
@@ -180,7 +180,7 @@ export function PsnGuidedFlowDesktop() {
             {step < 5 && (
               <div className="panel" style={{ marginTop: 18, padding: 12, background: 'var(--ink-2)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <Icon name="shield" size={14} style={{ color: 'var(--green)', marginTop: 1 }} />
-                <div style={{ fontSize: 11, color: 'var(--paper-dim)', lineHeight: 1.5 }}>
+                <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', lineHeight: 1.5 }}>
                   <div style={{ color: 'var(--paper)' }}>this stays on your device until step 4.</div>
                   hoard validates the format locally before sending. tokens are encrypted at rest and never logged.
                 </div>
@@ -209,7 +209,7 @@ export function PsnGuidedFlowDesktop() {
 
           {/* RIGHT — browser mock */}
           <div style={{ padding: 28, background: 'var(--ink-2)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="t-up t-faint" style={{ fontSize: 10 }}>// what you should see</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// what you should see</div>
 
             <div style={{ border: '1px solid var(--rule-bright)', background: 'var(--void)', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               {/* fake browser chrome */}
@@ -219,15 +219,15 @@ export function PsnGuidedFlowDesktop() {
                     <span key={i} style={{ width: 8, height: 8, background: 'var(--paper-faint)' }} />
                   ))}
                 </span>
-                <div className="field" style={{ flex: 1, height: 22, fontSize: 10 }}>
+                <div className="field" style={{ flex: 1, height: 22, fontSize: "var(--text-3xs)" }}>
                   <span className="pre" style={{ color: 'var(--green)' }}>https://</span>
                   <span style={{ color: 'var(--paper-dim)' }}>ca.account.sony.com/api/v1/ssocookie</span>
                 </div>
                 <Icon name="refresh" size={11} style={{ color: 'var(--paper-faint)' }} />
               </div>
 
-              <div style={{ padding: 18, flex: 1, fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.7, color: 'var(--paper-dim)', overflow: 'auto' }}>
-                <div style={{ color: 'var(--paper-faint)', fontSize: 10, marginBottom: 10 }}>view-source · application/json</div>
+              <div style={{ padding: 18, flex: 1, fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", lineHeight: 1.7, color: 'var(--paper-dim)', overflow: 'auto' }}>
+                <div style={{ color: 'var(--paper-faint)', fontSize: "var(--text-3xs)", marginBottom: 10 }}>view-source · application/json</div>
                 <div>{'{'}</div>
                 <div style={{ paddingLeft: 18 }}>
                   "npsso":{' '}
@@ -236,13 +236,13 @@ export function PsnGuidedFlowDesktop() {
                   </span>
                 </div>
                 <div>{'}'}</div>
-                <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontSize: 11 }}>
+                <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontSize: "var(--text-2xs)" }}>
                   <Icon name="copy" size={11} /> highlighted · ⌘C to copy
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--paper-faint)', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', alignItems: 'center' }}>
               <Icon name="info" size={11} /> 64 chars · hex/letters only · expires 60 days from issue
             </div>
           </div>

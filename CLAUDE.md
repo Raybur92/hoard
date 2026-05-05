@@ -143,7 +143,31 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: No active phase — Performance & UX workstream complete (2026-05-04). Production is fast and stable; ready for next feature work.**
+**Active: Phase 8 — Mobile Parity, iOS-HIG & Accessibility (planned 2026-05-05).**
+
+Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics, iOS HIG, typography, touch targets, and full accessibility. Composite mobile UX score: ~3/10 baseline → target 8/10. See `docs/PLAN.md` → Phase 8 for the complete 5-PR breakdown.
+
+**Audit headline findings:**
+- ~290 uses of 9–12 px text; no `--text-*` token scale exists
+- Zero `:focus-visible` styles anywhere; ~50 `<div onClick>` without keyboard support
+- Zero semantic `<h1>` / `<h2>` / `<h3>` across the app
+- Mobile shell renders a fake hardcoded "9:41 / 100 %" status bar (`MobileFrame.tsx:11–19`)
+- Mobile tab bar grid is `repeat(5, 1fr)` for 4 tabs (`global.css:516`)
+- No `viewport-fit=cover` / `env(safe-area-inset-*)` / `100dvh`
+- Mobile components don't read `usePreferences()` and don't call `update()` — ~50 % of desktop interactivity missing on mobile equivalents
+
+**Phase 8 PR sequence:**
+1. **PR 1 — Foundation:** typography scale tokens, `:focus-visible` styles globally, `prefers-reduced-motion`, line-height tokens, raise minimum chip / btn.sm sizes, ban `--paper-faint` for body text under 17 px.
+2. **PR 2 — Mobile shell (iOS HIG):** delete fake status bar, fix tab bar grid, add `viewport-fit=cover` + safe-area insets + `100dvh`, active-tab indicator, press feedback, replace placeholder icons, wire MobileHeader's search.
+3. **PR 3 — Accessibility (WCAG 2.1 AA):** convert ~50 `<div onClick>` → `<button>`; add semantic `<h1>`–`<h3>` and ARIA landmarks; `<label htmlFor>` on every input; `role="dialog"` + focus trap on every modal; `useDocumentTitle` per route; skip-to-content link; `eslint-plugin-jsx-a11y`; axe-core in Playwright; Lighthouse a11y threshold raised to 95.
+4. **PR 4 — Mobile parity (scope TBD):** wire GameDetailMobile interactions, add backlog picker / now-playing actions to DashboardMobile, platform filter / sort to LibraryMobile, scope toggle to UpcomingMobile, sync-frequency to PlatformDetailMobile. Per-feature scope decision pending before implementation.
+5. **PR 5 — IA & polish:** empty / first-run states with CTAs, retry buttons on errors, `navigate(-1)` audit, URL state for sort / view / scope, pull-to-refresh on mobile data screens.
+
+WCAG 2.1 AA is the bar (Hoard may be released as a product later, so accessibility is a hard prerequisite, not a personal-tool nicety).
+
+---
+
+**Previous workstream — Performance & UX (complete 2026-05-04).**
 
 The full per-PR breakdown (14 items, 6 PRs) is preserved in `docs/PERFORMANCE_PLAN.md`. Headline summary kept here for quick orientation:
 

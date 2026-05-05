@@ -90,8 +90,8 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps)
           <Plat code={g.platformCode} />
         </div>
         {isBacklog && showHltb && g.hltbHours != null && (
-          <div style={{ position: 'absolute', bottom: 4, left: 4, padding: '2px 5px', background: 'rgba(0,0,0,0.78)', border: '1px solid var(--rule-bright)', fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.04em', color: 'var(--paper-dim)' }}>
-            <span style={{ color: 'var(--paper-faint)', fontSize: 8 }}>HLTB </span>~{g.hltbHours}h
+          <div style={{ position: 'absolute', bottom: 4, left: 4, padding: '2px 5px', background: 'rgba(0,0,0,0.78)', border: '1px solid var(--rule-bright)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", letterSpacing: '0.04em', color: 'var(--paper-dim)' }}>
+            <span style={{ color: 'var(--paper-faint)', fontSize: "var(--text-3xs)" }}>HLTB </span>~{g.hltbHours}h
           </div>
         )}
         {g.progress > 0 && (
@@ -100,8 +100,8 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps)
           </div>
         )}
       </div>
-      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--paper)', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 9, color: 'var(--paper-faint)' }}>
+      <div style={{ marginTop: 8, fontSize: "var(--text-2xs)", color: 'var(--paper)', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: "var(--text-2xs)", color: 'var(--paper-faint)' }}>
         <span className="t-tnum">{g.playtime}</span>
         <span className="t-tnum">{g.lastPlayed}</span>
       </div>
@@ -147,16 +147,16 @@ function Shelf({ idx, shelf, coverW, coverH, showHltb }: ShelfProps) {
       <div className="shelf-label">
         <span className="num" style={{ color: accent }}>{String(idx).padStart(2, '0')}</span>
         <span className="name">{shelf.name}</span>
-        <span className="t-mono t-faint" style={{ fontSize: 11 }}>· {shelf.count} titles</span>
+        <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {shelf.count} titles</span>
       </div>
       <div ref={rowRef} style={{ display: 'flex', gap: SHELF_GAP, overflow: 'hidden' }}>
         {shown.map(g => <ShelfItem key={g.id} g={g} w={coverW} h={coverH} isBacklog={isBacklog} showHltb={showHltb} />)}
         <div
-          style={{ width: coverW, flex: `0 0 ${coverW}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: coverH, color: 'var(--paper-faint)', fontSize: 11, gap: 6, cursor: 'pointer' }}
+          style={{ width: coverW, flex: `0 0 ${coverW}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: coverH, color: 'var(--paper-faint)', fontSize: "var(--text-2xs)", gap: 6, cursor: 'pointer' }}
           onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
         >
-          {remaining > 0 && <span style={{ fontSize: 22 }}>+{remaining}</span>}
-          <span className="t-up" style={{ fontSize: 9 }}>view all</span>
+          {remaining > 0 && <span style={{ fontSize: "var(--text-lg)" }}>+{remaining}</span>}
+          <span className="t-up" style={{ fontSize: "var(--text-2xs)" }}>view all</span>
         </div>
       </div>
       <div style={{ height: 4, background: 'var(--rule-bright)', marginTop: 10, position: 'relative' }}>
@@ -224,8 +224,8 @@ export function LibraryDesktop() {
       <>
         <TopBar crumbs={['hoard', 'library']} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '32px' }}>
-          <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// failed to load library`}</span>
-          <span className="t-mono t-faint" style={{ fontSize: 11, maxWidth: 480, textAlign: 'center' }}>{error}</span>
+          <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// failed to load library`}</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", maxWidth: 480, textAlign: 'center' }}>{error}</span>
           <Btn sm onClick={() => refetch()}>retry</Btn>
         </div>
       </>
@@ -316,8 +316,8 @@ export function LibraryDesktop() {
             <Icon name="back" size={10} /> shelves
           </Btn>
           <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
-          <span className="t-up" style={{ fontSize: 11, color: accent }}>{cfg?.name ?? statusParam}</span>
-          <span className="t-mono t-faint" style={{ fontSize: 11 }}>· {items.length} titles</span>
+          <span className="t-up" style={{ fontSize: "var(--text-2xs)", color: accent }}>{cfg?.name ?? statusParam}</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {items.length} titles</span>
           <span style={{ flex: 1 }} />
           <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
             <Icon name="plus" size={10} /> add game
@@ -328,7 +328,7 @@ export function LibraryDesktop() {
         )}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px' }}>
           {items.length === 0 ? (
-            <span className="t-mono t-faint" style={{ fontSize: 12 }}>// no titles in this shelf yet</span>
+            <span className="t-mono t-faint" style={{ fontSize: "var(--text-xs)" }}>// no titles in this shelf yet</span>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
               {items.map(g => <ShelfItem key={g.id} g={g} w={coverDims.w} h={coverDims.h} isBacklog={isBacklog} showHltb={prefs.showHltb} />)}
@@ -349,17 +349,17 @@ export function LibraryDesktop() {
             <span className="pre">$</span>
             <span style={{ color: 'var(--paper)' }}>find</span>
             <span style={{ color: 'var(--paper-faint)' }}>{totalGames} games · type to filter</span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--paper-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ marginLeft: 'auto', fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <Icon name="search" size={11} /> K
             </span>
           </div>
           <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
-          <span className="t-up t-faint" style={{ fontSize: 10 }}>view</span>
+          <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>view</span>
           <Chip on={viewMode === 'shelves'} onClick={() => { setViewMode('shelves'); void updatePref({ libraryView: 'shelves' }); }}>shelves</Chip>
           <Chip on={viewMode === 'grid'}    onClick={() => { setViewMode('grid');    void updatePref({ libraryView: 'grid' }); }}>grid</Chip>
           <Chip on={viewMode === 'list'}    onClick={() => { setViewMode('list');    void updatePref({ libraryView: 'list' }); }}>list</Chip>
           <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
-          <span className="t-up t-faint" style={{ fontSize: 10 }}>plat</span>
+          <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
           <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
           <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')}><Plat code="ST" /></Chip>
           <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')}><Plat code="PS" /></Chip>
@@ -368,7 +368,7 @@ export function LibraryDesktop() {
           <span style={{ flex: 1 }} />
           <span
             className="t-mono t-faint"
-            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
             onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}
           >
             sort: {SORT_LABELS[sortBy]} <Icon name="arrowD" size={10} />

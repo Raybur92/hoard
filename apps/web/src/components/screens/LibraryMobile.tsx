@@ -67,9 +67,9 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
   return (
     <div id={`shelf-${shelf.status}`} style={{ padding: '14px 0 18px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0 16px' }}>
-        <span className="t-display" style={{ fontSize: 18, color: accent, lineHeight: 0.9 }}>{String(idx).padStart(2, '0')}</span>
-        <span className="t-up" style={{ fontSize: 12, letterSpacing: '0.14em' }}>{shelf.name}</span>
-        <span className="t-mono t-faint" style={{ fontSize: 10 }}>· {shelf.count}</span>
+        <span className="t-display" style={{ fontSize: "var(--text-md)", color: accent, lineHeight: 0.9 }}>{String(idx).padStart(2, '0')}</span>
+        <span className="t-up" style={{ fontSize: "var(--text-xs)", letterSpacing: '0.14em' }}>{shelf.name}</span>
+        <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {shelf.count}</span>
       </div>
       <div style={{ display: 'flex', gap: 10, overflow: 'hidden', padding: '12px 16px 0' }}>
         {shown.map(g => (
@@ -83,19 +83,19 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
                 </div>
               )}
             </div>
-            <div style={{ fontSize: 10, marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
-            <div style={{ fontSize: 9, color: 'var(--paper-faint)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+            <div style={{ fontSize: "var(--text-3xs)", marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
+            <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
               <span>{g.playtime}</span>
               {isBacklog && g.hltbHours != null && <span style={{ color: 'var(--paper-dim)' }}>~{g.hltbHours}h</span>}
             </div>
           </div>
         ))}
         <div
-          style={{ width: 84, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: 112, color: 'var(--paper-faint)', fontSize: 10, gap: 4, cursor: 'pointer' }}
+          style={{ width: 84, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: 112, color: 'var(--paper-faint)', fontSize: "var(--text-3xs)", gap: 4, cursor: 'pointer' }}
           onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
         >
-          {remaining > 0 && <span style={{ fontSize: 16 }}>+{remaining}</span>}
-          <span className="t-up" style={{ fontSize: 8 }}>view all</span>
+          {remaining > 0 && <span style={{ fontSize: "var(--text-md)" }}>+{remaining}</span>}
+          <span className="t-up" style={{ fontSize: "var(--text-3xs)" }}>view all</span>
         </div>
       </div>
       <div style={{ height: 3, background: 'var(--rule-bright)', margin: '10px 16px 0' }} />
@@ -154,8 +154,8 @@ export function LibraryMobile() {
       <>
         <MobileHeader title="shelves" sub="// load failed" />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '24px' }}>
-          <span className="t-mono t-red" style={{ fontSize: 11 }}>{`// failed to load library`}</span>
-          <span className="t-mono t-faint" style={{ fontSize: 10, maxWidth: 320, textAlign: 'center' }}>{error}</span>
+          <span className="t-mono t-red" style={{ fontSize: "var(--text-2xs)" }}>{`// failed to load library`}</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", maxWidth: 320, textAlign: 'center' }}>{error}</span>
           <Btn sm onClick={() => refetch()}>retry</Btn>
         </div>
       </>
@@ -233,7 +233,7 @@ export function LibraryMobile() {
         )}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 20px' }}>
           {items.length === 0 ? (
-            <span className="t-mono t-faint" style={{ fontSize: 11 }}>// no titles in this shelf yet</span>
+            <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>// no titles in this shelf yet</span>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {items.map(g => (
@@ -247,8 +247,8 @@ export function LibraryMobile() {
                       </div>
                     )}
                   </div>
-                  <div style={{ fontSize: 10, marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
-                  <div style={{ fontSize: 9, color: 'var(--paper-faint)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                  <div style={{ fontSize: "var(--text-3xs)", marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
+                  <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
                     <span>{g.playtime}</span>
                     {isBacklog && g.hltbHours != null && <span style={{ color: 'var(--paper-dim)' }}>~{g.hltbHours}h</span>}
                   </div>

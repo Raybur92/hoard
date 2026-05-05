@@ -26,7 +26,7 @@ export function OfflineBanner() {
       background: 'var(--amber)',
       color: 'var(--void)',
       fontFamily: 'var(--mono)',
-      fontSize: 11,
+      fontSize: "var(--text-2xs)",
       fontWeight: 500,
       letterSpacing: '0.07em',
       textTransform: 'uppercase',

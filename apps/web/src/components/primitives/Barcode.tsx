@@ -20,7 +20,7 @@ export function Barcode({ code = 'HRD-0042-ELDN-0026', height = 36 }: BarcodePro
             : <div key={i} style={{ width: w }} />,
         )}
       </div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.18em' }}>{code}</div>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: "var(--text-3xs)", letterSpacing: '0.18em' }}>{code}</div>
     </div>
   );
 }

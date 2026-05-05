@@ -71,7 +71,7 @@ export function DashboardDesktop() {
         <TopBar crumbs={['hoard', 'dashboard']} />
         {error
           ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+              <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// error: ${error}`}</span>
             </div>
           : <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 28 }}>
@@ -136,19 +136,19 @@ export function DashboardDesktop() {
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginTop: 16 }}>
                 <span className="bignum">{stats.totalGames}</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span className="t-up t-faint" style={{ fontSize: 11 }}>games owned</span>
-                  <span className="t-mono t-dim" style={{ fontSize: 12 }}>+{stats.weeklyAdded} this week</span>
+                  <span className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>games owned</span>
+                  <span className="t-mono t-dim" style={{ fontSize: "var(--text-xs)" }}>+{stats.weeklyAdded} this week</span>
                 </div>
               </div>
-              <div style={{ marginTop: 6, color: 'var(--paper-dim)', fontSize: 13, fontFamily: 'var(--mono)' }}>
+              <div style={{ marginTop: 6, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", fontFamily: 'var(--mono)' }}>
                 <span className="t-green">$</span>{' '}
                 {(stats.totalPlaytimeMinutes / 60).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} hours played
                 &nbsp;·&nbsp;{stats.completionPct}% completed
               </div>
             </div>
             <div className="panel" style={{ padding: '14px 18px' }}>
-              <div className="t-up t-faint" style={{ fontSize: 10 }}>system</div>
-              <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 18px', fontSize: 12 }}>
+              <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>system</div>
+              <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 18px', fontSize: "var(--text-xs)" }}>
                 {platforms.map(p => (
                   <>
                     <div key={`${p.code}-l`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -188,18 +188,18 @@ export function DashboardDesktop() {
                   />
                   <div>
                     <Marker>// session active · resumed {np.lastPlayedAt ? formatRelative(np.lastPlayedAt) : '—'}</Marker>
-                    <div style={{ marginTop: 10, fontSize: 28, lineHeight: 1.05, color: 'var(--paper)', letterSpacing: '-0.01em', fontWeight: 500 }}>
+                    <div style={{ marginTop: 10, fontSize: "var(--text-xl)", lineHeight: 1.05, color: 'var(--paper)', letterSpacing: '-0.01em', fontWeight: 500 }}>
                       {nowPlayingTitle(np.game.title)}
                     </div>
-                    <div className="t-mono t-dim" style={{ fontSize: 12, marginTop: 4 }}>
+                    <div className="t-mono t-dim" style={{ fontSize: "var(--text-xs)", marginTop: 4 }}>
                       {np.game.developer} · {np.game.releaseYear} · {np.game.genres[0] ?? '—'}
                     </div>
 
-                    <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, max-content)', gap: '4px 28px', fontSize: 12 }}>
-                      <span className="t-up t-faint" style={{ fontSize: 10 }}>played</span>
-                      <span className="t-up t-faint" style={{ fontSize: 10 }}>est. main</span>
-                      <span className="t-up t-faint" style={{ fontSize: 10 }}>progress</span>
-                      <span className="t-up t-faint" style={{ fontSize: 10 }}>last save</span>
+                    <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, max-content)', gap: '4px 28px', fontSize: "var(--text-xs)" }}>
+                      <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>played</span>
+                      <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>est. main</span>
+                      <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>progress</span>
+                      <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>last save</span>
                       <span className="t-tnum" style={{ color: 'var(--paper)' }}>{minutesToHours(npTotalMins)}</span>
                       <span className="t-tnum t-dim">{npHltbMain}</span>
                       <span className="t-tnum t-green">—</span>
@@ -218,7 +218,7 @@ export function DashboardDesktop() {
                       {npPlatforms.map(({ code, label, h }) => (
                         <span key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <Plat code={code} lg />
-                          <span className="t-faint" style={{ fontSize: 11 }}>{label} · {h}</span>
+                          <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{label} · {h}</span>
                         </span>
                       ))}
                     </div>
@@ -230,11 +230,11 @@ export function DashboardDesktop() {
               <div className="panel" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <Marker>// hours by platform · all-time</Marker>
-                  <span className="t-mono t-faint" style={{ fontSize: 10 }}>
+                  <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)" }}>
                     {(stats.totalPlaytimeMinutes / 60).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h total
                   </span>
                 </div>
-                <pre className="ascii t-dim" style={{ marginTop: 12, fontSize: 12, lineHeight: 1.55 }}>
+                <pre className="ascii t-dim" style={{ marginTop: 12, fontSize: "var(--text-xs)", lineHeight: 1.55 }}>
                   {platformChart}
                 </pre>
               </div>
@@ -243,7 +243,7 @@ export function DashboardDesktop() {
               <div className="panel" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <Marker>// games last-played · 24 wk</Marker>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--paper-faint)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }}>
                     <span>less</span>
                     <div className="heat-cell" /><div className="heat-cell l1" /><div className="heat-cell l2" />
                     <div className="heat-cell l3" /><div className="heat-cell l4" /><div className="heat-cell l5" />
@@ -269,9 +269,9 @@ export function DashboardDesktop() {
                   [`${(stats.totalPlaytimeMinutes / 60).toFixed(0)}h`, 'TOTAL PLAYED', 'all-time',     'dim'],
                 ] as [string, string, string, string | null][]).map(([v, k, sub, tone], i) => (
                   <div key={i} style={{ background: 'var(--ink)', padding: '16px 16px 14px' }}>
-                    <div className="t-mono t-tnum" style={{ fontSize: 28, fontWeight: 500, lineHeight: 1, color: tone === 'green' ? 'var(--green)' : tone === 'amber' ? 'var(--amber)' : tone === 'red' ? 'var(--red)' : 'var(--paper)' }}>{v}</div>
-                    <div className="t-up t-faint" style={{ fontSize: 9, marginTop: 8 }}>{k}</div>
-                    <div className="t-mono" style={{ fontSize: 10, color: 'var(--paper-dim)', marginTop: 2 }}>{sub}</div>
+                    <div className="t-mono t-tnum" style={{ fontSize: "var(--text-xl)", fontWeight: 500, lineHeight: 1, color: tone === 'green' ? 'var(--green)' : tone === 'amber' ? 'var(--amber)' : tone === 'red' ? 'var(--red)' : 'var(--paper)' }}>{v}</div>
+                    <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 8 }}>{k}</div>
+                    <div className="t-mono" style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', marginTop: 2 }}>{sub}</div>
                   </div>
                 ))}
               </div>
@@ -279,8 +279,8 @@ export function DashboardDesktop() {
               {/* completion gauge */}
               <div style={{ marginTop: 18 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <span className="t-up t-faint" style={{ fontSize: 10 }}>completion ratio</span>
-                  <span className="t-tnum" style={{ fontSize: 11, color: 'var(--paper-dim)' }}>{stats.completedCount} / {stats.totalGames}</span>
+                  <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>completion ratio</span>
+                  <span className="t-tnum" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)' }}>{stats.completedCount} / {stats.totalGames}</span>
                 </div>
                 <Gauge total={20} filled={Math.round((stats.completedCount / Math.max(stats.totalGames, 1)) * 20)} />
               </div>
@@ -288,16 +288,16 @@ export function DashboardDesktop() {
               {/* genre breakdown */}
               {stats.genres.length > 0 && (
                 <div style={{ marginTop: 18 }}>
-                  <div className="t-up t-faint" style={{ fontSize: 10, marginBottom: 8 }}>top genres</div>
+                  <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)", marginBottom: 8 }}>top genres</div>
                   {(() => {
                     const maxCount = stats.genres[0]?.count ?? 1;
                     return stats.genres.map(({ name, count }, i) => (
-                      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 12 }}>
+                      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: "var(--text-xs)" }}>
                         <span style={{ width: 130, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)' }}>{name}</span>
                         <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
                           <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
                         </div>
-                        <span className="t-tnum t-faint" style={{ fontSize: 11, width: 28, textAlign: 'right' }}>{count}</span>
+                        <span className="t-tnum t-faint" style={{ fontSize: "var(--text-2xs)", width: 28, textAlign: 'right' }}>{count}</span>
                       </div>
                     ));
                   })()}
@@ -314,11 +314,11 @@ export function DashboardDesktop() {
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <Cover w={40} h={54} src={displayPick.game.coverUrl} label={(displayPick.game.title.split(' ')[0] ?? '').toUpperCase()} />
                     <div>
-                      <div style={{ fontSize: 13, color: 'var(--paper)', lineHeight: 1.2 }}>{displayPick.game.title}</div>
-                      <div className="t-faint" style={{ fontSize: 10, marginTop: 3 }}>
+                      <div style={{ fontSize: "var(--text-sm)", color: 'var(--paper)', lineHeight: 1.2 }}>{displayPick.game.title}</div>
+                      <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 3 }}>
                         {displayPick.game.developer} · {displayPick.game.releaseYear}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--paper-faint)', marginTop: 3 }}>
+                      <div style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', marginTop: 3 }}>
                         {displayPick.hltb?.mainStory
                           ? <span>HLTB ~{Math.round(displayPick.hltb.mainStory / 60)}h</span>
                           : null}
@@ -338,14 +338,14 @@ export function DashboardDesktop() {
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div>
                     <Marker>// wishlist · dropping soon</Marker>
-                    <div className="t-display" style={{ fontSize: 22, color: 'var(--paper)', marginTop: 6, letterSpacing: '0.04em' }}>
+                    <div className="t-display" style={{ fontSize: "var(--text-lg)", color: 'var(--paper)', marginTop: 6, letterSpacing: '0.04em' }}>
                       {wishlistCountdown.length} incoming{' '}
                       <span className="t-amber" style={{ display: 'inline-flex', verticalAlign: '-0.1em' }}>
                         <Icon name="star" size={18} fill={true} />
                       </span>
                     </div>
                   </div>
-                  <div className="t-faint" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <div className="t-faint" style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     see full upcoming feed <Icon name="arrowR" size={11} />
                   </div>
                 </div>
@@ -369,19 +369,19 @@ function WishlistCountdown({ items }: { items: WishlistRelease[] }) {
           <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Cover w="100%" h={170} src={w.coverUrl} label={w.title.toUpperCase()} dev={w.developer ?? '—'} bright={urgent} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span className="t-tnum" style={{ fontSize: 11, color: urgent ? 'var(--amber)' : 'var(--paper-dim)' }}>
+              <span className="t-tnum" style={{ fontSize: "var(--text-2xs)", color: urgent ? 'var(--amber)' : 'var(--paper-dim)' }}>
                 {formatReleaseDate(w.releaseDate)}
               </span>
-              <span className="t-tnum t-faint" style={{ fontSize: 10 }}>
+              <span className="t-tnum t-faint" style={{ fontSize: "var(--text-3xs)" }}>
                 {w.releaseDate ? `T-${days}` : 'TBA'}
               </span>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--paper)', lineHeight: 1.2 }}>{w.title}</div>
+            <div style={{ fontSize: "var(--text-sm)", color: 'var(--paper)', lineHeight: 1.2 }}>{w.title}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 4 }}>
                 {platCodes.map(code => <Plat key={code} code={code} />)}
               </div>
-              <span className="t-amber" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span className="t-amber" style={{ fontSize: "var(--text-xs)", display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="star" size={11} fill={true} /> tracking
               </span>
             </div>

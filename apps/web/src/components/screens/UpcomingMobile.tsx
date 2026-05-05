@@ -80,7 +80,7 @@ export function UpcomingMobile() {
         {monthTabs.map(([m, n], i) => (
           <div key={m} style={{
             padding: '5px 10px',
-            fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em',
+            fontFamily: 'var(--mono)', fontSize: "var(--text-3xs)", letterSpacing: '0.08em',
             color: i === 0 ? 'var(--void)' : 'var(--paper-dim)',
             background: i === 0 ? 'var(--paper)' : 'transparent',
             border: '1px solid ' + (i === 0 ? 'var(--paper)' : 'var(--rule)'),
@@ -98,7 +98,7 @@ export function UpcomingMobile() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <Marker>// next drop</Marker>
                 <span
-                  style={{ fontSize: 9, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: featured.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                  style={{ fontSize: "var(--text-2xs)", cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: featured.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
                   onClick={() => void handleToggleWishlist(featured.igdbId)}
                 >
                   <Icon name="star" size={10} fill={featured.wishlisted} />
@@ -111,16 +111,16 @@ export function UpcomingMobile() {
                   <div className="t-display" style={{ fontSize: 32, color: 'var(--amber)', lineHeight: 0.9 }}>
                     {featured.releaseDate ? `T-${featured.days}` : 'TBA'}
                   </div>
-                  <div style={{ fontSize: 13, marginTop: 4, lineHeight: 1.15 }}>{featured.title}</div>
-                  <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>
+                  <div style={{ fontSize: "var(--text-sm)", marginTop: 4, lineHeight: 1.15 }}>{featured.title}</div>
+                  <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
                     {featured.parts.full} · {featured.developer} · {featured.platStr}
                   </div>
                   {cd && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, marginTop: 8 }}>
                       {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
                         <div key={k} style={{ background: 'var(--ink-2)', border: '1px solid var(--rule)', padding: '4px 0', textAlign: 'center' }}>
-                          <div className="t-tnum" style={{ fontSize: 13, color: 'var(--amber)', lineHeight: 1 }}>{v}</div>
-                          <div className="t-faint" style={{ fontSize: 7, marginTop: 1 }}>{k.toUpperCase()}</div>
+                          <div className="t-tnum" style={{ fontSize: "var(--text-sm)", color: 'var(--amber)', lineHeight: 1 }}>{v}</div>
+                          <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 1 }}>{k.toUpperCase()}</div>
                         </div>
                       ))}
                     </div>
@@ -146,18 +146,18 @@ export function UpcomingMobile() {
               alignItems: 'center',
             }}>
               <div style={{ textAlign: 'center' }}>
-                <div className="t-up t-faint" style={{ fontSize: 8 }}>{g.parts.month}</div>
-                <div className="t-display" style={{ fontSize: 18, color: 'var(--amber)', lineHeight: 1 }}>
+                <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>{g.parts.month}</div>
+                <div className="t-display" style={{ fontSize: "var(--text-md)", color: 'var(--amber)', lineHeight: 1 }}>
                   {g.parts.day === '—' ? '?' : g.parts.day}
                 </div>
               </div>
               <Cover w={36} h={48} src={g.coverUrl} label={(g.title[0] ?? '').toUpperCase()} bright />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, lineHeight: 1.1 }}>{g.title}</div>
-                <div className="t-faint" style={{ fontSize: 9, marginTop: 2 }}>{g.developer} · {g.platStr}</div>
+                <div style={{ fontSize: "var(--text-xs)", lineHeight: 1.1 }}>{g.title}</div>
+                <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 2 }}>{g.developer} · {g.platStr}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div className="t-tnum" style={{ fontSize: 12, color: 'var(--amber)' }}>
+                <div className="t-tnum" style={{ fontSize: "var(--text-xs)", color: 'var(--amber)' }}>
                   {g.releaseDate ? `T-${g.days}d` : 'TBA'}
                 </div>
                 <div

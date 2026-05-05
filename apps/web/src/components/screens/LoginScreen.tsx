@@ -56,7 +56,7 @@ export function LoginScreen() {
           <div className="t-display" style={{ fontSize: 42, color: 'var(--paper)', letterSpacing: '0.04em' }}>
             hoard
           </div>
-          <div className="t-mono t-faint" style={{ fontSize: 11, marginTop: 4 }}>
+          <div className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>
             // your games. all of them.
           </div>
         </div>
@@ -69,7 +69,7 @@ export function LoginScreen() {
               onClick={() => { setMode(m); setError(''); }}
               style={{
                 padding: '8px 0', marginRight: 20,
-                fontSize: 11, fontFamily: 'var(--mono)',
+                fontSize: "var(--text-2xs)", fontFamily: 'var(--mono)',
                 textTransform: 'uppercase', letterSpacing: '0.12em',
                 color: mode === m ? 'var(--paper)' : 'var(--paper-faint)',
                 borderBottom: `2px solid ${mode === m ? 'var(--green)' : 'transparent'}`,
@@ -86,7 +86,7 @@ export function LoginScreen() {
         <form onSubmit={(e) => void handleSubmit(e)}>
           {mode === 'register' && (
             <div style={{ marginBottom: 12 }}>
-              <label className="t-mono t-faint" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+              <label className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
                 // display name (optional)
               </label>
               <input
@@ -102,7 +102,7 @@ export function LoginScreen() {
           )}
 
           <div style={{ marginBottom: 12 }}>
-            <label className="t-mono t-faint" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+            <label className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
               // email
             </label>
             <input
@@ -118,7 +118,7 @@ export function LoginScreen() {
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <label className="t-mono t-faint" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+            <label className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
               // password {mode === 'register' && <span className="t-ghost">(min 8 chars)</span>}
             </label>
             <input
@@ -138,13 +138,13 @@ export function LoginScreen() {
             <div style={{
               marginBottom: 14, padding: '10px 14px',
               border: '1px solid var(--red)', background: 'rgba(226,85,58,0.06)',
-              fontSize: 12, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: "var(--text-xs)", color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <Icon name="warn" size={13} /> {error}
             </div>
           )}
 
-          <Btn type="submit" variant="primary" disabled={loading} style={{ width: '100%', height: 42, fontSize: 12 }}>
+          <Btn type="submit" variant="primary" disabled={loading} style={{ width: '100%', height: 42, fontSize: "var(--text-xs)" }}>
             {loading
               ? '// loading…'
               : mode === 'login'
@@ -156,7 +156,7 @@ export function LoginScreen() {
         {/* divider */}
         <div style={{ margin: '20px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1 }}><Hr kind="dot" /></div>
-          <span className="t-mono t-ghost" style={{ fontSize: 10 }}>or</span>
+          <span className="t-mono t-ghost" style={{ fontSize: "var(--text-3xs)" }}>or</span>
           <div style={{ flex: 1 }}><Hr kind="dot" /></div>
         </div>
 
@@ -166,7 +166,7 @@ export function LoginScreen() {
             href={`${API_BASE}/api/auth/google`}
             style={{ textDecoration: 'none' }}
           >
-            <Btn style={{ width: '100%', height: 38, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Btn style={{ width: '100%', height: 38, fontSize: "var(--text-2xs)", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <Icon name="user" size={12} /> continue with google
             </Btn>
           </a>
@@ -174,14 +174,14 @@ export function LoginScreen() {
             href={`${API_BASE}/api/auth/steam`}
             style={{ textDecoration: 'none' }}
           >
-            <Btn style={{ width: '100%', height: 38, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Btn style={{ width: '100%', height: 38, fontSize: "var(--text-2xs)", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <Icon name="play" size={12} /> continue with steam
             </Btn>
           </a>
         </div>
 
         {/* footer */}
-        <div className="t-faint" style={{ fontSize: 10, textAlign: 'center', marginTop: 28, lineHeight: 1.5 }}>
+        <div className="t-faint" style={{ fontSize: "var(--text-3xs)", textAlign: 'center', marginTop: 28, lineHeight: 1.5 }}>
           hoard is a personal tool — your data stays yours.
         </div>
       </div>
@@ -194,7 +194,7 @@ const fieldStyle: React.CSSProperties = {
   width: '100%',
   marginTop: 6,
   height: 36,
-  fontSize: 12,
+  fontSize: "var(--text-xs)",
   fontFamily: 'var(--mono)',
   background: 'var(--ink-2)',
   border: '1px solid var(--rule-bright)',

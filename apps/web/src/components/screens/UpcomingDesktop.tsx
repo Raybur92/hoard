@@ -90,13 +90,13 @@ export function UpcomingDesktop() {
           {months.map(([m, n], i) => (
             <div key={m} style={{
               padding: '8px 14px',
-              fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.1em',
+              fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", letterSpacing: '0.1em',
               color: i === 0 ? 'var(--paper)' : 'var(--paper-faint)',
               borderBottom: i === 0 ? '2px solid var(--amber)' : '2px solid transparent',
               cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 6,
             }}>
-              {m} <span className="t-faint" style={{ fontSize: 9 }}>{n}</span>
+              {m} <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{n}</span>
             </div>
           ))}
           <span style={{ flex: 1 }} />
@@ -125,7 +125,7 @@ export function UpcomingDesktop() {
                           <span className="t-display" style={{ fontSize: 48, lineHeight: 0.85, color: 'var(--amber)' }}>T-{featured.days}</span>
                           <div>
                             <div style={{ fontSize: 26, lineHeight: 1.05, color: 'var(--paper)', letterSpacing: '-0.01em' }}>{featured.title}</div>
-                            <div className="t-mono t-dim" style={{ fontSize: 12, marginTop: 4 }}>{featured.developer} · {featured.genres[0] ?? '—'}</div>
+                            <div className="t-mono t-dim" style={{ fontSize: "var(--text-xs)", marginTop: 4 }}>{featured.developer} · {featured.genres[0] ?? '—'}</div>
                           </div>
                         </div>
                       </div>
@@ -133,26 +133,26 @@ export function UpcomingDesktop() {
                         <div style={{ flex: '0 0 auto', display: 'flex', gap: 4 }}>
                           {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
                             <div key={k} style={{ background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', padding: '6px 8px', textAlign: 'center', minWidth: 38 }}>
-                              <div className="t-mono t-tnum" style={{ fontSize: 18, color: 'var(--amber)', lineHeight: 1 }}>{v}</div>
-                              <div className="t-faint t-up" style={{ fontSize: 8, marginTop: 3 }}>{k.toUpperCase()}</div>
+                              <div className="t-mono t-tnum" style={{ fontSize: "var(--text-md)", color: 'var(--amber)', lineHeight: 1 }}>{v}</div>
+                              <div className="t-faint t-up" style={{ fontSize: "var(--text-3xs)", marginTop: 3 }}>{k.toUpperCase()}</div>
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
 
-                    <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, fontSize: 12 }}>
-                      <div><div className="t-up t-faint" style={{ fontSize: 9 }}>release</div><div className="t-tnum" style={{ marginTop: 4, color: 'var(--paper)' }}>{featured.parts.full}</div></div>
-                      <div><div className="t-up t-faint" style={{ fontSize: 9 }}>day</div><div className="t-tnum" style={{ marginTop: 4 }}>{featured.parts.dow}</div></div>
+                    <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, fontSize: "var(--text-xs)" }}>
+                      <div><div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>release</div><div className="t-tnum" style={{ marginTop: 4, color: 'var(--paper)' }}>{featured.parts.full}</div></div>
+                      <div><div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>day</div><div className="t-tnum" style={{ marginTop: 4 }}>{featured.parts.dow}</div></div>
                       <div>
-                        <div className="t-up t-faint" style={{ fontSize: 9 }}>platforms</div>
+                        <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>platforms</div>
                         <div style={{ marginTop: 4, display: 'flex', gap: 4 }}>
                           {featured.platforms.map(p => <Plat key={p} code={toPlatCode(p)} lg />)}
                         </div>
                       </div>
-                      <div><div className="t-up t-faint" style={{ fontSize: 9 }}>genres</div><div style={{ marginTop: 4, fontSize: 11 }}>{featured.genres[0] ?? '—'}</div></div>
+                      <div><div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>genres</div><div style={{ marginTop: 4, fontSize: "var(--text-2xs)" }}>{featured.genres[0] ?? '—'}</div></div>
                     </div>
-                    <div className="t-sans" style={{ marginTop: 16, fontSize: 13, lineHeight: 1.5, color: 'var(--paper-dim)' }}>
+                    <div className="t-sans" style={{ marginTop: 16, fontSize: "var(--text-sm)", lineHeight: 1.5, color: 'var(--paper-dim)' }}>
                       {featured.synopsis ?? featured.genres.join(' · ')}
                     </div>
                     <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -189,19 +189,19 @@ export function UpcomingDesktop() {
                       }}>
                         {labelTop && (
                           <div style={{ textAlign: 'center', marginBottom: 4 }}>
-                            <div style={{ fontSize: 10, color: 'var(--amber)', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontSize: "var(--text-3xs)", color: 'var(--amber)', whiteSpace: 'nowrap' }}>
                               <Icon name="star" size={9} fill={true} style={{ marginRight: 3 }} />{e.title.split(':')[0]}
                             </div>
-                            <div className="t-mono t-faint" style={{ fontSize: 9, marginTop: 1 }}>{e.parts.month} {e.parts.day}</div>
+                            <div className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 1 }}>{e.parts.month} {e.parts.day}</div>
                           </div>
                         )}
                         <div style={{ flex: 1, width: 1, background: 'var(--amber)' }} />
                         {!labelTop && (
                           <div style={{ textAlign: 'center', marginTop: 4 }}>
-                            <div style={{ fontSize: 10, color: 'var(--amber)', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontSize: "var(--text-3xs)", color: 'var(--amber)', whiteSpace: 'nowrap' }}>
                               <Icon name="star" size={9} fill={true} style={{ marginRight: 3 }} />{e.title.split(':')[0]}
                             </div>
-                            <div className="t-mono t-faint" style={{ fontSize: 9, marginTop: 1 }}>{e.parts.month} {e.parts.day}</div>
+                            <div className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 1 }}>{e.parts.month} {e.parts.day}</div>
                           </div>
                         )}
                       </div>
@@ -219,26 +219,26 @@ export function UpcomingDesktop() {
                 {items.slice(0, 4).map((g) => (
                   <div key={g.igdbId} style={{ display: 'grid', gridTemplateColumns: '60px 76px 1fr', gap: 14, padding: 14, border: '1px solid var(--rule)', background: 'var(--ink)' }}>
                     <div style={{ textAlign: 'center', borderRight: '1px dashed var(--rule-bright)', paddingRight: 8 }}>
-                      <div className="t-up t-faint" style={{ fontSize: 9 }}>{g.parts.month}</div>
+                      <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>{g.parts.month}</div>
                       <div className="t-display" style={{ fontSize: 26, color: 'var(--amber)', lineHeight: 1, marginTop: 3 }}>{g.parts.day === '—' ? '?' : g.parts.day}</div>
-                      <div className="t-mono t-faint" style={{ fontSize: 9, marginTop: 3 }}>{g.parts.dow}</div>
+                      <div className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 3 }}>{g.parts.dow}</div>
                     </div>
                     <Cover w={76} h={100} src={g.coverUrl} label={(g.title.split(' ')[0] ?? g.title).toUpperCase()} bright />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                        <div style={{ fontSize: 14, color: 'var(--paper)', lineHeight: 1.15 }}>{g.title}</div>
-                        {g.category === 2 && <span className="chip" style={{ fontSize: 9, color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>DLC</span>}
-                        {g.category === 8 && <span className="chip" style={{ fontSize: 9, color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>remake</span>}
+                        <div style={{ fontSize: "var(--text-base)", color: 'var(--paper)', lineHeight: 1.15 }}>{g.title}</div>
+                        {g.category === 2 && <span className="chip" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>DLC</span>}
+                        {g.category === 8 && <span className="chip" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>remake</span>}
                       </div>
-                      <div className="t-mono t-faint" style={{ fontSize: 10, marginTop: 2 }}>{g.developer}</div>
-                      <div className="t-faint" style={{ fontSize: 11, marginTop: 4 }}>{g.genres[0] ?? '—'}</div>
+                      <div className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>{g.developer}</div>
+                      <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>{g.genres[0] ?? '—'}</div>
                       <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                         {g.platforms.slice(0, 3).map(p => <Plat key={p} code={toPlatCode(p)} />)}
                       </div>
                       <div style={{ marginTop: 8 }}>
                         <span
                           onClick={() => void handleToggleWishlist(g.igdbId)}
-                          style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                          style={{ fontSize: "var(--text-2xs)", cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
                         >
                           <Icon name="star" size={10} fill={g.wishlisted} />
                           {g.wishlisted ? 'tracking' : '+ wishlist'}
@@ -255,7 +255,7 @@ export function UpcomingDesktop() {
           <div className="thin-scroll" style={{ overflow: 'auto' }}>
             <div style={{ padding: '18px 22px 6px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <Marker>// agenda · all tracked</Marker>
-              <span className="t-mono t-faint" style={{ fontSize: 10 }}>{items.length} items</span>
+              <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)" }}>{items.length} items</span>
             </div>
             {items.map((g) => (
               <div key={g.igdbId} style={{
@@ -268,20 +268,20 @@ export function UpcomingDesktop() {
                 background: 'rgba(212,160,23,0.04)',
               }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="t-up t-faint" style={{ fontSize: 8 }}>{g.parts.month}</div>
+                  <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>{g.parts.month}</div>
                   <div className="t-display" style={{ fontSize: 20, color: 'var(--amber)', lineHeight: 1 }}>{g.parts.day === '—' ? '?' : g.parts.day}</div>
                 </div>
                 <Cover w={32} h={42} src={g.coverUrl} label={(g.title[0] ?? '').toUpperCase()} bright />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, lineHeight: 1.1, display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  <div style={{ fontSize: "var(--text-xs)", lineHeight: 1.1, display: 'flex', alignItems: 'baseline', gap: 5 }}>
                     <span>{g.title}</span>
-                    {g.category === 2 && <span style={{ fontSize: 9, color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>DLC</span>}
-                    {g.category === 8 && <span style={{ fontSize: 9, color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>remake</span>}
+                    {g.category === 2 && <span style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>DLC</span>}
+                    {g.category === 8 && <span style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>remake</span>}
                   </div>
-                  <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>{g.developer} · {g.platStr}</div>
+                  <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>{g.developer} · {g.platStr}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div className="t-tnum" style={{ fontSize: 13, color: 'var(--amber)' }}>
+                  <div className="t-tnum" style={{ fontSize: "var(--text-sm)", color: 'var(--amber)' }}>
                     {g.releaseDate ? `T-${g.days}d` : 'TBA'}
                   </div>
                   <div

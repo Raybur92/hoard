@@ -57,8 +57,8 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div style={{ padding: '0 22px 18px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span className="t-display" style={{ fontSize: 22, color: 'var(--paper)', letterSpacing: '0.04em' }}>hoard</span>
-        <span className="t-faint" style={{ fontSize: 9 }}>v0.1</span>
+        <span className="t-display" style={{ fontSize: "var(--text-lg)", color: 'var(--paper)', letterSpacing: '0.04em' }}>hoard</span>
+        <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>v0.1</span>
       </div>
 
       <div className="group">// command</div>
@@ -111,11 +111,11 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
       })}
 
       <div style={{ flex: 1 }} />
-      <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', fontSize: 10, color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ width: 22, height: 22, background: 'var(--ink-3)', border: '1px solid var(--rule-bright)', flexShrink: 0 }} />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-          <span data-testid="sidebar-username" style={{ color: 'var(--paper)', fontSize: 11 }}>{user?.name ?? '…'}</span>
-          <span style={{ fontSize: 9 }}>since {user ? new Date(user.createdAt).getFullYear() : '…'}</span>
+          <span data-testid="sidebar-username" style={{ color: 'var(--paper)', fontSize: "var(--text-2xs)" }}>{user?.name ?? '…'}</span>
+          <span style={{ fontSize: "var(--text-2xs)" }}>since {user ? new Date(user.createdAt).getFullYear() : '…'}</span>
         </div>
         <span
           title="sign out"

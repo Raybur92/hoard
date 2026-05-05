@@ -74,8 +74,8 @@ export function SettingsMobile() {
           }}>
             <div style={{ width: 44, height: 44, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)' }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14 }}>{user?.name ?? '…'}</div>
-              <div className="t-faint" style={{ fontSize: 10 }}>hoard.app/u/{user?.name ?? user?.id ?? '…'}</div>
+              <div style={{ fontSize: "var(--text-base)" }}>{user?.name ?? '…'}</div>
+              <div className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>hoard.app/u/{user?.name ?? user?.id ?? '…'}</div>
             </div>
             <Btn sm onClick={() => navigate('/settings/account')}>edit</Btn>
           </div>
@@ -94,17 +94,17 @@ export function SettingsMobile() {
               >
                 <Icon name={icon as Parameters<typeof Icon>[0]['name']} size={14} />
                 <div>
-                  <div style={{ fontSize: 13 }}>{label}</div>
+                  <div style={{ fontSize: "var(--text-sm)" }}>{label}</div>
                 </div>
                 <Icon name="caret" size={11} style={{ transform: 'rotate(-90deg)' }} />
               </div>
             ))}
           </div>
           <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-            <span className="t-mono t-faint" style={{ fontSize: 10 }}>hoard v0.1</span>
+            <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)" }}>hoard v0.1</span>
             <span
               className="t-mono t-faint"
-              style={{ fontSize: 10, cursor: 'pointer' }}
+              style={{ fontSize: "var(--text-3xs)", cursor: 'pointer' }}
               onClick={() => { void signOut().then(() => navigate('/login')); }}
             >
               // sign out
@@ -126,34 +126,34 @@ export function SettingsMobile() {
         {backHeader('account', `// ${draftName || '…'}`)}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 16px 24px' }}>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// display name</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// display name</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
               <input
                 className="field"
-                style={{ flex: 1, fontSize: 12 }}
+                style={{ flex: 1, fontSize: "var(--text-xs)" }}
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
                 onBlur={() => void saveField('name', draftName)}
                 placeholder="display name"
               />
-              {saved === 'name' && <span className="t-mono t-green" style={{ fontSize: 10 }}>ok</span>}
+              {saved === 'name' && <span className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>ok</span>}
             </div>
           </div>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// email</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// email</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
               <input
                 className="field"
                 type="email"
-                style={{ flex: 1, fontSize: 12 }}
+                style={{ flex: 1, fontSize: "var(--text-xs)" }}
                 value={draftEmail}
                 onChange={(e) => setDraftEmail(e.target.value)}
                 onBlur={() => void saveField('email', draftEmail)}
                 placeholder="email address"
               />
               {saved === 'email'
-                ? <span className="t-mono t-green" style={{ fontSize: 10 }}>ok</span>
-                : <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)', fontSize: 10 }}>
+                ? <span className="t-mono t-green" style={{ fontSize: "var(--text-3xs)" }}>ok</span>
+                : <span className="chip" style={{ color: 'var(--green)', borderColor: 'var(--green)', fontSize: "var(--text-3xs)" }}>
                     <Icon name="check" size={9} /> ok
                   </span>
               }
@@ -193,8 +193,8 @@ export function SettingsMobile() {
               >
                 <Plat code={code} lg />
                 <div>
-                  <div style={{ fontSize: 13 }}>{code}</div>
-                  <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>
+                  <div style={{ fontSize: "var(--text-sm)" }}>{code}</div>
+                  <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
                     {connected ? `${detail?.who ?? ''} · sync ${detail?.lastSyncAt ? relativeTime(detail.lastSyncAt) : 'never'}` : 'not connected'}
                   </div>
                 </div>
@@ -220,19 +220,19 @@ export function SettingsMobile() {
         {backHeader('appearance', '// preferences')}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 24px' }}>
           <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// theme</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// theme</div>
             <div style={{ marginTop: 8 }}>
               <Radio on={true} label="dark" sub="default" />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', opacity: 0.45 }}>
                 <span style={{ width: 12, height: 12, border: '1px dashed var(--paper-faint)', display: 'inline-block' }} />
-                <div style={{ fontSize: 12, color: 'var(--paper-dim)' }}>
-                  light <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--amber)', letterSpacing: '0.1em' }}>// v2</span>
+                <div style={{ fontSize: "var(--text-xs)", color: 'var(--paper-dim)' }}>
+                  light <span style={{ marginLeft: 6, fontSize: "var(--text-3xs)", color: 'var(--amber)', letterSpacing: '0.1em' }}>// v2</span>
                 </div>
               </div>
             </div>
           </div>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// default library view</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// default library view</div>
             <div style={{ marginTop: 8 }}>
               <Radio on={prefs.libraryView === 'shelves'} label="shelves" sub="grouped by status"   onClick={() => void updatePref({ libraryView: 'shelves' })} />
               <Radio on={prefs.libraryView === 'grid'}    label="grid"    sub="all covers, dense"   onClick={() => void updatePref({ libraryView: 'grid' })} />
@@ -240,7 +240,7 @@ export function SettingsMobile() {
             </div>
           </div>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// show HLTB estimates</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// show HLTB estimates</div>
             <div style={{ marginTop: 10 }}>
               <Toggle
                 on={prefs.showHltb}
@@ -251,7 +251,7 @@ export function SettingsMobile() {
             </div>
           </div>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// cover density</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// cover density</div>
             <div style={{ marginTop: 8 }}>
               <Radio on={prefs.coverDensity === 'cozy'}     label="cozy"     onClick={() => void updatePref({ coverDensity: 'cozy' })} />
               <Radio on={prefs.coverDensity === 'standard'} label="standard" onClick={() => void updatePref({ coverDensity: 'standard' })} />
@@ -259,7 +259,7 @@ export function SettingsMobile() {
             </div>
           </div>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// terminal cursor</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// terminal cursor</div>
             <div style={{ marginTop: 10 }}>
               <Toggle
                 on={prefs.terminalCursor}
@@ -270,20 +270,20 @@ export function SettingsMobile() {
             </div>
           </div>
           <div style={{ padding: '14px 0' }}>
-            <div className="t-up t-faint" style={{ fontSize: 9 }}>// upcoming hype filter</div>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// upcoming hype filter</div>
             <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 className="btn sm"
                 onClick={() => void updatePref({ hypeThreshold: Math.max(0, prefs.hypeThreshold - 1) })}
-                style={{ width: 28, height: 28, padding: 0, fontSize: 14, lineHeight: 1 }}
+                style={{ width: 28, height: 28, padding: 0, fontSize: "var(--text-base)", lineHeight: 1 }}
               >−</button>
-              <span className="t-mono t-tnum" style={{ fontSize: 16, minWidth: 28, textAlign: 'center' }}>{prefs.hypeThreshold}</span>
+              <span className="t-mono t-tnum" style={{ fontSize: "var(--text-md)", minWidth: 28, textAlign: 'center' }}>{prefs.hypeThreshold}</span>
               <button
                 className="btn sm"
                 onClick={() => void updatePref({ hypeThreshold: Math.min(100, prefs.hypeThreshold + 1) })}
-                style={{ width: 28, height: 28, padding: 0, fontSize: 14, lineHeight: 1 }}
+                style={{ width: 28, height: 28, padding: 0, fontSize: "var(--text-base)", lineHeight: 1 }}
               >+</button>
-              <span className="t-faint" style={{ fontSize: 10 }}>0 = no filter</span>
+              <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>0 = no filter</span>
             </div>
           </div>
         </div>
@@ -309,8 +309,8 @@ export function SettingsMobile() {
         {backHeader('danger zone', '// settings')}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 16px 24px' }}>
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div style={{ fontSize: 13, color: 'var(--red)' }}>wipe library</div>
-            <div className="t-faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
+            <div style={{ fontSize: "var(--text-sm)", color: 'var(--red)' }}>wipe library</div>
+            <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4, lineHeight: 1.4 }}>
               delete all tracked games and statuses. platform connections stay.
             </div>
             <Btn sm style={{ marginTop: 10, color: 'var(--red)', borderColor: 'var(--red)' }}>
@@ -318,16 +318,16 @@ export function SettingsMobile() {
             </Btn>
           </div>
           <div style={{ padding: '14px 0' }}>
-            <div style={{ fontSize: 13, color: 'var(--red)' }}>delete account</div>
-            <div className="t-faint" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
+            <div style={{ fontSize: "var(--text-sm)", color: 'var(--red)' }}>delete account</div>
+            <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4, lineHeight: 1.4 }}>
               permanently erases your account and all data. cannot be undone.
             </div>
-            <div className="t-up t-faint" style={{ fontSize: 9, marginTop: 14 }}>
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 14 }}>
               // type <span style={{ color: 'var(--red)' }}>HOARD</span> to confirm
             </div>
             <input
               className="field"
-              style={{ marginTop: 8, fontSize: 13, letterSpacing: '0.14em', width: '100%' }}
+              style={{ marginTop: 8, fontSize: "var(--text-sm)", letterSpacing: '0.14em', width: '100%' }}
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value.toUpperCase())}
               placeholder="HOARD"

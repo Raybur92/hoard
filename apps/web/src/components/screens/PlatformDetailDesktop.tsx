@@ -96,7 +96,7 @@ export function PlatformDetailDesktop() {
               style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 18, cursor: 'pointer' }}
               onClick={() => navigate('/settings/platforms')}
             >
-              <span className="t-mono t-faint" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="back" size={11} /> all platforms
               </span>
             </div>
@@ -118,7 +118,7 @@ export function PlatformDetailDesktop() {
                 <div className="t-display" style={{ fontSize: 34, marginTop: 6, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
                   {info.name}
                 </div>
-                <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--paper-dim)' }}>
+                <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 12, fontSize: "var(--text-xs)", color: 'var(--paper-dim)' }}>
                   <PlatformDot status={status} />
                   {isConnected && platform.who && <span>signed in as <span style={{ color: 'var(--paper)' }}>{platform.who}</span></span>}
                   {isConnected && platform.lastSyncAt && (
@@ -146,8 +146,8 @@ export function PlatformDetailDesktop() {
               <div className="panel" style={{ marginTop: 24, padding: 18, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                 <Icon name="info" size={16} style={{ color: 'var(--paper-faint)', marginTop: 2 }} />
                 <div>
-                  <div style={{ fontSize: 13, color: 'var(--paper)' }}>manual import only</div>
-                  <div className="t-faint" style={{ fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: "var(--text-sm)", color: 'var(--paper)' }}>manual import only</div>
+                  <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 6, lineHeight: 1.5 }}>
                     {info.fullName} has no public API. Add games manually using the Library → Add game button. Choose <strong>{info.fullName}</strong> as the platform label.
                   </div>
                 </div>
@@ -165,7 +165,7 @@ export function PlatformDetailDesktop() {
                       onClick={() => setActiveTab(key)}
                       style={{
                         padding: '10px 0',
-                        fontSize: 11, fontFamily: 'var(--mono)',
+                        fontSize: "var(--text-2xs)", fontFamily: 'var(--mono)',
                         textTransform: 'uppercase', letterSpacing: '0.12em',
                         color: activeTab === key ? 'var(--paper)' : 'var(--paper-faint)',
                         borderBottom: `2px solid ${activeTab === key ? 'var(--green)' : 'transparent'}`,
@@ -193,7 +193,7 @@ export function PlatformDetailDesktop() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div className="panel" style={{ padding: 14 }}>
                       <Marker>// at a glance</Marker>
-                      <pre className="ascii t-dim" style={{ fontSize: 11, lineHeight: 1.7, margin: '10px 0 0' }}>
+                      <pre className="ascii t-dim" style={{ fontSize: "var(--text-2xs)", lineHeight: 1.7, margin: '10px 0 0' }}>
 {`games       ${platform.gameCount ?? '—'}
 last sync   ${platform.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}`}
                       </pre>
@@ -206,7 +206,7 @@ last sync   ${platform.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}
             {/* not-yet-connected: PSN inline guide */}
             {!isConnected && info.syncable && code.toLowerCase() !== 'ps' && (
               <div style={{ marginTop: 28 }}>
-                <div className="t-faint" style={{ fontSize: 12, marginTop: 12 }}>
+                <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 12 }}>
                   Connect your {info.fullName} account to import your library and playtime.
                 </div>
               </div>
@@ -257,7 +257,7 @@ function PsnConnectPanel({ npssoInput, setNpssoInput }: { npssoInput: string; se
     <div style={{ marginTop: 28 }}>
       <div className="panel" style={{ padding: 20 }}>
         <Marker>// connect psn via npsso token</Marker>
-        <div className="t-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.55, maxWidth: 600 }}>
+        <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 8, lineHeight: 1.55, maxWidth: 600 }}>
           PSN has no public API. Hoard uses the same session token your browser uses. Your password is never seen by Hoard.
           Follow the <span
             style={{ color: 'var(--paper)', cursor: 'pointer' }}
@@ -270,7 +270,7 @@ function PsnConnectPanel({ npssoInput, setNpssoInput }: { npssoInput: string; se
             value={npssoInput}
             onChange={(e) => setNpssoInput(e.target.value)}
             placeholder="paste your 64-character NPSSO token here"
-            style={{ flex: 1, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 12, padding: '0 12px', height: 36, outline: 'none' }}
+            style={{ flex: 1, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-xs)", padding: '0 12px', height: 36, outline: 'none' }}
             maxLength={64}
           />
           <Btn sm variant="primary" disabled={npssoInput.length !== 64}
@@ -279,7 +279,7 @@ function PsnConnectPanel({ npssoInput, setNpssoInput }: { npssoInput: string; se
           </Btn>
         </div>
         {npssoInput.length > 0 && npssoInput.length < 64 && (
-          <div className="t-faint" style={{ fontSize: 10, marginTop: 6 }}>
+          <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6 }}>
             {npssoInput.length}/64 characters
           </div>
         )}
@@ -294,7 +294,7 @@ function AuthTab({ code, platform }: { code: string; platform: PlatformDetail })
       <div>
         <Marker>// authentication · token &amp; method</Marker>
         <div style={{ marginTop: 16, padding: 16, border: '1px solid var(--rule)', background: 'var(--ink)' }}>
-          <div className="t-up t-faint" style={{ fontSize: 10 }}>// active token</div>
+          <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// active token</div>
           <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
             <div className="field" style={{ flex: 1 }}>
               <Icon name="key" size={11} style={{ color: 'var(--amber)' }} />
@@ -319,7 +319,7 @@ function AuthTab({ code, platform }: { code: string; platform: PlatformDetail })
   return (
     <div>
       <Marker>// authentication · {code.toUpperCase()}</Marker>
-      <div style={{ marginTop: 16, fontSize: 12, color: 'var(--paper-dim)', lineHeight: 1.5 }}>
+      <div style={{ marginTop: 16, fontSize: "var(--text-xs)", color: 'var(--paper-dim)', lineHeight: 1.5 }}>
         Connected via {PLATFORM_INFO[code.toLowerCase()]?.authMethod ?? 'OAuth'}.
         Last sync: {platform.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}.
       </div>
@@ -339,12 +339,12 @@ function ScopeTab() {
       <Marker>// scope · what hoard reads</Marker>
       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {scopes.map(([k, d, on]) => (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: "var(--text-xs)" }}>
             <span style={{ width: 12, height: 12, border: '1px solid var(--rule-bright)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
               {on && <Icon name="check" size={9} style={{ color: 'var(--green)' }} />}
             </span>
             <span style={{ color: on ? 'var(--paper)' : 'var(--paper-dim)' }}>{k}</span>
-            <span className="t-faint" style={{ fontSize: 10 }}>· {d}</span>
+            <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {d}</span>
           </div>
         ))}
       </div>
@@ -370,9 +370,9 @@ function SyncTab({ platform, syncing, onSync }: { platform: PlatformDetail; code
         <Btn sm onClick={onSync} disabled={syncing}>
           <Icon name="refresh" size={10} /> {syncing ? 'syncing…' : 'sync now'}
         </Btn>
-        {syncing && <span className="t-faint" style={{ fontSize: 10 }}>importing your library…</span>}
+        {syncing && <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>importing your library…</span>}
       </div>
-      <div className="t-faint" style={{ fontSize: 11, marginTop: 10 }}>
+      <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 10 }}>
         last sync: {platform.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}
       </div>
     </div>
@@ -383,7 +383,7 @@ function LogTab() {
   return (
     <div>
       <Marker>// activity log</Marker>
-      <pre className="ascii t-faint" style={{ fontSize: 11, lineHeight: 1.7, marginTop: 12 }}>
+      <pre className="ascii t-faint" style={{ fontSize: "var(--text-2xs)", lineHeight: 1.7, marginTop: 12 }}>
         {`// no log entries yet`}
       </pre>
     </div>

@@ -70,14 +70,14 @@ export function PlatformDetailMobile() {
       {/* identity strip */}
       <div style={{ padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'center', borderBottom: '1px solid var(--rule)' }}>
         <div style={{ width: 44, height: 44, border: `1px solid ${isConnected ? 'var(--rule-bright)' : 'var(--rule)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="t-display" style={{ fontSize: 18, color: isConnected ? 'var(--paper)' : 'var(--paper-faint)' }}>
+          <span className="t-display" style={{ fontSize: "var(--text-md)", color: isConnected ? 'var(--paper)' : 'var(--paper-faint)' }}>
             {code.toUpperCase()}
           </span>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13 }}>{platform?.who ?? name}</div>
+          <div style={{ fontSize: "var(--text-sm)" }}>{platform?.who ?? name}</div>
           {isConnected && (
-            <div className="t-faint" style={{ fontSize: 10 }}>
+            <div className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>
               {platform?.gameCount ?? '—'} games · {platform?.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never synced'}
             </div>
           )}
@@ -90,7 +90,7 @@ export function PlatformDetailMobile() {
         <div style={{ padding: '16px 16px 8px' }}>
           <div className="panel" style={{ padding: 14 }}>
             <Marker>// manual only</Marker>
-            <div className="t-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
+            <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 8, lineHeight: 1.5 }}>
               {name} has no public API. Add games via Library → Add game, using {name} as the platform label.
             </div>
           </div>
@@ -102,13 +102,13 @@ export function PlatformDetailMobile() {
         <div style={{ padding: 16 }}>
           {code.toLowerCase() === 'ps' ? (
             <div>
-              <div className="t-up t-faint" style={{ fontSize: 9 }}>// npsso token</div>
+              <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// npsso token</div>
               <input
                 className="field"
                 value={npssoInput}
                 onChange={(e) => setNpssoInput(e.target.value)}
                 placeholder="paste 64-char NPSSO token"
-                style={{ width: '100%', marginTop: 8, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 11, padding: '0 12px', height: 36, outline: 'none' }}
+                style={{ width: '100%', marginTop: 8, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", padding: '0 12px', height: 36, outline: 'none' }}
                 maxLength={64}
               />
               <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
@@ -139,7 +139,7 @@ export function PlatformDetailMobile() {
                 onClick={() => setActiveTab(t)}
                 style={{
                   padding: '10px 0', marginRight: 18,
-                  fontSize: 11, fontFamily: 'var(--mono)',
+                  fontSize: "var(--text-2xs)", fontFamily: 'var(--mono)',
                   textTransform: 'uppercase', letterSpacing: '0.1em',
                   color: activeTab === t ? 'var(--paper)' : 'var(--paper-faint)',
                   borderBottom: `2px solid ${activeTab === t ? 'var(--green)' : 'transparent'}`,
@@ -157,12 +157,12 @@ export function PlatformDetailMobile() {
               <div>
                 {code.toLowerCase() === 'ps' ? (
                   <>
-                    <div className="t-up t-faint" style={{ fontSize: 9 }}>// active token</div>
-                    <div className="field" style={{ marginTop: 8, fontSize: 11 }}>
+                    <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// active token</div>
+                    <div className="field" style={{ marginTop: 8, fontSize: "var(--text-2xs)" }}>
                       <Icon name="key" size={11} style={{ color: 'var(--amber)' }} />
                       <span style={{ color: 'var(--paper-dim)' }}>NPSSO•••••••••8e2f</span>
                     </div>
-                    <div className="t-faint" style={{ fontSize: 10, marginTop: 6 }}>
+                    <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6 }}>
                       last sync: {platform?.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}
                     </div>
                     <div style={{ marginTop: 16 }}>
@@ -170,7 +170,7 @@ export function PlatformDetailMobile() {
                     </div>
                   </>
                 ) : (
-                  <div className="t-faint" style={{ fontSize: 12, lineHeight: 1.5 }}>
+                  <div className="t-faint" style={{ fontSize: "var(--text-xs)", lineHeight: 1.5 }}>
                     Connected. Last sync: {platform?.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleDateString() : 'never'}.
                   </div>
                 )}
@@ -178,7 +178,7 @@ export function PlatformDetailMobile() {
                   <Btn onClick={handleSync} disabled={syncing}>
                     <Icon name="refresh" size={11} /> {syncing ? 'syncing…' : 'sync now'}
                   </Btn>
-                  {syncing && <span className="t-faint" style={{ fontSize: 10 }}>importing your library…</span>}
+                  {syncing && <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>importing your library…</span>}
                   <Btn style={{ color: 'var(--red)', borderColor: 'var(--red)' }}
                     onClick={() => void api.disconnectPlatform(code.toUpperCase()).then(() => navigate('/settings/platforms'))}>
                     <Icon name="x" size={11} /> disconnect
@@ -189,18 +189,18 @@ export function PlatformDetailMobile() {
             {activeTab === 'scope' && (
               <div>
                 <Marker>// scope</Marker>
-                <div className="t-mono" style={{ fontSize: 11, marginTop: 8, color: 'var(--paper-dim)' }}>
+                <div className="t-mono" style={{ fontSize: "var(--text-2xs)", marginTop: 8, color: 'var(--paper-dim)' }}>
                   library · playtime · trophies <span className="t-faint">(friends off)</span>
                 </div>
               </div>
             )}
             {activeTab === 'sync' && (
-              <div className="t-faint" style={{ fontSize: 12 }}>
+              <div className="t-faint" style={{ fontSize: "var(--text-xs)" }}>
                 Last sync: {platform?.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}.
               </div>
             )}
             {activeTab === 'log' && (
-              <pre className="ascii t-faint" style={{ fontSize: 10, lineHeight: 1.7 }}>
+              <pre className="ascii t-faint" style={{ fontSize: "var(--text-3xs)", lineHeight: 1.7 }}>
                 {'// no log entries yet'}
               </pre>
             )}

@@ -677,6 +677,309 @@ These items were addressed after PSN was connected and real data revealed gaps.
 
 ---
 
+### Phase 8 — Mobile Parity, iOS-HIG & Accessibility
+
+**Goal:** Bring the mobile experience to platform-correct, fully WCAG 2.1 AA-compliant, and feature-aligned with desktop. Resolves structural debt surfaced by the May 2026 multi-pass UX audit (parity, Nielsen heuristics, iOS HIG, typography & touch targets, accessibility / states / forms / IA / motion).
+
+**Audit composite score before this phase:** ~3/10 mobile UX. Aesthetic is preserved and worth keeping; foundations underneath (typography system, focus management, semantic HTML, mobile shell HIG correctness) need to be built.
+
+**Audit summary (key findings):**
+- ~290 uses of 9–12 px text; no `--text-*` token scale exists despite `--sp-*` spacing scale being established
+- Zero `:focus-visible`, zero `:focus`, zero `outline:` overrides anywhere in styles
+- ~50 `<div onClick>` / `<span onClick>` handlers without `role`, `tabIndex`, or keyboard support
+- Zero semantic `<h1>` / `<h2>` / `<h3>` across the app (all visual styling on `<div>`)
+- Form inputs lack `<label htmlFor>` and `aria-label`
+- Modals (`AddGameModal`, `SearchOverlay`, `DeleteAccount`, `PsnGuidedFlow`) lack `role="dialog"`, `aria-modal`, focus trap
+- Mobile shell ships a fake hardcoded "9:41 / 100%" status bar above the real iOS status bar (`MobileFrame.tsx:11–19`)
+- Mobile tab bar uses `repeat(5, 1fr)` grid for 4 tabs (`global.css:516`) — 20 % empty column
+- No `viewport-fit=cover`, no `env(safe-area-inset-*)`, `100vh` instead of `100dvh`
+- Mobile components don't read `usePreferences()` and don't call `update()`; ~50 % of desktop interactivity is missing on mobile equivalents
+- `--paper-faint` (`#6b6f72`) at 4.2:1 on `--void` fails WCAG AA for normal text and is the most common color for labels/captions at 9–10 px
+- Browser tab title is always "hoard" (no `<title>` per route)
+- `prefers-reduced-motion` not honored
+
+**Order matters:** PR 1 (foundation tokens + focus styles) unblocks every later PR. PR 2 (mobile shell) is independent and can ship in parallel with PR 3 once PR 1 lands. PR 3 (accessibility) is best done before PR 4 (parity) so new mobile features inherit accessible patterns. PR 5 is additive and last.
+
+---
+
+#### PR 1 — Foundation: typography scale, focus styles, motion tokens
+
+**Risk:** low. Pure CSS / tokens. No logic changes.
+
+**Deliverables:**
+- [ ] `--text-3xs: 10px` through `--text-display: 96px` typography scale added to `apps/web/src/styles/tokens.css` (8-step scale)
+- [ ] `--lh-tight: 1.15` / `--lh-snug: 1.3` / `--lh-normal: 1.5` / `--lh-relaxed: 1.7` line-height tokens added
+- [ ] Global `:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }` applied via `apps/web/src/styles/global.css`
+- [ ] `@media (prefers-reduced-motion: reduce)` block added to `global.css` — disables `.skel` pulse animation, neutralises `transition` on `Toggle` and any future component animations
+- [ ] `.chip` minimum height raised from 22 px → 28 px; `.chip` text from 10 px → `var(--text-xs)` (12 px)
+- [ ] `.btn.sm` minimum height raised from 24 px → 32 px; text from 10 px → `var(--text-xs)`
+- [ ] `.btn` text from 11 px → `var(--text-sm)` (13 px); height stays 32 px (acceptable on desktop, will be revisited on mobile in PR 2)
+- [ ] `.field` height raised from 30 px → 36 px
+- [ ] `--paper-faint` removed as text color anywhere font-size < `--text-md` (17 px); replaced with `--paper-dim` (`#a9a89e`, ~9.4:1 contrast)
+- [ ] All `lineHeight: 1` / `lineHeight: 0.85–1.05` inline styles audited; replaced with `--lh-snug` minimum unless on `.bignum` / `.barcode` / single-glyph display
+- [ ] Sweep all inline `fontSize:` values across `apps/web/src/components/screens/` and `apps/web/src/components/layout/` — replace literals with the new scale tokens (var refs preferred over magic numbers)
+
+**Success Criteria:**
+- [ ] Tab through every screen with keyboard — focus indicator visible at every interactive element
+- [ ] WebAIM contrast checker: every text/background pair scores ≥ 4.5:1 (or ≥ 3:1 for large text ≥ 18 px regular / ≥ 14 px bold)
+- [ ] No `font-size: <number>` magic-number declarations remaining outside the `.receipt` / `.barcode` / `.bignum` exception list
+- [ ] Toggling System Settings → Accessibility → Reduce Motion (macOS) / Settings → Accessibility → Motion (iOS) suppresses skeleton pulse and toggle slide
+- [ ] All Vitest + Jest tests still pass; visual regression snapshots regenerated and reviewed before commit
+
+**Testing:**
+- [ ] Manual contrast audit using the macOS Digital Color Meter or Chrome DevTools' contrast picker on every text/background combination
+- [ ] Manual focus-visible audit: Tab through Dashboard / Library / GameDetail / Settings / Login on Chrome desktop and confirm visible amber outline on every focusable element
+- [ ] Reduced-motion verification on macOS Safari and iOS Safari
+- [ ] Visual regression: Playwright snapshots regenerated; reviewer compares old vs new for unintended visual drift
+
+**Decisions:** _(populated as PR lands)_
+
+---
+
+#### PR 2 — Mobile shell: iOS HIG correctness
+
+**Risk:** low–medium. Mostly CSS; one icon-set decision.
+
+**Deliverables:**
+- [ ] `MobileFrame.tsx:11–19` — delete the fake `.m-status` status bar block entirely; remove `--statusbar-h` from `tokens.css:46`
+- [ ] `apps/web/index.html:5` — viewport meta updated to `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`
+- [ ] `.app-mobile` rules updated: `height: 100dvh` (was `100vh`); `padding-top: env(safe-area-inset-top)` to clear notch / Dynamic Island
+- [ ] `.m-tabbar` rules updated: `grid-template-columns: repeat(4, 1fr)` (was `repeat(5, 1fr)`); `padding-bottom: max(8px, env(safe-area-inset-bottom))` to clear home indicator
+- [ ] `.m-tabbar .item` updated: padding `12px 0 max(14px, env(safe-area-inset-bottom))`; glyph size 14 px → 18 px; label size 9 px → `var(--text-2xs)` (11 px)
+- [ ] Active-tab indicator added: `2px solid var(--amber)` top border on `.m-tabbar .item.active` (color-shift alone is insufficient cue)
+- [ ] Press feedback added: `.m-tabbar .item:active { background: var(--ink-2); }`
+- [ ] Light haptic on tap: `navigator.vibrate?.(8)` in `MobileTabBar.tsx` `onClick` handler (gracefully no-op on iOS Safari, fires on Android Chrome)
+- [ ] `MobileHeader.tsx:43–48` — wire the search icon to open `SearchOverlay` (lift state up to `AppShell` if needed); decide on the menu icon (either wire to a contextual sheet, or remove)
+- [ ] `MobileTabBar.tsx:6–11` — replace placeholder icons with destination-meaningful glyphs: Dashboard → grid/dashboard, Library → stacked-rows, Soon → clock, Me → user (must remain consistent with existing terminal aesthetic — extend `Icon.tsx` `ICON_PATHS` if needed)
+
+**Success Criteria:**
+- [ ] On iOS Safari (real device or BrowserStack), no double clock / battery indicator visible
+- [ ] On a notched device, content does not slide under the notch
+- [ ] On a device with home indicator, the tab bar does not collide with the home indicator hint line
+- [ ] Tab bar fills the full screen width with no empty column
+- [ ] Active tab is identifiable at a glance from across the room (color + top border, not color alone)
+- [ ] Tapping a tab gives a visible press state and (on supporting devices) a haptic tick
+- [ ] Search icon in mobile header opens `SearchOverlay`; menu icon either has clear purpose or is gone
+
+**Testing:**
+- [ ] Real-device test on iOS Safari (iPhone 13+ recommended for Dynamic Island and home indicator)
+- [ ] Real-device test on a non-Dynamic-Island iPhone (SE / 2nd gen) to confirm safe-area math works for the older notch geometry too
+- [ ] Real-device test on Android Chrome to confirm haptic tick fires
+- [ ] Playwright mobile viewport snapshot regenerated; tab bar layout verified
+
+**Decisions:** _(populated as PR lands)_
+
+---
+
+#### PR 3 — Accessibility pass: WCAG 2.1 AA compliance
+
+**Risk:** medium. Touches every screen, but mostly mechanical replacements. This is the heaviest PR.
+
+**Scope target:** Full WCAG 2.1 AA compliance. Hoard is currently a personal tool but Andrea may release it as a product later; A-grade accessibility is a hard prerequisite.
+
+**Specific WCAG 2.1 AA criteria addressed:**
+
+| Criterion | What it requires | Where Hoard fails today |
+|---|---|---|
+| 1.1.1 Non-text Content | Alt text on all `<img>` | `Cover.tsx:25` falls back to `alt=""` even when label exists |
+| 1.3.1 Info and Relationships | Semantic HTML — headings, lists, nav, landmarks | Zero `<h1>` / `<h2>` / `<h3>`; no `<main>` / `<nav>` / `<aside>` |
+| 1.4.3 Contrast (Minimum) | 4.5:1 normal, 3:1 large | `--paper-faint` at 4.2:1 used on small body text (addressed in PR 1) |
+| 1.4.10 Reflow | Content reflows at 320 px without horizontal scroll | Needs verification — mobile viewport is well above 320 |
+| 1.4.11 Non-text Contrast | 3:1 for UI components & focus indicators | No focus indicators today (addressed in PR 1) |
+| 1.4.12 Text Spacing | User-overrides for line-height, letter-spacing must not break layout | Test with Stylebot-equivalent overrides |
+| 2.1.1 Keyboard | All functionality keyboard-operable | ~50 `<div onClick>` not keyboard-operable |
+| 2.1.2 No Keyboard Trap | Focus must be able to leave any component | Modals don't trap focus today, but they don't trap-trap either; verify |
+| 2.4.1 Bypass Blocks | Skip-to-content link or landmark navigation | Not present |
+| 2.4.2 Page Titled | Each page has a `<title>` | Browser tab always "hoard" |
+| 2.4.3 Focus Order | Logical tab order | Verify after focus styles land |
+| 2.4.4 Link Purpose (in Context) | Each link's purpose is determinable from its text + context | "View all" / "+" / icon-only buttons need accessible names |
+| 2.4.6 Headings and Labels | Descriptive headings & labels | No headings exist; labels exist visually but not programmatically |
+| 2.4.7 Focus Visible | Keyboard focus indicator visible | Addressed in PR 1 |
+| 2.5.3 Label in Name | Accessible name contains the visible label | New requirement once `aria-label` is added — must match visible text |
+| 2.5.5 Target Size (AA: 24 × 24 CSS px) | Tap targets ≥ 24 × 24 CSS px (AA) | `.chip` 22 px (addressed in PR 1 raises to 28) |
+| 3.1.1 Language of Page | `<html lang="en">` set | Verify in `index.html` |
+| 3.2.3 Consistent Navigation | Repeated navigation in same order | Sidebar / TopBar / TabBar are consistent ✓ |
+| 3.2.4 Consistent Identification | Same components labelled the same way everywhere | Verify post-changes |
+| 3.3.1 Error Identification | Errors clearly identified in text | Login / Settings / AddGameModal mostly OK; SettingsDesktop blur-to-save silent on failure |
+| 3.3.2 Labels or Instructions | Form inputs have labels or instructions | `htmlFor` missing across all inputs |
+| 3.3.3 Error Suggestion | Specific suggestions for fixing errors | Mostly OK in form messages |
+| 3.3.4 Error Prevention | For data deletion / submission, ability to review and confirm | Delete account already has HOARD confirmation ✓ |
+| 4.1.2 Name, Role, Value | All UI components must expose name, role, and value to assistive tech | `<div onClick>` has no role; modals have no `role="dialog"` |
+| 4.1.3 Status Messages | Status messages announced via ARIA live regions | "// saved" message in Settings is visual-only; needs `aria-live="polite"` |
+
+**Deliverables:**
+
+Semantic HTML:
+- [ ] Replace ~50 `<div onClick>` / `<span onClick>` with `<button type="button">` (preferred) or `<a>` for navigation actions; keep existing styling via class. Components touched: `TopBar`, `Sidebar`, `MobileHeader`, `MobileTabBar`, `LoginScreen` (tab switcher), `SearchOverlay`, `AddGameModal`, `LibraryDesktop`/`LibraryMobile` (game cover cards, "view all" cards), `PlatformDetailDesktop`/`Mobile` (back link, tab strip), `GameDetailDesktop`/`Mobile` (status menu toggle, action buttons, notes editor trigger), `SettingsDesktop`/`Mobile` (modal backdrops, menu items), `UpcomingDesktop`/`Mobile` (chip toggles), `Chip`, `Toggle`, `Radio`
+- [ ] Convert the visual heading patterns (`.t-display`, `.bignum`, hand-styled `<div>`s used as section titles) to semantic `<h1>` / `<h2>` / `<h3>` tags, retaining existing CSS classes for visual styling. One `<h1>` per route minimum
+- [ ] Add ARIA landmarks: `<main>` wrapping each route's content, `<nav aria-label="primary">` on `Sidebar` / `MobileTabBar`, `<header>` on `TopBar` / `MobileHeader`, `<aside>` for the sidebar nav region if appropriate
+
+Forms:
+- [ ] Every `<input>` gets `id` + matching `<label htmlFor>`. Components: `LoginScreen.tsx:89/105/121`, `SettingsDesktop.tsx:118/132`, `SettingsMobile.tsx:131/145`, `PlatformDetailDesktop.tsx:145` and Mobile equivalent (PSN token), `AddGameModal.tsx:93/153/165`, `SearchOverlay.tsx:83`, `PsnGuidedFlowDesktop.tsx:145` and Mobile equivalent
+- [ ] `<select>` elements in `AddGameModal` get associated labels (status / platform pickers)
+- [ ] `Toggle.tsx` and `Radio.tsx` accept and render proper `<input type="checkbox">` / `<input type="radio">` underneath their styled visual layer (or correct `role="switch"` / `role="radio"` + ARIA state); keyboard support for Space (toggle) / Enter (activate) / Arrow keys (radio group navigation)
+- [ ] Accessible names match visible labels (WCAG 2.5.3) — verify every `aria-label` matches the on-screen text where both exist
+
+Modals & overlays:
+- [ ] `AddGameModal`, `SearchOverlay`, `DeleteAccount` modal in `SettingsDesktop`, NPSSO error dialog in `PsnGuidedFlow` — each gets `role="dialog"` + `aria-modal="true"` + `aria-labelledby` (referencing the modal title's `id`)
+- [ ] Focus trap implemented in each modal (focus cycles within modal until closed; can be done via a small custom hook `useFocusTrap` or `react-focus-lock` if dependency cost is acceptable)
+- [ ] Restore focus to the triggering element on modal close (currently `SearchOverlay` does not restore focus; nor does `AddGameModal`)
+- [ ] Escape key closes every modal (already done in `SearchOverlay`; needs adding elsewhere)
+
+Page titles & landmarks:
+- [ ] `useDocumentTitle(title: string)` hook added; called by every screen component with a route-appropriate title (e.g., "Library — Hoard", "Game · Elden Ring — Hoard", "Settings — Hoard")
+- [ ] Skip-to-content link at the top of `AppShell` (`<a href="#main-content" class="sr-only-focusable">Skip to content</a>`); `<main id="main-content">` receives focus when activated
+- [ ] `<html lang="en">` confirmed in `index.html` (likely already correct, but verify)
+
+Live regions:
+- [ ] `aria-live="polite"` regions for status announcements: SettingsDesktop "// saved" toast, sync state changes in PlatformDetail, Login error messages
+- [ ] `aria-busy="true"` on data containers while `loading: true` from data hooks
+
+Images:
+- [ ] `Cover.tsx:25` — alt text strategy: when `label` is provided, use it (e.g., `alt={label}`); when component is purely decorative (e.g., skeleton placeholder), use `alt=""` explicitly with `role="presentation"`. Audit every `<Cover>` call site to confirm correct semantic — game cover art on a clickable card needs descriptive alt; decorative cover stripes do not
+
+Tooling & CI:
+- [ ] Add `eslint-plugin-jsx-a11y` to ESLint config with `recommended` ruleset; fix all errors raised; add as required check in CI
+- [ ] Add `axe-core` Playwright integration: every existing E2E test gets a `await injectAxe(page); await checkA11y(page)` assertion. Failures block CI
+- [ ] Add `pa11y-ci` (or equivalent) GitHub Action that runs against every PR's preview deployment; thresholds: zero critical, zero serious
+
+**Success Criteria:**
+- [ ] axe-core scan returns zero critical and zero serious violations on every screen (Dashboard, Library, GameDetail, Upcoming, Settings, PlatformDetail, PsnGuidedFlow, Login) on both desktop and mobile viewports
+- [ ] WAVE browser extension reports zero errors on every screen
+- [ ] Lighthouse Accessibility score ≥ 95 on every screen (current threshold is 90, raise it)
+- [ ] Manual VoiceOver (macOS) walkthrough: a sighted-but-blindfolded reviewer can complete each of the four critical user flows: log in, navigate to Library and open a game, change a game's status, connect a platform
+- [ ] Manual TalkBack (Android Chrome) spot-check on the PWA-installed app for the same flows
+- [ ] Manual keyboard-only walkthrough of every screen: every interactive element reachable via Tab; every action triggerable via Space/Enter; modals trap focus; Escape closes
+- [ ] Browser tab title updates per route (verify by switching tabs in Chrome)
+- [ ] Reduced-motion preference is honored (verified in PR 1, retested here)
+- [ ] All Vitest / Jest / Playwright suites still pass
+
+**Testing:**
+- [ ] Update `apps/web/tests/e2e/` Playwright tests to assert `await checkA11y(page)` after each navigation — minimum one assertion per route
+- [ ] New `apps/web/tests/e2e/keyboard.spec.ts` test suite: scripted Tab traversal of every screen, asserting focus visible state and that critical actions can be triggered via keyboard alone
+- [ ] New axe-core CI workflow in `.github/workflows/a11y.yml` running on every PR
+- [ ] Update `lighthouserc.json` Accessibility threshold from 90 → 95
+
+**Decisions:** _(populated as PR lands; expected to include: which focus-trap library if any; whether `Toggle`/`Radio` need underlying real inputs or pure ARIA; per-modal title `id` strategy)_
+
+---
+
+#### PR 4 — Mobile parity: bug fixes for missing wiring
+
+**Risk:** medium. The most visible PR — most of the actual feature work lives here. Patterns already exist on Desktop, so it's largely porting.
+
+**⚠ Scope decision pending.** Some Desktop features may legitimately not belong on mobile (e.g. view-mode toggle, activity log). Final per-feature scope to be decided before this PR starts. Until that decision is made, the deliverables list below is the **maximalist port** — every desktop interaction made available on mobile. We will trim before implementing.
+
+**Deliverables (maximalist — pending scope decision):**
+
+`GameDetailMobile`:
+- [ ] Hook destructure pulls `update` (`apps/web/src/components/screens/GameDetailMobile.tsx:23`)
+- [ ] Status "change" chip becomes a real button opening a status picker. Mobile-appropriate UX: a bottom action sheet (full-width modal-from-bottom) listing all 6 statuses with their dot color
+- [ ] Notes section: tap to enter edit mode (textarea inline); blur to save; "// saved" toast for 2 s; failure → red error message inline
+- [ ] Action buttons (`start` / `+ note` / `share`) wired: `start` → `update({ status: 'Playing' })`; `+ note` → focus the notes textarea; `share` → existing share generator
+- [ ] Browser back: replace `navigate('/library')` (`GameDetailMobile.tsx:70`) with `navigate(-1)` so back returns to wherever the user came from
+
+`DashboardMobile`:
+- [ ] Hook destructure pulls `backlogPick` and `backlogItems` (`DashboardMobile.tsx:73`)
+- [ ] Random backlog picker widget ported from Desktop (with shuffle button) — placement: between now-playing and heatmap
+- [ ] Now-playing card gets the three Desktop action buttons (`resume` / `log session` / `+ note`)
+- [ ] Genre breakdown panel ported from Desktop (proportional bars)
+
+`LibraryMobile`:
+- [ ] `MobileHeader` search icon already wired to `SearchOverlay` in PR 2; verify
+- [ ] Platform filter chip strip below `MobileHeader` (mirrors Desktop's `LibraryDesktop.tsx:362–364`)
+- [ ] Reads `usePreferences()` for `coverDensity`; cover dimensions scale per density
+- [ ] Sort chip (cycles `lastPlayed` → `title` → `playtime`)
+- [ ] [SCOPE TBD] View-mode toggle (shelves / grid / list) — mobile is too narrow for "list" view; recommendation is to skip
+
+`UpcomingMobile`:
+- [ ] Lift `scope: 'my-platforms' | 'all'` state; pass to `useUpcoming(scope)`
+- [ ] Scope chip toggle in header
+- [ ] DLC / remake category labels on cards (mirrors Desktop)
+
+`PlatformDetailMobile`:
+- [ ] Sync frequency picker (5 m / 15 m / 1 h / manual)
+- [ ] Scope tab: full checklist of permissions (instead of one-liner)
+- [ ] [SCOPE TBD] Activity log tab — possibly skipped on mobile
+
+`SettingsMobile`:
+- [ ] Platform row in Settings list expanded to show game count + last sync time + colored status (matches Desktop's 6-col grid, simplified for mobile)
+
+**Success Criteria:**
+- [ ] Mobile and desktop reach feature parity on every flow that survives scope-decision
+- [ ] Every action available on Desktop GameDetail is available on Mobile GameDetail (status change, notes edit, start/resume, share)
+- [ ] Random backlog picker visible on Mobile Dashboard (AGENT.md key decision #4)
+- [ ] Search reachable on Mobile via the `MobileHeader` search icon
+- [ ] Cover density preference takes effect on Mobile
+- [ ] Browser back button respects history on every screen
+- [ ] All Vitest / Jest tests still pass; new mobile interaction tests added
+
+**Testing:**
+- [ ] Update Playwright tests: every E2E test that exercises a Desktop interaction gets a mobile-viewport equivalent (320 × 568, 375 × 667, 390 × 844, 414 × 896)
+- [ ] Real-device walkthrough of all four critical flows on iOS Safari and Android Chrome
+- [ ] Visual regression snapshots regenerated for mobile viewports
+
+**Decisions:** _(populated as PR lands; will include the per-feature scope decision)_
+
+---
+
+#### PR 5 — Information architecture & polish
+
+**Risk:** low. Mostly additive.
+
+**Deliverables:**
+
+Empty / first-run states:
+- [ ] First-run Dashboard: when `totalOwned === 0`, show a centred onboarding panel: "// no games yet" with two CTAs — "connect a platform" (→ `/settings/platforms`) and "add a game manually" (→ opens AddGameModal)
+- [ ] First-run Library: same pattern when shelves are all empty
+- [ ] Empty Upcoming: "// no upcoming releases tracked — adjust hype threshold in settings or wishlist a game"
+- [ ] Empty single-shelf Library view (e.g., `/library/Wishlist` with zero items): "// nothing on this shelf yet"
+
+Error recovery:
+- [ ] When `useQuery` returns an error, surface a "// retry" button next to the error message that calls the existing `refetch()`
+- [ ] `OfflineBanner` visual verification on real devices; ensure mounting at `App.tsx:46` is correct and the banner renders above content (z-index audit)
+
+Navigation polish:
+- [ ] Replace remaining hardcoded `navigate('/path')` for back actions with `navigate(-1)` where appropriate (audit + spreadsheet of all `navigate()` calls; only "intentional fixed destinations" stay)
+
+URL state:
+- [ ] Library sort persists in URL: `?sort=lastPlayed|title|playtime`
+- [ ] Library view-mode persists in URL when changed by the user (currently only persists in Preferences)
+- [ ] Upcoming scope persists in URL: `?scope=my-platforms|all`
+
+Pull-to-refresh:
+- [ ] Add pull-to-refresh on `DashboardMobile`, `LibraryMobile`, `UpcomingMobile` — calls existing `refetch()` from the data hook. Use a small custom hook (no library) that listens to touch events and triggers refetch when overscroll exceeds a threshold
+
+Discoverability:
+- [ ] [SCOPE TBD] Quick-sync trigger from the Sidebar / TopBar (currently sync is buried in `Settings → Platforms → {platform}`)
+- [ ] [SCOPE TBD] Page-transition animation (subtle fade or slide) for route changes — debate: does the terminal aesthetic want this, or stay instant?
+
+**Success Criteria:**
+- [ ] A new user with zero data sees actionable empty states everywhere instead of bare blank screens
+- [ ] Pulling down on a mobile data screen triggers a re-fetch with a visible loading indicator
+- [ ] An API error shows a retry button that actually retries
+- [ ] Sharing a URL like `/library/Backlog?sort=playtime&view=grid` reproduces the exact view for the recipient
+- [ ] Browser back button does the right thing everywhere
+
+**Testing:**
+- [ ] Playwright: load the app with a fresh test user (zero games), verify empty-state CTAs render
+- [ ] Playwright: simulate API failure, click retry, verify request fires
+- [ ] Manual mobile real-device test: pull-to-refresh on each data screen
+- [ ] Manual URL-share test: open a deep-linked URL in a new tab and confirm filter / sort / scope are honored
+
+**Decisions:** _(populated as PR lands)_
+
+---
+
+**Phase 8 success criteria (rollup):**
+- [ ] WCAG 2.1 AA compliance verified by axe-core, WAVE, manual VoiceOver / keyboard walkthroughs
+- [ ] Lighthouse Accessibility ≥ 95 on every screen
+- [ ] Mobile UX composite score reaches 8/10 (vs. ~3/10 baseline)
+- [ ] No fake iOS chrome rendered in production
+- [ ] All five PRs land green on CI; existing test count grows; no regressions in the 115 + 69 baseline
+
+---
+
 ## Global Testing Strategy
 
 ### Test Layers
@@ -740,5 +1043,6 @@ These items were addressed after PSN was connected and real data revealed gaps.
 | 7 — Deploy + Google OAuth | Done | Railway + Vercel live behind custom domain `gamehoardr.com` (Porkbun registrar). API at `api.gamehoardr.com`, web at `gamehoardr.com`. Email/password + Google OAuth verified end-to-end on desktop Chrome (regular + incognito) and iOS Safari. Cross-origin cookie problem resolved — both subdomains share `.gamehoardr.com` parent so cookies are first-party. Steam OpenID still pending production verification. |
 | Post-7 — Lint Cleanup + Supabase RLS | Done | `npm run lint` 86 errors → 0 errors (CI lint job now actually green). RLS enabled on all public tables, closing 8 Supabase Security Advisor errors. Test suite still 103 API + 40 web all passing. `auth.test.ts` made deterministic via `dotenv/config` mock so it passes regardless of local OAuth env. |
 | Post-7 — Performance & UX | Done | Drafted in `docs/PERFORMANCE_PLAN.md` 2026-05-04. 14 fix items across architecture (shell-as-layout, UserProvider, SWR cache), backend (slim `/api/dashboard`, `/api/games/shelves`, indexes, cache headers), images (lazy + IGDB sizes), and SW. **All 6 PRs landed 2026-05-04** (commits `c11fc29`, `624a380`, `8e31e46`). Persistent shell + UserProvider + SWR cache + slim dashboard + per-shelf endpoint + cover lazy-load + IGDB size variants + preconnect + memoization + screen code-splitting + DB indexes live + real activity heatmap. Initial JS bundle 105.68 → 75.38 KB gzipped (~30%). 115 API + 69 web tests passing. **Plus infra fixes via Railway dashboard (same day):** region us-west → EU West (Amsterdam) to match Supabase eu-west-1, `connection_limit=1` → `5` in `DATABASE_URL`, fixed Railway Watch Paths format. Production `/api/games/shelves` 10.6 s → 460 ms (23×); `/api/dashboard` 10.9 s → ~500 ms (22×). All gotchas recorded in `CLAUDE.md`. |
+| 8 — Mobile Parity, iOS-HIG & Accessibility | In progress (planned 2026-05-05) | Drafted from May 2026 multi-pass UX audit (parity, Nielsen, iOS HIG, typography, accessibility). 5 PRs: foundation tokens & focus styles → mobile shell HIG correctness → WCAG 2.1 AA pass → mobile parity bug fixes → IA & polish. Composite mobile UX score 3/10 → target 8/10. PR 4 scope (which Desktop features port to Mobile) deferred — to be decided before implementation. PR 3 targets full WCAG 2.1 AA in anticipation of possible product release. |
 
 > Update this table as phases progress. Use: `In progress`, `Done`, `Blocked (reason)`.

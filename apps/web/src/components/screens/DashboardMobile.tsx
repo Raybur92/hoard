@@ -108,10 +108,10 @@ export function DashboardMobile() {
         <div style={{ padding: '14px 16px 4px' }}>
           <Marker>// good {greeting()}, {(user?.name ?? user?.email?.split('@')[0] ?? 'hoard').toLowerCase()}</Marker>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 10 }}>
-            <span className="t-display bignum" style={{ fontSize: 56, lineHeight: 0.85 }}>{stats.totalGames}</span>
+            <span className="t-display bignum" style={{ fontSize: "var(--text-display-sm)", lineHeight: 0.85 }}>{stats.totalGames}</span>
             <div>
-              <div className="t-up t-faint" style={{ fontSize: 9 }}>games owned</div>
-              <div className="t-mono t-dim" style={{ fontSize: 11 }}>+{stats.weeklyAdded} wk</div>
+              <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>games owned</div>
+              <div className="t-mono t-dim" style={{ fontSize: "var(--text-2xs)" }}>+{stats.weeklyAdded} wk</div>
             </div>
           </div>
         </div>
@@ -122,17 +122,17 @@ export function DashboardMobile() {
             <div className="panel" style={{ padding: 12, display: 'flex', gap: 12 }}>
               <Cover w={70} h={94} label={(np.game.title.split(': ')[1] ?? np.game.title).toUpperCase()} dev={np.game.developer ?? ''} bright />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 9, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ fontSize: "var(--text-2xs)", color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <Icon name="dotO" size={7} fill={true} /> now playing
                 </div>
-                <div style={{ fontSize: 14, lineHeight: 1.15, marginTop: 3 }}>{np.game.title}</div>
-                <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>
+                <div style={{ fontSize: "var(--text-base)", lineHeight: 1.15, marginTop: 3 }}>{np.game.title}</div>
+                <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
                   {minutesToHours(npTotalMin)} · {formatRelative(np.lastPlayedAt)} · {npDominantPlat.toLowerCase()}
                 </div>
                 <div className="prog green" style={{ marginTop: 8 }}>
                   <span style={{ width: `${npPct}%` }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 10, color: 'var(--paper-faint)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }}>
                   <span>{npPct}%</span>
                   <span>{npHltb}</span>
                 </div>
@@ -152,7 +152,7 @@ export function DashboardMobile() {
             ] as [string, string, string | null][]).map(([v, k, tone], i) => (
               <div key={i} style={{ background: 'var(--ink)', padding: '12px 12px 10px' }}>
                 <div className="t-mono t-tnum" style={{ fontSize: 20, fontWeight: 500, color: tone === 'green' ? 'var(--green)' : tone === 'amber' ? 'var(--amber)' : 'var(--paper)' }}>{v}</div>
-                <div className="t-up t-faint" style={{ fontSize: 9, marginTop: 4 }}>{k}</div>
+                <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>{k}</div>
               </div>
             ))}
           </div>
@@ -162,7 +162,7 @@ export function DashboardMobile() {
         {stats.playtimeByPlatform.length > 0 && (
           <div style={{ padding: '14px 16px 0' }}>
             <Marker>// hours by platform</Marker>
-            <pre className="ascii t-dim" style={{ marginTop: 8, fontSize: 10, lineHeight: 1.55 }}>
+            <pre className="ascii t-dim" style={{ marginTop: 8, fontSize: "var(--text-3xs)", lineHeight: 1.55 }}>
               {platformChart}
             </pre>
           </div>
@@ -182,7 +182,7 @@ export function DashboardMobile() {
             <Hr kind="dot" />
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 14, marginBottom: 10 }}>
               <Marker>// dropping soon · {wishlistCountdown.length}</Marker>
-              <span className="t-amber" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span className="t-amber" style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="star" size={10} fill={true} /> all
               </span>
             </div>
@@ -197,17 +197,17 @@ export function DashboardMobile() {
                 <div key={w.id} style={{ display: 'grid', gridTemplateColumns: '36px 1fr auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: i < wishlistCountdown.length - 1 ? '1px dotted var(--rule-bright)' : 'none' }}>
                   <Cover w={36} h={48} label={(w.title.split(' ')[0] ?? w.title).toUpperCase()} />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, lineHeight: 1.1 }}>{w.title}</div>
+                    <div style={{ fontSize: "var(--text-xs)", lineHeight: 1.1 }}>{w.title}</div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
-                      <span className="t-tnum" style={{ fontSize: 10, color: urgent ? 'var(--amber)' : 'var(--paper-dim)' }}>{dateStr.split(',')[0]}</span>
-                      <span className="t-faint" style={{ fontSize: 10 }}>· {platCodes.join('·')}</span>
+                      <span className="t-tnum" style={{ fontSize: "var(--text-3xs)", color: urgent ? 'var(--amber)' : 'var(--paper-dim)' }}>{dateStr.split(',')[0]}</span>
+                      <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {platCodes.join('·')}</span>
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div className="t-tnum" style={{ fontSize: 14, color: urgent ? 'var(--amber)' : 'var(--paper)' }}>
+                    <div className="t-tnum" style={{ fontSize: "var(--text-base)", color: urgent ? 'var(--amber)' : 'var(--paper)' }}>
                       {w.releaseDate ? `T-${days}` : 'TBA'}
                     </div>
-                    <div className="t-faint" style={{ fontSize: 9 }}>days</div>
+                    <div className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>days</div>
                   </div>
                 </div>
               );

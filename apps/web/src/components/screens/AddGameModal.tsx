@@ -82,7 +82,7 @@ export function AddGameModal({ onClose, onAdded }: Props) {
       <div className="panel" style={{ width: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: 0, border: '1px solid var(--rule-bright)' }}>
         {/* header */}
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="t-mono t-up" style={{ fontSize: 10, color: 'var(--paper-dim)' }}>// add game</span>
+          <span className="t-mono t-up" style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-dim)' }}>// add game</span>
           <span style={{ cursor: 'pointer', color: 'var(--paper-faint)' }} onClick={onClose}><Icon name="x" size={11} /></span>
         </div>
 
@@ -95,9 +95,9 @@ export function AddGameModal({ onClose, onAdded }: Props) {
               value={query}
               onChange={(e) => { setSelected(null); setQuery(e.target.value); }}
               placeholder="search IGDB by title…"
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--paper)' }}
+              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--mono)', fontSize: "var(--text-xs)", color: 'var(--paper)' }}
             />
-            {searching && <span className="t-faint" style={{ fontSize: 10 }}>…</span>}
+            {searching && <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>…</span>}
           </div>
         </div>
 
@@ -114,8 +114,8 @@ export function AddGameModal({ onClose, onAdded }: Props) {
               >
                 <Cover w={32} h={44} label="" src={r.coverUrl} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
-                  <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                  <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
                     {r.developer ?? 'Unknown'}{r.releaseYear ? ` · ${r.releaseYear}` : ''}
                   </div>
                 </div>
@@ -126,7 +126,7 @@ export function AddGameModal({ onClose, onAdded }: Props) {
         )}
 
         {!selected && query.length >= 2 && !searching && results.length === 0 && (
-          <div style={{ padding: '20px 18px', color: 'var(--paper-faint)', fontSize: 11 }}>
+          <div style={{ padding: '20px 18px', color: 'var(--paper-faint)', fontSize: "var(--text-2xs)" }}>
             no results for "{query}"
           </div>
         )}
@@ -137,23 +137,23 @@ export function AddGameModal({ onClose, onAdded }: Props) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
               <Cover w={36} h={50} label="" src={selected.coverUrl} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: 'var(--paper)' }}>{selected.title}</div>
-                <div className="t-faint" style={{ fontSize: 10, marginTop: 2 }}>
+                <div style={{ fontSize: "var(--text-sm)", color: 'var(--paper)' }}>{selected.title}</div>
+                <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
                   {selected.developer ?? 'Unknown'}{selected.releaseYear ? ` · ${selected.releaseYear}` : ''}
                 </div>
               </div>
-              <span style={{ cursor: 'pointer', fontSize: 10, color: 'var(--paper-faint)' }} onClick={() => setSelected(null)}>
+              <span style={{ cursor: 'pointer', fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }} onClick={() => setSelected(null)}>
                 change
               </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <div className="t-up t-faint" style={{ fontSize: 9, marginBottom: 6 }}>// platform</div>
+                <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginBottom: 6 }}>// platform</div>
                 <select
                   value={platform}
                   onChange={(e) => setPlatform(e.target.value)}
-                  style={{ width: '100%', background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 11, padding: '5px 8px' }}
+                  style={{ width: '100%', background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", padding: '5px 8px' }}
                 >
                   {PLATFORM_OPTIONS.map((p) => (
                     <option key={p.value} value={p.value}>{p.label}</option>
@@ -161,11 +161,11 @@ export function AddGameModal({ onClose, onAdded }: Props) {
                 </select>
               </div>
               <div>
-                <div className="t-up t-faint" style={{ fontSize: 9, marginBottom: 6 }}>// status</div>
+                <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginBottom: 6 }}>// status</div>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as GameStatus)}
-                  style={{ width: '100%', background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 11, padding: '5px 8px' }}
+                  style={{ width: '100%', background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", padding: '5px 8px' }}
                 >
                   {STATUSES.map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -178,7 +178,7 @@ export function AddGameModal({ onClose, onAdded }: Props) {
 
         {/* footer */}
         <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {error ? <span style={{ fontSize: 10, color: 'var(--red)' }}>{error}</span> : <span />}
+          {error ? <span style={{ fontSize: "var(--text-3xs)", color: 'var(--red)' }}>{error}</span> : <span />}
           <div style={{ display: 'flex', gap: 8 }}>
             <Btn sm onClick={onClose}>cancel</Btn>
             <Btn sm variant="primary" onClick={() => void handleAdd()} disabled={!selected || adding}>

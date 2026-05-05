@@ -26,7 +26,7 @@ export function GameDetailMobile() {
     return (
       <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
         {error
-          ? <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+          ? <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// error: ${error}`}</span>
           : <>
               <div className="skel" style={{ height: 180 }} />
               <div className="skel" style={{ width: 200, height: 20 }} />
@@ -66,13 +66,13 @@ export function GameDetailMobile() {
       {/* back-bar header */}
       <div style={{ padding: '8px 16px 10px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--ink)' }}>
         <span
-          style={{ color: 'var(--paper-dim)', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+          style={{ color: 'var(--paper-dim)', fontSize: "var(--text-base)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
           onClick={() => navigate('/library')}
         >
           <Icon name="back" size={14} /> library
         </span>
-        <span className="t-up t-faint" style={{ fontSize: 9 }}>// game record</span>
-        <span style={{ color: 'var(--paper-dim)', fontSize: 13 }}><Icon name="arrowR" size={13} /></span>
+        <span className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// game record</span>
+        <span style={{ color: 'var(--paper-dim)', fontSize: "var(--text-sm)" }}><Icon name="arrowR" size={13} /></span>
       </div>
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 18px 24px', background: 'var(--void)' }}>
@@ -87,27 +87,27 @@ export function GameDetailMobile() {
 
         {/* receipt */}
         <div className="receipt" style={{
-          fontFamily: 'var(--mono)', fontSize: 11, lineHeight: 1.6, padding: '20px 22px',
+          fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", lineHeight: 1.6, padding: '20px 22px',
           boxShadow: '0 16px 40px -8px rgba(0,0,0,0.7)',
           transform: 'rotate(-0.3deg)',
         }}>
           <div className="center">
-            <div className="t-display" style={{ fontSize: 22, letterSpacing: '0.06em' }}>hoard</div>
-            <div style={{ fontSize: 9, marginTop: 2, letterSpacing: '0.18em' }}>=== GAME · RECORD ===</div>
-            <div style={{ fontSize: 9, marginTop: 4, letterSpacing: '0.08em' }}>{receipt.date} · ref# {receipt.ref}</div>
+            <div className="t-display" style={{ fontSize: "var(--text-lg)", letterSpacing: '0.06em' }}>hoard</div>
+            <div style={{ fontSize: "var(--text-2xs)", marginTop: 2, letterSpacing: '0.18em' }}>=== GAME · RECORD ===</div>
+            <div style={{ fontSize: "var(--text-2xs)", marginTop: 4, letterSpacing: '0.08em' }}>{receipt.date} · ref# {receipt.ref}</div>
           </div>
 
           <div className="rule" style={{ margin: '12px 0' }} />
 
           <div className="center">
-            <div style={{ fontSize: 18, lineHeight: 1.05, fontWeight: 700, letterSpacing: '-0.01em' }}>{g.game.title.toUpperCase()}</div>
-            <div style={{ fontSize: 10, marginTop: 4 }}>{g.game.developer} · {g.game.releaseYear}</div>
-            <div style={{ fontSize: 10 }}>{g.game.genres[0] ?? '—'}</div>
+            <div style={{ fontSize: "var(--text-md)", lineHeight: 1.05, fontWeight: 700, letterSpacing: '-0.01em' }}>{g.game.title.toUpperCase()}</div>
+            <div style={{ fontSize: "var(--text-3xs)", marginTop: 4 }}>{g.game.developer} · {g.game.releaseYear}</div>
+            <div style={{ fontSize: "var(--text-3xs)" }}>{g.game.genres[0] ?? '—'}</div>
           </div>
 
           <div className="rule" style={{ margin: '12px 0' }} />
 
-          <pre style={{ fontSize: 10.5, lineHeight: 1.6, margin: 0, fontFamily: 'inherit' }}>
+          <pre style={{ fontSize: "var(--text-3xs)", lineHeight: 1.6, margin: 0, fontFamily: 'inherit' }}>
 {`STATUS .......... ${g.status.toUpperCase()}
 RATING .......... ${g.rating != null ? `${g.rating}/5` : '—/★★★★★'}
 ADDED ........... ${g.addedAt.slice(0, 10)}`}
@@ -115,8 +115,8 @@ ADDED ........... ${g.addedAt.slice(0, 10)}`}
 
           <div className="rule" style={{ margin: '12px 0' }} />
 
-          <div style={{ fontSize: 9, letterSpacing: '0.1em', marginBottom: 6 }}>OWNED ON ──────────────</div>
-          <pre style={{ fontSize: 10.5, lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
+          <div style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.1em', marginBottom: 6 }}>OWNED ON ──────────────</div>
+          <pre style={{ fontSize: "var(--text-3xs)", lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
             {platLines}
             {'\n              ───────\nSUBTOTAL '}
             {minutesToHours(totalMin).padStart(9)}
@@ -124,8 +124,8 @@ ADDED ........... ${g.addedAt.slice(0, 10)}`}
 
           <div className="rule" style={{ margin: '12px 0' }} />
 
-          <div style={{ fontSize: 9, letterSpacing: '0.1em', marginBottom: 6 }}>PROGRESS ─────────────</div>
-          <pre style={{ fontSize: 10.5, lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
+          <div style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.1em', marginBottom: 6 }}>PROGRESS ─────────────</div>
+          <pre style={{ fontSize: "var(--text-3xs)", lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
 {`HLTB main ........ ${hltbMain ? `${hltbMain} h` : '—'}
 % of main ........ ${pctOfMain}
 last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
@@ -133,8 +133,8 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
 
           <div className="rule" style={{ margin: '12px 0' }} />
 
-          <div style={{ fontSize: 9, letterSpacing: '0.1em', marginBottom: 4 }}>NOTES ────────────────</div>
-          <div style={{ fontSize: 10.5, lineHeight: 1.5 }}>
+          <div style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.1em', marginBottom: 4 }}>NOTES ────────────────</div>
+          <div style={{ fontSize: "var(--text-3xs)", lineHeight: 1.5 }}>
             {noteLines.length > 0
               ? noteLines.map((n, i) => <div key={i}>&gt; {n}</div>)
               : <div>&gt; no notes yet</div>
@@ -143,24 +143,24 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
 
           <div className="rule solid" style={{ margin: '12px 0 10px' }} />
 
-          <div className="row" style={{ fontSize: 12, fontWeight: 700 }}>
+          <div className="row" style={{ fontSize: "var(--text-xs)", fontWeight: 700 }}>
             <span>TOTAL · HOARD</span><span>{minutesToHours(totalMin)}</span>
           </div>
           {g.hltb?.mainStory && (
-            <div className="row" style={{ fontSize: 10 }}>
+            <div className="row" style={{ fontSize: "var(--text-3xs)" }}>
               <span>· still owed</span><span>{stillOwed}</span>
             </div>
           )}
 
           <div className="rule" style={{ margin: '10px 0' }} />
 
-          <div className="center" style={{ fontSize: 10 }}>
+          <div className="center" style={{ fontSize: "var(--text-3xs)" }}>
             ** thank u for hoarding **
           </div>
           <div style={{ marginTop: 10 }}>
             <Barcode code={receipt.barcode} height={28} />
           </div>
-          <div className="center" style={{ fontSize: 8, marginTop: 8, letterSpacing: '0.16em', opacity: 0.7 }}>
+          <div className="center" style={{ fontSize: "var(--text-3xs)", marginTop: 8, letterSpacing: '0.16em', opacity: 0.7 }}>
             hoard.app/g/{g.game.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}
           </div>
         </div>
@@ -179,8 +179,8 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
             {platforms.map(([code, min]) => (
               <div key={code} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, alignItems: 'center', padding: '8px 12px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
                 <Plat code={code} />
-                <span style={{ fontSize: 12 }}>{code} <span className="t-faint" style={{ fontSize: 10 }}>· {g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}</span></span>
-                <span className="t-tnum" style={{ fontSize: 13 }}>{minutesToHours(min ?? 0)}</span>
+                <span style={{ fontSize: "var(--text-xs)" }}>{code} <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}</span></span>
+                <span className="t-tnum" style={{ fontSize: "var(--text-sm)" }}>{minutesToHours(min ?? 0)}</span>
               </div>
             ))}
           </div>

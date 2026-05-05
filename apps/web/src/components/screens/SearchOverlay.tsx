@@ -86,11 +86,11 @@ export function SearchOverlay({ onClose }: Props) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKey}
             placeholder="search your library…"
-            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--paper)', caretColor: 'var(--green)' }}
+            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", color: 'var(--paper)', caretColor: 'var(--green)' }}
           />
           {searching
-            ? <span className="t-faint" style={{ fontSize: 10, flexShrink: 0 }}>…</span>
-            : <span className="t-mono t-faint" style={{ fontSize: 9, flexShrink: 0, letterSpacing: '0.08em' }}>ESC</span>
+            ? <span className="t-faint" style={{ fontSize: "var(--text-3xs)", flexShrink: 0 }}>…</span>
+            : <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", flexShrink: 0, letterSpacing: '0.08em' }}>ESC</span>
           }
         </div>
 
@@ -113,14 +113,14 @@ export function SearchOverlay({ onClose }: Props) {
               >
                 <Cover w={28} h={38} label="" src={g.game.coverUrl} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {g.game.title}
                   </div>
                   {g.game.developer && (
-                    <div className="t-faint" style={{ fontSize: 10, marginTop: 1 }}>{g.game.developer}</div>
+                    <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 1 }}>{g.game.developer}</div>
                   )}
                 </div>
-                <span style={{ fontSize: 9, color: STATUS_COLORS[g.status] ?? 'var(--paper-faint)', textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
+                <span style={{ fontSize: "var(--text-2xs)", color: STATUS_COLORS[g.status] ?? 'var(--paper-faint)', textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
                   {g.status}
                 </span>
                 <Icon name="caret" size={9} style={{ color: 'var(--paper-faint)', transform: 'rotate(-90deg)', flexShrink: 0 }} />
@@ -130,7 +130,7 @@ export function SearchOverlay({ onClose }: Props) {
         )}
 
         {noResults && (
-          <div style={{ padding: '16px 18px', color: 'var(--paper-faint)', fontSize: 11 }}>
+          <div style={{ padding: '16px 18px', color: 'var(--paper-faint)', fontSize: "var(--text-2xs)" }}>
             // no results for "{query}"
           </div>
         )}
@@ -138,9 +138,9 @@ export function SearchOverlay({ onClose }: Props) {
         {/* footer */}
         <div style={{ height: 1, background: 'var(--rule)' }} />
         <div style={{ padding: '7px 18px', display: 'flex', gap: 16 }}>
-          <span className="t-mono t-faint" style={{ fontSize: 9 }}>↑↓ navigate</span>
-          <span className="t-mono t-faint" style={{ fontSize: 9 }}>↵ open</span>
-          <span className="t-mono t-faint" style={{ fontSize: 9 }}>esc close</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>↑↓ navigate</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>↵ open</span>
+          <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>esc close</span>
         </div>
       </div>
     </div>

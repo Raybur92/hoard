@@ -22,24 +22,24 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         {back && (
           <span
-            style={{ fontSize: 16, color: 'var(--paper-dim)', cursor: 'pointer' }}
+            style={{ fontSize: "var(--text-md)", color: 'var(--paper-dim)', cursor: 'pointer' }}
             onClick={onBack}
           >
             ‹
           </span>
         )}
         <div>
-          <div className="t-display" style={{ fontSize: 18, lineHeight: 1, letterSpacing: '0.04em' }}>
+          <div className="t-display" style={{ fontSize: "var(--text-md)", lineHeight: 1, letterSpacing: '0.04em' }}>
             {title}
           </div>
           {sub && (
-            <div style={{ fontSize: 9, color: 'var(--paper-faint)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 4 }}>
+            <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 4 }}>
               {sub}
             </div>
           )}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 12, color: 'var(--paper-dim)', fontSize: 13, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 12, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", alignItems: 'center' }}>
         {right ?? (
           <>
             <Icon name="search" size={14} />

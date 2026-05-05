@@ -14,6 +14,59 @@ body {
 
 #root { height: 100%; }
 
+/* ---------- accessibility: focus + motion ---------- */
+
+/* Suppress the legacy mouse-click outline; keyboard focus still gets the styled
+   :focus-visible ring below. WCAG 2.1 SC 2.4.7 (focus visible). */
+:focus { outline: none; }
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Inputs and textareas show a thicker tinted ring so the focus is unmissable
+   even against the dense terminal palette. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-color: var(--amber);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px var(--amber);
+}
+
+/* Honor user preference for reduced motion — disables the skeleton pulse,
+   the toggle slide, and any future transitions. WCAG 2.3.3 (animation from
+   interactions) and platform best practice. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skip-to-content link, hidden until focused — required for keyboard users
+   to bypass repeated nav (WCAG 2.4.1). Wired up in Phase 8 PR 3. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  padding: 6px 12px;
+  background: var(--paper);
+  color: var(--void);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  z-index: 1000;
+}
+.skip-link:focus {
+  top: 8px;
+}
+
 /* ---------- noise overlay ---------- */
 
 .hoard-noise { position: relative; }
@@ -68,7 +121,7 @@ body {
   align-items: center;
   gap: 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -144,10 +197,10 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 10px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--paper-dim);
@@ -173,13 +226,16 @@ body {
   width: 18px;
   height: 14px;
   font-family: var(--mono);
+  /* 9px is below text-2xs but .plat is a 2-letter code on a 14px tall badge —
+     the badge geometry is the constraint. Keep at 9px as a documented
+     decorative exception; reviewed in Phase 8 PR 1 audit. */
   font-size: 9px;
   font-weight: 600;
   border: 1px solid var(--paper-faint);
   color: var(--paper-dim);
   letter-spacing: 0.04em;
 }
-.plat.lg { width: 24px; height: 18px; font-size: 10px; }
+.plat.lg { width: 24px; height: 18px; font-size: var(--text-3xs); }
 
 /* ---------- progress bar ---------- */
 
@@ -222,13 +278,13 @@ body {
   grid-template-columns: max-content 1fr;
   gap: 4px 12px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 .kv .k {
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--paper-faint);
-  font-size: 10px;
+  color: var(--paper-dim);
+  font-size: var(--text-2xs);
   align-self: center;
 }
 
@@ -242,7 +298,7 @@ body {
   height: 32px;
   padding: 0 14px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   background: transparent;
@@ -257,7 +313,7 @@ body {
 .btn.amber   { color: var(--amber); border-color: var(--amber-dim); }
 .btn.amber:hover { background: var(--amber); color: var(--void); border-color: var(--amber); }
 .btn.green   { color: var(--green); border-color: var(--green-dim); }
-.btn.sm      { height: 24px; padding: 0 10px; font-size: 10px; }
+.btn.sm      { height: 32px; padding: 0 12px; font-size: var(--text-xs); }
 
 /* ---------- field (decorative input) ---------- */
 
@@ -265,12 +321,12 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 30px;
-  padding: 0 10px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--rule);
   background: var(--ink);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--paper-dim);
 }
 .field .pre { color: var(--green); }
@@ -339,14 +395,15 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--text-xs);
+  line-height: var(--lh-relaxed);
 }
 .receipt .section-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  /* Receipt section heads are a documented dense-mono exception. */
+  font-size: var(--text-3xs);
   letter-spacing: 0.1em;
   margin-bottom: 6px;
 }
@@ -381,16 +438,17 @@ body {
   display: inline-flex;
   align-items: center;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--paper-faint);
+  color: var(--paper-dim);
   gap: 8px;
 }
 .marker::before {
   content: '';
   width: 8px;
   height: 1px;
+  /* divider line — paper-faint is OK because this is decoration, not text */
   background: var(--paper-faint);
 }
 
@@ -398,7 +456,9 @@ body {
 
 .bignum {
   font-family: var(--display);
-  font-size: 96px;
+  font-size: var(--text-display);
+  /* Tight display leading is intentional for bignum hero text — exempt from
+     line-height rules per Phase 8 PR 1. */
   line-height: 0.85;
   letter-spacing: -0.02em;
   color: var(--paper);
@@ -414,21 +474,22 @@ body {
 }
 .shelf-label .num {
   font-family: var(--display);
-  font-size: 28px;
+  font-size: var(--text-xl);
   color: var(--paper);
+  /* Display number; tight leading is intentional. */
   line-height: 0.9;
 }
 .shelf-label .name {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.16em;
   color: var(--paper);
 }
 .shelf-label .total {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--paper-faint);
+  font-size: var(--text-2xs);
+  color: var(--paper-dim);
   margin-left: auto;
 }
 
@@ -454,10 +515,10 @@ body {
 }
 .sidebar .group {
   padding: 14px 22px 6px;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--paper-faint);
+  color: var(--paper-dim);
 }
 .sidebar .item {
   display: flex;
@@ -465,16 +526,16 @@ body {
   gap: 10px;
   padding: 7px 22px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--paper-dim);
   border-left: 2px solid transparent;
   cursor: pointer;
   user-select: none;
 }
-.sidebar .item .glyph { width: 14px; color: var(--paper-faint); font-size: 11px; display: flex; align-items: center; }
+.sidebar .item .glyph { width: 14px; color: var(--paper-dim); font-size: var(--text-2xs); display: flex; align-items: center; }
 .sidebar .item:hover  { color: var(--paper); background: var(--ink-2); }
 .sidebar .item.active { color: var(--paper); border-left-color: var(--amber); background: var(--ink-2); }
-.sidebar .item .count { margin-left: auto; font-size: 10px; color: var(--paper-faint); }
+.sidebar .item .count { margin-left: auto; font-size: var(--text-2xs); color: var(--paper-dim); }
 
 /* ---------- topbar (desktop) ---------- */
 
@@ -487,14 +548,14 @@ body {
   gap: 18px;
   background: var(--ink);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   flex-shrink: 0;
 }
 .topbar .crumbs { color: var(--paper-dim); }
 .topbar .crumbs b { color: var(--paper); font-weight: 500; }
-.topbar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; color: var(--paper-faint); }
+.topbar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; color: var(--paper-dim); }
 
 /* ---------- mobile status bar ---------- */
 
@@ -525,9 +586,9 @@ body {
   align-items: center;
   gap: 3px;
   padding: 10px 0 14px;
-  color: var(--paper-faint);
+  color: var(--paper-dim);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   cursor: pointer;

@@ -61,7 +61,7 @@ export function GameDetailDesktop() {
         <TopBar crumbs={['hoard', 'library', '…']} />
         {error
           ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <span className="t-mono t-red" style={{ fontSize: 12 }}>{`// error: ${error}`}</span>
+              <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// error: ${error}`}</span>
             </div>
           : <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32 }}>
               <div className="skel" style={{ height: 347 }} />
@@ -118,10 +118,10 @@ export function GameDetailDesktop() {
             <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 28, marginTop: 18 }}>
               <Cover w={220} h={300} src={g.game.coverUrl} label={g.game.title.toUpperCase()} dev={g.game.developer ?? ''} year={shortYear(g.game.releaseYear)} bright />
               <div>
-                <div className="t-up t-faint" style={{ fontSize: 10 }}>
+                <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>
                   {g.game.developer} · {g.game.releaseYear} · {g.game.genres[0] ?? '—'}
                 </div>
-                <div style={{ fontSize: 44, lineHeight: 1, color: 'var(--paper)', marginTop: 8, letterSpacing: '-0.015em' }}>{g.game.title}</div>
+                <div style={{ fontSize: "var(--text-2xl)", lineHeight: 1, color: 'var(--paper)', marginTop: 8, letterSpacing: '-0.015em' }}>{g.game.title}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div ref={statusRef} style={{ position: 'relative' }}>
                     <Chip on onClick={() => setStatusOpen(o => !o)} style={{ cursor: 'pointer' }}>
@@ -137,7 +137,7 @@ export function GameDetailDesktop() {
                             onClick={() => void changeStatus(s)}
                             style={{
                               padding: '6px 14px',
-                              fontSize: 11,
+                              fontSize: "var(--text-2xs)",
                               fontFamily: 'var(--mono)',
                               color: s === g.status ? 'var(--paper)' : 'var(--paper-dim)',
                               background: s === g.status ? 'var(--ink-3)' : 'transparent',
@@ -176,9 +176,9 @@ export function GameDetailDesktop() {
                     [pctOfMain, 'complete'],
                     [g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : '—', 'last touched'],
                   ] as [string, string][]).map(([v, k], i) => (
-                    <div key={i} style={{ background: 'var(--ink)', padding: '14px 16px', display: 'grid', gridTemplateRows: '28px 12px', rowGap: 4, alignContent: 'start' }}>
-                      <div className="t-mono t-tnum" style={{ fontSize: 24, lineHeight: 1, alignSelf: 'center', color: 'var(--paper)' }}>{v}</div>
-                      <div className="t-up t-faint" style={{ fontSize: 9, alignSelf: 'end' }}>{k}</div>
+                    <div key={i} style={{ background: 'var(--ink)', padding: '14px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 6, minWidth: 0 }}>
+                      <div className="t-mono t-tnum" style={{ fontSize: 24, lineHeight: 1, color: 'var(--paper)' }}>{v}</div>
+                      <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", lineHeight: 'var(--lh-snug)' }}>{k}</div>
                     </div>
                   ))}
                 </div>
@@ -190,9 +190,9 @@ export function GameDetailDesktop() {
                     {platforms.map(([code, min]) => (
                       <div key={code} style={{ display: 'grid', gridTemplateColumns: '32px 140px 1fr auto', gap: 14, alignItems: 'center', padding: '8px 14px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
                         <Plat code={code} lg />
-                        <span style={{ fontSize: 13 }}>{code}</span>
-                        <span className="t-faint" style={{ fontSize: 11 }}>{formatRelative(g.lastPlayedAt)}</span>
-                        <span className="t-tnum" style={{ fontSize: 14 }}>{minutesToHours(min ?? 0)}</span>
+                        <span style={{ fontSize: "var(--text-sm)" }}>{code}</span>
+                        <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{formatRelative(g.lastPlayedAt)}</span>
+                        <span className="t-tnum" style={{ fontSize: "var(--text-base)" }}>{minutesToHours(min ?? 0)}</span>
                       </div>
                     ))}
                   </div>
@@ -208,31 +208,34 @@ export function GameDetailDesktop() {
                           background: 'var(--ink)',
                           padding: '14px 14px 12px',
                           borderTop: c.you ? '2px solid var(--amber)' : '2px solid transparent',
-                          display: 'grid',
-                          gridTemplateRows: '24px 32px 14px',
-                          rowGap: 4,
-                          alignContent: 'start',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          gap: 6,
+                          minWidth: 0,
                         }}>
-                          <div className="t-up t-faint" style={{ fontSize: 9, letterSpacing: '0.12em', lineHeight: 1.2, alignSelf: 'start' }}>{c.label}</div>
-                          <div className="t-mono t-tnum" style={{ fontSize: 26, color: c.you ? 'var(--amber)' : 'var(--paper)', lineHeight: 1, alignSelf: 'center' }}>{c.value}</div>
-                          <div className="t-faint" style={{ fontSize: 9, lineHeight: 1.2, alignSelf: 'end' }}>{c.sub}</div>
+                          <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.12em', lineHeight: 'var(--lh-snug)' }}>{c.label}</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div className="t-mono t-tnum" style={{ fontSize: 26, color: c.you ? 'var(--amber)' : 'var(--paper)', lineHeight: 1 }}>{c.value}</div>
+                            <div className="t-faint" style={{ fontSize: "var(--text-2xs)", lineHeight: 'var(--lh-snug)' }}>{c.sub}</div>
+                          </div>
                         </div>
                       ))}
                     </div>
                     <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '8px 10px 8px 14px', border: '1px solid var(--rule)', borderTop: 'none', background: 'var(--ink-2)' }}>
                       <span className="t-mono" style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6,
-                        fontSize: 11, letterSpacing: '0.04em',
+                        fontSize: "var(--text-2xs)", letterSpacing: '0.04em',
                         color: 'var(--paper-dim)',
                         padding: '4px 8px', border: '1px solid var(--rule)', background: 'var(--ink)',
                       }}>
                         <span>howlongtobeat.com</span>
                         <Icon name="ext" size={11} />
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, fontSize: 10, color: 'var(--paper-faint)' }}>
-                        <span><span className="t-mono t-tnum t-amber" style={{ fontSize: 14 }}>{pctOfMain}</span>&nbsp;of main</span>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }}>
+                        <span><span className="t-mono t-tnum t-amber" style={{ fontSize: "var(--text-base)" }}>{pctOfMain}</span>&nbsp;of main</span>
                         <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--rule)' }} />
-                        <span><span className="t-mono t-tnum" style={{ fontSize: 14, color: 'var(--paper)' }}>{stillOwed}</span>&nbsp;still owed</span>
+                        <span><span className="t-mono t-tnum" style={{ fontSize: "var(--text-base)", color: 'var(--paper)' }}>{stillOwed}</span>&nbsp;still owed</span>
                       </div>
                     </div>
                   </div>
@@ -241,7 +244,7 @@ export function GameDetailDesktop() {
                 {/* synopsis / genres */}
                 <div style={{ marginTop: 24 }}>
                   <Marker>// the synopsis</Marker>
-                  <div className="t-sans" style={{ marginTop: 10, fontSize: 14, lineHeight: 1.65, color: 'var(--paper-dim)', maxWidth: 620 }}>
+                  <div className="t-sans" style={{ marginTop: 10, fontSize: "var(--text-base)", lineHeight: 1.65, color: 'var(--paper-dim)', maxWidth: 620 }}>
                     {g.game.genres.length > 0 ? g.game.genres.join(' · ') : '—'}
                   </div>
                 </div>
@@ -255,7 +258,7 @@ export function GameDetailDesktop() {
                         autoFocus
                         value={noteDraft}
                         onChange={e => setNoteDraft(e.target.value)}
-                        style={{ width: '100%', minHeight: 100, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.6, padding: '10px 14px', resize: 'vertical', boxSizing: 'border-box' }}
+                        style={{ width: '100%', minHeight: 100, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", lineHeight: 1.6, padding: '10px 14px', resize: 'vertical', boxSizing: 'border-box' }}
                         placeholder="// your notes here"
                       />
                       <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -265,10 +268,10 @@ export function GameDetailDesktop() {
                     </div>
                   ) : (
                     <div
-                      style={{ marginTop: 10, padding: 16, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.6, color: 'var(--paper)', cursor: 'pointer' }}
+                      style={{ marginTop: 10, padding: 16, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", lineHeight: 1.6, color: 'var(--paper)', cursor: 'pointer' }}
                       onClick={() => { setNoteDraft(g.notes ?? ''); setEditingNotes(true); }}
                     >
-                      <div className="t-faint" style={{ fontSize: 10, marginBottom: 6 }}>{g.updatedAt.slice(0, 10)}</div>
+                      <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginBottom: 6 }}>{g.updatedAt.slice(0, 10)}</div>
                       {noteLines.length > 0
                         ? noteLines.map((note, i) => <div key={i}><span className="t-green">&gt;</span> {note}</div>)
                         : <div className="t-faint">no notes yet · click to add</div>
@@ -285,23 +288,23 @@ export function GameDetailDesktop() {
             <div style={{ position: 'relative', width: 380 }}>
               <Marker style={{ position: 'absolute', top: -18, left: 0 }}>// shareable receipt · v0.7</Marker>
               <div className="receipt" style={{
-                fontFamily: 'var(--mono)', fontSize: 12, lineHeight: 1.65,
+                fontFamily: 'var(--mono)', fontSize: "var(--text-xs)", lineHeight: 1.65,
                 boxShadow: '0 24px 60px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
                 transform: 'rotate(-0.4deg)',
               }}>
                 <div className="center">
                   <div className="t-display" style={{ fontSize: 26, letterSpacing: '0.06em' }}>hoard</div>
-                  <div style={{ fontSize: 10, marginTop: 2, letterSpacing: '0.18em' }}>=== GAME · RECORD ===</div>
-                  <div style={{ fontSize: 10, marginTop: 6, letterSpacing: '0.08em' }}>{receipt.date}</div>
-                  <div style={{ fontSize: 10, letterSpacing: '0.08em' }}>cashier: andrea · ref# {receipt.ref}</div>
+                  <div style={{ fontSize: "var(--text-3xs)", marginTop: 2, letterSpacing: '0.18em' }}>=== GAME · RECORD ===</div>
+                  <div style={{ fontSize: "var(--text-3xs)", marginTop: 6, letterSpacing: '0.08em' }}>{receipt.date}</div>
+                  <div style={{ fontSize: "var(--text-3xs)", letterSpacing: '0.08em' }}>cashier: andrea · ref# {receipt.ref}</div>
                 </div>
 
                 <div className="rule" style={{ margin: '14px 0' }} />
 
                 <div className="center">
-                  <div style={{ fontSize: 22, letterSpacing: '-0.01em', lineHeight: 1.1, fontWeight: 700 }}>{g.game.title.toUpperCase()}</div>
-                  <div style={{ fontSize: 11, marginTop: 4 }}>{g.game.developer} · {g.game.releaseYear}</div>
-                  <div style={{ fontSize: 11 }}>{g.game.genres[0] ?? '—'}</div>
+                  <div style={{ fontSize: "var(--text-lg)", letterSpacing: '-0.01em', lineHeight: 1.1, fontWeight: 700 }}>{g.game.title.toUpperCase()}</div>
+                  <div style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>{g.game.developer} · {g.game.releaseYear}</div>
+                  <div style={{ fontSize: "var(--text-2xs)" }}>{g.game.genres[0] ?? '—'}</div>
                 </div>
 
                 <div className="rule" style={{ margin: '14px 0' }} />
@@ -354,7 +357,7 @@ export function GameDetailDesktop() {
                 <div className="rule" style={{ margin: '14px 0' }} />
 
                 <div className="section-head">NOTES</div>
-                <div style={{ fontSize: 11, lineHeight: 1.65 }}>
+                <div style={{ fontSize: "var(--text-2xs)", lineHeight: 1.65 }}>
                   {noteLines.length > 0
                     ? noteLines.map((n, i) => <div key={i} style={{ display: 'flex', gap: 6 }}><span style={{ opacity: 0.5, flexShrink: 0 }}>&gt;</span><span>{n}</span></div>)
                     : <div style={{ opacity: 0.5 }}>&gt; no notes yet</div>
@@ -363,15 +366,15 @@ export function GameDetailDesktop() {
 
                 <div className="rule solid" style={{ margin: '14px 0 12px' }} />
 
-                <div className="row" style={{ fontSize: 13, fontWeight: 700 }}>
+                <div className="row" style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
                   <span>TOTAL · YOUR HOARD</span><span>{minutesToHours(totalMin)}</span>
                 </div>
                 {g.hltb?.mainStory && (
                   <>
-                    <div className="row" style={{ fontSize: 11 }}>
+                    <div className="row" style={{ fontSize: "var(--text-2xs)" }}>
                       <span>· of estimated</span><span>{hltbMain} h</span>
                     </div>
-                    <div className="row" style={{ fontSize: 11 }}>
+                    <div className="row" style={{ fontSize: "var(--text-2xs)" }}>
                       <span>· still owed</span><span>{stillOwed}</span>
                     </div>
                   </>
@@ -379,14 +382,14 @@ export function GameDetailDesktop() {
 
                 <div className="rule" style={{ margin: '14px 0' }} />
 
-                <div className="center" style={{ fontSize: 11, marginBottom: 12 }}>
+                <div className="center" style={{ fontSize: "var(--text-2xs)", marginBottom: 12 }}>
                   ** thank u for hoarding **<br />
-                  <span style={{ fontSize: 9, opacity: 0.65 }}>nothing here is for sale</span>
+                  <span style={{ fontSize: "var(--text-2xs)", opacity: 0.65 }}>nothing here is for sale</span>
                 </div>
 
                 <Barcode code={receipt.barcode} />
 
-                <div className="center" style={{ fontSize: 9, marginTop: 10, letterSpacing: '0.16em', opacity: 0.7 }}>
+                <div className="center" style={{ fontSize: "var(--text-2xs)", marginTop: 10, letterSpacing: '0.16em', opacity: 0.7 }}>
                   hoard.app/g/{g.game.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}
                 </div>
               </div>
