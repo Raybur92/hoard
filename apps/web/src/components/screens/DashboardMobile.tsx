@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
 import { Marker } from '../primitives/Marker';
@@ -6,10 +7,11 @@ import { Cover } from '../primitives/Cover';
 import { Icon } from '../primitives/Icon';
 import { Hr } from '../primitives/Hr';
 import { Heatmap } from '../primitives/Heatmap';
+import { Btn } from '../primitives/Btn';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { minutesToHours, formatRelative, daysUntil, buildAsciiBar } from '../../lib/utils';
-import type { PlatformStat, WishlistRelease } from '@hoard/types';
+import type { PlatformStat, UserGameDetail, WishlistRelease } from '@hoard/types';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -45,8 +47,10 @@ function asciiChart(platforms: PlatformStat[]): string {
 
 export function DashboardMobile() {
   useDocumentTitle("Dashboard");
+  const navigate = useNavigate();
   const { data, loading } = useDashboard();
   const user = useCurrentUser();
+  const [pickIdx, setPickIdx] = useState(0);
   const platformChart = useMemo(
     () => (data ? asciiChart(data.stats.playtimeByPlatform) : ''),
     [data],
@@ -72,7 +76,13 @@ export function DashboardMobile() {
 
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
-  const { stats, nowPlaying, wishlistCountdown, platforms, activity = { weeks: 24, cells: [] } } = data;
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = data;
+  const backlogPool: UserGameDetail[] = backlogItems.length > 0 ? backlogItems : [];
+  const displayPick: UserGameDetail | null = backlogPool[pickIdx] ?? backlogPick;
+  function shufflePick() {
+    if (backlogPool.length === 0) return;
+    setPickIdx(Math.floor(Math.random() * backlogPool.length));
+  }
   // Mobile shows the last 16 weeks. The activity array is column-major
   // (col * 7 + row), oldest first — slice off the leading columns.
   const MOBILE_WEEKS = 16;
@@ -122,10 +132,16 @@ export function DashboardMobile() {
           </div>
         </div>
 
-        {/* now playing */}
+        {/* now playing — tap the card to open the game detail */}
         {np && (
           <div style={{ padding: '12px 16px' }}>
-            <div className="panel" style={{ padding: 12, display: 'flex', gap: 12 }}>
+            <button
+              type="button"
+              className="panel"
+              onClick={() => navigate(`/game/${np.id}`)}
+              aria-label={`Open ${np.game.title}`}
+              style={{ padding: 12, display: 'flex', gap: 12, width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}
+            >
               <Cover w={70} h={94} label={(np.game.title.split(': ')[1] ?? np.game.title).toUpperCase()} dev={np.game.developer ?? ''} bright />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "var(--text-2xs)", color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -143,7 +159,7 @@ export function DashboardMobile() {
                   <span>{npHltb}</span>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         )}
 
@@ -181,6 +197,58 @@ export function DashboardMobile() {
             <Heatmap weeks={MOBILE_WEEKS} days={7} cells={mobileCells} />
           </div>
         </div>
+
+        {/* genre breakdown */}
+        {stats.genres.length > 0 && (
+          <div style={{ padding: '14px 16px 0' }}>
+            <Marker>// top genres</Marker>
+            <div style={{ marginTop: 8 }}>
+              {(() => {
+                const maxCount = stats.genres[0]?.count ?? 1;
+                return stats.genres.slice(0, 6).map(({ name, count }, i) => (
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: "var(--text-2xs)" }}>
+                    <span style={{ width: 92, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                    <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
+                      <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
+                    </div>
+                    <span className="t-tnum t-faint" style={{ fontSize: "var(--text-3xs)", width: 22, textAlign: 'right' }}>{count}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* backlog picker — AGENT.md key decision #4 */}
+        {displayPick && (
+          <div style={{ padding: '18px 16px 4px' }}>
+            <Hr kind="dot" />
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 14, marginBottom: 10 }}>
+              <Marker>// play next · backlog pick</Marker>
+              <Btn sm onClick={shufflePick}>shuffle</Btn>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/game/${displayPick.id}`)}
+              aria-label={`Open ${displayPick.game.title}`}
+              style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', cursor: 'pointer' }}
+            >
+              <Cover w={48} h={64} src={displayPick.game.coverUrl} label={(displayPick.game.title.split(' ')[0] ?? '').toUpperCase()} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "var(--text-sm)", color: 'var(--paper)', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayPick.game.title}</div>
+                <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 3 }}>
+                  {displayPick.game.developer} · {displayPick.game.releaseYear}
+                </div>
+                {displayPick.hltb?.mainStory && (
+                  <div style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', marginTop: 3 }}>
+                    HLTB ~{Math.round(displayPick.hltb.mainStory / 60)}h
+                  </div>
+                )}
+              </div>
+              <Icon name="arrowR" size={12} style={{ color: 'var(--paper-dim)', flexShrink: 0 }} />
+            </button>
+          </div>
+        )}
 
         {/* wishlist dropping soon */}
         {wishlistCountdown.length > 0 && (

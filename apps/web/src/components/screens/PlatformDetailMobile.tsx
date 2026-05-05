@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
-import { PlatformDot, Toggle } from '../settings';
+import { PlatformDot, Toggle, Radio } from '../settings';
 import type { PlatConnectStatus } from '../settings';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
@@ -195,15 +195,40 @@ export function PlatformDetailMobile() {
             )}
             {activeTab === 'scope' && (
               <div>
-                <Marker>// scope</Marker>
-                <div className="t-mono" style={{ fontSize: "var(--text-2xs)", marginTop: 8, color: 'var(--paper-dim)' }}>
-                  library · playtime · trophies <span className="t-faint">(friends off)</span>
+                <Marker>// scope · what hoard reads</Marker>
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {([
+                    ['library',  'owned games + entitlements', true],
+                    ['playtime', 'hours per game',             true],
+                    ['trophies', 'achievement progress',       true],
+                    ['friends',  'friend list',                false],
+                  ] as [string, string, boolean][]).map(([k, d, on]) => (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: "var(--text-xs)" }}>
+                      <span style={{ width: 14, height: 14, border: '1px solid var(--rule-bright)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} aria-hidden="true">
+                        {on && <Icon name="check" size={9} style={{ color: 'var(--green)' }} />}
+                      </span>
+                      <span style={{ color: on ? 'var(--paper)' : 'var(--paper-dim)' }}>{k}</span>
+                      <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {d}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
             {activeTab === 'sync' && (
-              <div className="t-faint" style={{ fontSize: "var(--text-xs)" }}>
-                Last sync: {platform?.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}.
+              <div>
+                <Marker>// sync schedule</Marker>
+                <div style={{ marginTop: 12 }}>
+                  <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)", marginBottom: 8 }}>// frequency</div>
+                  <div role="radiogroup" aria-label="Sync frequency" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Radio name="sync-freq" on={false} label="every 5 minutes" />
+                    <Radio name="sync-freq" on={true}  label="every 15 minutes" />
+                    <Radio name="sync-freq" on={false} label="every hour" />
+                    <Radio name="sync-freq" on={false} label="manual only" sub="sync only when you tap below" />
+                  </div>
+                </div>
+                <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 14 }}>
+                  Last sync: {platform?.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}.
+                </div>
               </div>
             )}
             {activeTab === 'log' && (

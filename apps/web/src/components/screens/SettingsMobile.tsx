@@ -13,6 +13,15 @@ import { useUser } from '../../contexts/UserContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import type { PlatformDetail, PlatformCode } from '@hoard/types';
 
+const MOBILE_PLATFORM_NAMES: Record<string, string> = {
+  ST: 'Steam',
+  PS: 'PSN',
+  XB: 'Xbox',
+  GG: 'GOG',
+  NT: 'Nintendo',
+  EP: 'Epic Games',
+};
+
 const TOP_SECTIONS = [
   { key: 'account',      label: 'account',       sub: 'andrea · andrea@lx-media.at', icon: 'user'     },
   { key: 'platforms',    label: 'platforms',      sub: '4 connected',                  icon: 'link'     },
@@ -194,14 +203,24 @@ export function SettingsMobile() {
             const status: PlatConnectStatus = connected
               ? ((rawSyncStatus === 'ok' || !rawSyncStatus) ? 'connected' : rawSyncStatus as PlatConnectStatus)
               : code === 'NT' || code === 'EP' ? 'unsupported' : 'available';
+            const fullName = MOBILE_PLATFORM_NAMES[code] ?? code;
+            const gameCount = detail?.gameCount ?? null;
+            const lastSyncStr = detail?.lastSyncAt ? relativeTime(detail.lastSyncAt) : null;
+            // Compose detail line: game count + last sync, or 'not connected'
+            const detailLine = connected
+              ? [
+                  gameCount != null ? `${gameCount} games` : null,
+                  lastSyncStr ? `synced ${lastSyncStr}` : 'never synced',
+                ].filter(Boolean).join(' · ')
+              : 'not connected';
             const rowStyle = { display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--rule)', alignItems: 'center' } as const;
             const inner = (
               <>
                 <Plat code={code} lg />
-                <div>
-                  <div style={{ fontSize: "var(--text-sm)" }}>{code}</div>
-                  <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
-                    {connected ? `${detail?.who ?? ''} · sync ${detail?.lastSyncAt ? relativeTime(detail.lastSyncAt) : 'never'}` : 'not connected'}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "var(--text-sm)" }}>{fullName}</div>
+                  <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {detailLine}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>

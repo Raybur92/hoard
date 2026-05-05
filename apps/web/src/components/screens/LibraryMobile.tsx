@@ -9,9 +9,19 @@ import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
+import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours } from '../../lib/utils';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
+
+// Mobile cover dimensions per density preference.
+// `standard` matches the original 84×112; `cozy` and `dense` mirror the
+// desktop ratio scaled down for mobile width budgets.
+const COVER_DIMS: Record<string, { w: number; h: number }> = {
+  cozy:     { w: 96, h: 128 },
+  standard: { w: 84, h: 112 },
+  dense:    { w: 72, h: 96 },
+};
 
 interface GameDisplay {
   id: string;
@@ -59,11 +69,13 @@ function toGameDisplay(ug: UserGameDetail): GameDisplay {
   };
 }
 
-function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
+function MobileShelf({ idx, shelf, coverW, coverH }: { idx: number; shelf: ShelfDisplay; coverW: number; coverH: number }) {
   const navigate = useNavigate();
   const accent = shelf.tone === 'green' ? 'var(--green)' : shelf.tone === 'amber' ? 'var(--amber)' : shelf.tone === 'red' ? 'var(--red)' : 'var(--paper)';
   const isBacklog = shelf.status === 'Backlog';
-  const shown = shelf.items.slice(0, 3);
+  // Slot count adapts to density: smaller covers fit more per row.
+  const visibleSlots = coverW <= 80 ? 4 : coverW >= 96 ? 2 : 3;
+  const shown = shelf.items.slice(0, visibleSlots);
   const remaining = shelf.count - shown.length;
   return (
     <div id={`shelf-${shelf.status}`} style={{ padding: '14px 0 18px' }}>
@@ -79,10 +91,10 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
             type="button"
             aria-label={`Open ${g.title}`}
             onClick={() => navigate(`/game/${g.id}`)}
-            style={{ width: 84, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
+            style={{ width: coverW, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
           >
             <div style={{ position: 'relative' }}>
-              <Cover w={84} h={112} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
+              <Cover w={coverW} h={coverH} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
               <div style={{ position: 'absolute', top: 4, right: 4 }}><Plat code={g.platformCode} /></div>
               {g.progress > 0 && (
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: 'rgba(0,0,0,0.3)' }}>
@@ -101,7 +113,7 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
           type="button"
           aria-label={`View all ${shelf.status} games`}
           onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
-          style={{ width: 84, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: 112, color: 'var(--paper-dim)', fontSize: "var(--text-3xs)", gap: 4, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}
+          style={{ width: coverW, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: coverH, color: 'var(--paper-dim)', fontSize: "var(--text-3xs)", gap: 4, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}
         >
           {remaining > 0 && <span style={{ fontSize: "var(--text-md)" }}>+{remaining}</span>}
           <span className="t-up" style={{ fontSize: "var(--text-3xs)" }}>view all</span>
@@ -121,6 +133,8 @@ export function LibraryMobile() {
   const { status: statusParam } = useParams<{ status?: string }>();
   const isFiltered = !!statusParam;
   useDocumentTitle(statusParam ? `Library · ${statusParam}` : 'Library');
+  const { prefs } = usePreferences();
+  const { w: coverW, h: coverH } = COVER_DIMS[prefs.coverDensity] ?? COVER_DIMS['standard']!;
 
   const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
     useShelves(4, { enabled: !isFiltered });
@@ -241,6 +255,17 @@ export function LibraryMobile() {
         {showAddModal && (
           <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
         )}
+        {/* Filter strip — same chips as the unfiltered view, mirrors desktop's filter bar */}
+        <div className="thin-scroll" style={{ padding: '10px 16px 0', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
+          <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
+          <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')} ariaLabel="Filter by Steam"><Plat code="ST" /></Chip>
+          <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')} ariaLabel="Filter by PlayStation"><Plat code="PS" /></Chip>
+          <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')} ariaLabel="Filter by Xbox"><Plat code="XB" /></Chip>
+          <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')} ariaLabel="Filter by GOG"><Plat code="GG" /></Chip>
+          <Chip onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)} ariaLabel={`Sort by ${SORT_LABELS[sortBy]}, click to change`}>
+            <Icon name="arrowD" size={10} style={{ marginRight: 4 }} />{SORT_LABELS[sortBy]}
+          </Chip>
+        </div>
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 20px' }}>
           {items.length === 0 ? (
             <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>// no titles in this shelf yet</span>
@@ -252,10 +277,10 @@ export function LibraryMobile() {
                   type="button"
                   aria-label={`Open ${g.title}`}
                   onClick={() => navigate(`/game/${g.id}`)}
-                  style={{ width: 84, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
+                  style={{ width: coverW, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
                 >
                   <div style={{ position: 'relative' }}>
-                    <Cover w={84} h={112} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
+                    <Cover w={coverW} h={coverH} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
                     <div style={{ position: 'absolute', top: 4, right: 4 }}><Plat code={g.platformCode} /></div>
                     {g.progress > 0 && (
                       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: 'rgba(0,0,0,0.3)' }}>
@@ -302,7 +327,7 @@ export function LibraryMobile() {
       </div>
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', marginTop: 6 }}>
         {shelves.map((s, i) => (
-          <MobileShelf key={s.status} idx={i + 1} shelf={s} />
+          <MobileShelf key={s.status} idx={i + 1} shelf={s} coverW={coverW} coverH={coverH} />
         ))}
       </div>
     </>
