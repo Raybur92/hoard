@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
 import { Toggle, Radio, PlatformDot } from '../settings';
 import type { PlatConnectStatus } from '../settings';
@@ -24,6 +25,7 @@ const TOP_SECTIONS = [
 ] as const;
 
 export function SettingsMobile() {
+  useDocumentTitle("Settings");
   const { section } = useParams<{ section: string }>();
   const navigate = useNavigate();
   const { user, setUser, signOut } = useUser();
@@ -81,15 +83,21 @@ export function SettingsMobile() {
           </div>
           <div>
             {TOP_SECTIONS.map(({ key, label, icon }) => (
-              <div
+              <button
                 key={key}
+                type="button"
                 onClick={() => navigate(`/settings/${key}`)}
                 style={{
                   display: 'grid', gridTemplateColumns: '24px 1fr 12px', gap: 12,
                   padding: '14px 16px', alignItems: 'center',
                   borderBottom: '1px solid var(--rule)',
+                  borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                   color: key === 'danger' ? 'var(--red)' : 'var(--paper)',
                   cursor: 'pointer',
+                  background: 'transparent',
+                  width: '100%',
+                  textAlign: 'left',
+                  font: 'inherit',
                 }}
               >
                 <Icon name={icon as Parameters<typeof Icon>[0]['name']} size={14} />
@@ -97,18 +105,19 @@ export function SettingsMobile() {
                   <div style={{ fontSize: "var(--text-sm)" }}>{label}</div>
                 </div>
                 <Icon name="caret" size={11} style={{ transform: 'rotate(-90deg)' }} />
-              </div>
+              </button>
             ))}
           </div>
           <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
             <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)" }}>hoard v0.1</span>
-            <span
+            <button
+              type="button"
               className="t-mono t-faint"
-              style={{ fontSize: "var(--text-3xs)", cursor: 'pointer' }}
+              style={{ fontSize: "var(--text-3xs)", cursor: 'pointer', background: 'transparent', border: 'none', padding: 4, font: 'inherit', color: 'inherit' }}
               onClick={() => { void signOut().then(() => navigate('/login')); }}
             >
               // sign out
-            </span>
+            </button>
           </div>
         </div>
       </>
@@ -185,12 +194,9 @@ export function SettingsMobile() {
             const status: PlatConnectStatus = connected
               ? ((rawSyncStatus === 'ok' || !rawSyncStatus) ? 'connected' : rawSyncStatus as PlatConnectStatus)
               : code === 'NT' || code === 'EP' ? 'unsupported' : 'available';
-            return (
-              <div
-                key={code}
-                style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--rule)', alignItems: 'center' }}
-                onClick={connected ? () => navigate(`/settings/platforms/${code.toLowerCase()}`) : undefined}
-              >
+            const rowStyle = { display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--rule)', alignItems: 'center' } as const;
+            const inner = (
+              <>
                 <Plat code={code} lg />
                 <div>
                   <div style={{ fontSize: "var(--text-sm)" }}>{code}</div>
@@ -206,6 +212,20 @@ export function SettingsMobile() {
                     </Btn>
                   )}
                 </div>
+              </>
+            );
+            return connected ? (
+              <button
+                key={code}
+                type="button"
+                onClick={() => navigate(`/settings/platforms/${code.toLowerCase()}`)}
+                style={{ ...rowStyle, background: 'transparent', borderTop: 'none', borderLeft: 'none', borderRight: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit' }}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div key={code} style={rowStyle}>
+                {inner}
               </div>
             );
           })}

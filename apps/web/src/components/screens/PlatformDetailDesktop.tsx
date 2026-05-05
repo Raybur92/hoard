@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { SettingsNav, SettingsRow, Toggle, Radio, PlatformDot } from '../settings';
 import type { PlatConnectStatus } from '../settings';
@@ -30,6 +31,7 @@ export function PlatformDetailDesktop() {
   const { code = '' } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const info = PLATFORM_INFO[code.toLowerCase()];
+  useDocumentTitle(info ? `${info.name} · platforms` : 'Platforms');
   const [activeTab, setActiveTab] = useState<TabKey>('authentication');
   const [platform, setPlatform] = useState<PlatformDetail | null>(null);
   const [npssoInput, setNpssoInput] = useState('');
@@ -92,14 +94,16 @@ export function PlatformDetailDesktop() {
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '28px 40px 40px', maxWidth: 1080 }}>
 
             {/* back link */}
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 18, cursor: 'pointer' }}
+            <button
+              type="button"
               onClick={() => navigate('/settings/platforms')}
+              aria-label="Back to all platforms"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 18, cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, fontFamily: 'inherit', color: 'inherit' }}
             >
               <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="back" size={11} /> all platforms
               </span>
-            </div>
+            </button>
 
             {/* hero header */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, paddingBottom: 22, borderBottom: '1px solid var(--rule)' }}>
@@ -158,23 +162,28 @@ export function PlatformDetailDesktop() {
             {isConnected && (
               <>
                 {/* tab strip */}
-                <div style={{ marginTop: 22, display: 'flex', gap: 24, borderBottom: '1px solid var(--rule)' }}>
+                <div role="tablist" aria-label="Platform sections" style={{ marginTop: 22, display: 'flex', gap: 24, borderBottom: '1px solid var(--rule)' }}>
                   {TABS.map(([key, label]) => (
-                    <div
+                    <button
                       key={key}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === key}
                       onClick={() => setActiveTab(key)}
                       style={{
                         padding: '10px 0',
                         fontSize: "var(--text-2xs)", fontFamily: 'var(--mono)',
                         textTransform: 'uppercase', letterSpacing: '0.12em',
-                        color: activeTab === key ? 'var(--paper)' : 'var(--paper-faint)',
+                        color: activeTab === key ? 'var(--paper)' : 'var(--paper-dim)',
+                        background: 'transparent',
+                        border: 'none',
                         borderBottom: `2px solid ${activeTab === key ? 'var(--green)' : 'transparent'}`,
                         marginBottom: -1,
                         cursor: 'pointer',
                       }}
                     >
                       {label}
-                    </div>
+                    </button>
                   ))}
                 </div>
 
@@ -259,10 +268,11 @@ function PsnConnectPanel({ npssoInput, setNpssoInput }: { npssoInput: string; se
         <Marker>// connect psn via npsso token</Marker>
         <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 8, lineHeight: 1.55, maxWidth: 600 }}>
           PSN has no public API. Hoard uses the same session token your browser uses. Your password is never seen by Hoard.
-          Follow the <span
-            style={{ color: 'var(--paper)', cursor: 'pointer' }}
+          Follow the <button
+            type="button"
             onClick={() => navigate('/settings/platforms/ps/connect')}
-          >guided flow →</span> for step-by-step instructions.
+            style={{ color: 'var(--paper)', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', textDecoration: 'underline' }}
+          >guided flow →</button> for step-by-step instructions.
         </div>
         <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center' }}>
           <input

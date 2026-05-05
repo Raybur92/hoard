@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileFrame } from '../layout/MobileFrame';
 import { MobileHeader } from '../layout/MobileHeader';
 import { Icon } from '../primitives/Icon';
@@ -19,6 +20,7 @@ const SONY_AUTH_URL = 'https://ca.account.sony.com/api/v1/ssocookie';
 const SONY_LOGIN_URL = 'https://my.account.sony.com/central/signin';
 
 export function PsnGuidedFlowMobile() {
+  useDocumentTitle("Connect PSN");
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [npsso, setNpsso] = useState('');
@@ -65,9 +67,14 @@ export function PsnGuidedFlowMobile() {
         sub={`// step ${step} of ${PSN_STEPS.length}`}
         back
         right={
-          <span onClick={() => navigate('/settings/platforms/ps')}>
+          <button
+            type="button"
+            aria-label="Cancel guided flow"
+            onClick={() => navigate('/settings/platforms/ps')}
+            style={{ background: 'transparent', border: 'none', padding: 8, margin: -8, color: 'inherit', cursor: 'pointer' }}
+          >
             <Icon name="x" size={14} />
-          </span>
+          </button>
         }
       />
 
@@ -138,9 +145,11 @@ export function PsnGuidedFlowMobile() {
 
         {step === 4 && (
           <div style={{ marginTop: 18 }}>
-            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// paste here</div>
+            <label htmlFor="psn-npsso-input-mobile" className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// paste here</label>
             <input
+              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
+              id="psn-npsso-input-mobile"
               className="field"
               value={npsso}
               onChange={(e) => setNpsso(e.target.value.trim())}

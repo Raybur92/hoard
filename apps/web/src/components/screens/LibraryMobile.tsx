@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
 import { Cover } from '../primitives/Cover';
 import { Plat } from '../primitives/Plat';
@@ -73,7 +74,13 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
       </div>
       <div style={{ display: 'flex', gap: 10, overflow: 'hidden', padding: '12px 16px 0' }}>
         {shown.map(g => (
-          <div key={g.id} style={{ width: 84, flex: '0 0 auto', cursor: 'pointer' }} onClick={() => navigate(`/game/${g.id}`)}>
+          <button
+            key={g.id}
+            type="button"
+            aria-label={`Open ${g.title}`}
+            onClick={() => navigate(`/game/${g.id}`)}
+            style={{ width: 84, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
+          >
             <div style={{ position: 'relative' }}>
               <Cover w={84} h={112} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
               <div style={{ position: 'absolute', top: 4, right: 4 }}><Plat code={g.platformCode} /></div>
@@ -84,19 +91,21 @@ function MobileShelf({ idx, shelf }: { idx: number; shelf: ShelfDisplay }) {
               )}
             </div>
             <div style={{ fontSize: "var(--text-3xs)", marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
-            <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+            <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
               <span>{g.playtime}</span>
               {isBacklog && g.hltbHours != null && <span style={{ color: 'var(--paper-dim)' }}>~{g.hltbHours}h</span>}
             </div>
-          </div>
+          </button>
         ))}
-        <div
-          style={{ width: 84, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: 112, color: 'var(--paper-faint)', fontSize: "var(--text-3xs)", gap: 4, cursor: 'pointer' }}
+        <button
+          type="button"
+          aria-label={`View all ${shelf.status} games`}
           onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
+          style={{ width: 84, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: 112, color: 'var(--paper-dim)', fontSize: "var(--text-3xs)", gap: 4, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}
         >
           {remaining > 0 && <span style={{ fontSize: "var(--text-md)" }}>+{remaining}</span>}
           <span className="t-up" style={{ fontSize: "var(--text-3xs)" }}>view all</span>
-        </div>
+        </button>
       </div>
       <div style={{ height: 3, background: 'var(--rule-bright)', margin: '10px 16px 0' }} />
     </div>
@@ -111,6 +120,7 @@ export function LibraryMobile() {
   const navigate = useNavigate();
   const { status: statusParam } = useParams<{ status?: string }>();
   const isFiltered = !!statusParam;
+  useDocumentTitle(statusParam ? `Library · ${statusParam}` : 'Library');
 
   const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
     useShelves(4, { enabled: !isFiltered });
@@ -237,7 +247,13 @@ export function LibraryMobile() {
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {items.map(g => (
-                <div key={g.id} style={{ width: 84, flex: '0 0 auto', cursor: 'pointer' }} onClick={() => navigate(`/game/${g.id}`)}>
+                <button
+                  key={g.id}
+                  type="button"
+                  aria-label={`Open ${g.title}`}
+                  onClick={() => navigate(`/game/${g.id}`)}
+                  style={{ width: 84, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
+                >
                   <div style={{ position: 'relative' }}>
                     <Cover w={84} h={112} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
                     <div style={{ position: 'absolute', top: 4, right: 4 }}><Plat code={g.platformCode} /></div>
@@ -248,11 +264,11 @@ export function LibraryMobile() {
                     )}
                   </div>
                   <div style={{ fontSize: "var(--text-3xs)", marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
-                  <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                  <div style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', marginTop: 1, display: 'flex', justifyContent: 'space-between', gap: 4 }}>
                     <span>{g.playtime}</span>
                     {isBacklog && g.hltbHours != null && <span style={{ color: 'var(--paper-dim)' }}>~{g.hltbHours}h</span>}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

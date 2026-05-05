@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
@@ -17,6 +18,7 @@ const SONY_AUTH_URL = 'https://ca.account.sony.com/api/v1/ssocookie';
 const SONY_LOGIN_URL = 'https://my.account.sony.com/central/signin';
 
 export function PsnGuidedFlowDesktop() {
+  useDocumentTitle("Connect PSN");
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [npsso, setNpsso] = useState('');
@@ -71,13 +73,15 @@ export function PsnGuidedFlowDesktop() {
               psn has no public api. we pass-through the same cookie your browser uses. hoard never sees your password.
             </div>
           </div>
-          <span
+          <button
+            type="button"
             className="t-faint"
-            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
+            aria-label="Cancel guided flow"
             onClick={() => navigate('/settings/platforms/ps')}
+            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit', color: 'inherit' }}
           >
             <Icon name="x" size={11} /> cancel
-          </span>
+          </button>
         </div>
 
         {/* step tracker */}
@@ -141,9 +145,11 @@ export function PsnGuidedFlowDesktop() {
 
             {step === 4 && (
               <div style={{ marginTop: 18 }}>
-                <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// paste token here</div>
+                <label htmlFor="psn-npsso-input-desktop" className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// paste token here</label>
                 <input
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
                   autoFocus
+                  id="psn-npsso-input-desktop"
                   className="field"
                   value={npsso}
                   onChange={(e) => setNpsso(e.target.value.trim())}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Hr } from '../primitives/Hr';
@@ -10,6 +11,7 @@ type Mode = 'login' | 'register';
 const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
 
 export function LoginScreen() {
+  useDocumentTitle("Sign in");
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [mode, setMode] = useState<Mode>('login');
@@ -62,23 +64,28 @@ export function LoginScreen() {
         </div>
 
         {/* tab switcher */}
-        <div style={{ display: 'flex', marginBottom: 20, borderBottom: '1px solid var(--rule)' }}>
+        <div role="tablist" aria-label="Authentication mode" style={{ display: 'flex', marginBottom: 20, borderBottom: '1px solid var(--rule)' }}>
           {(['login', 'register'] as Mode[]).map((m) => (
-            <div
+            <button
               key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
               onClick={() => { setMode(m); setError(''); }}
               style={{
                 padding: '8px 0', marginRight: 20,
                 fontSize: "var(--text-2xs)", fontFamily: 'var(--mono)',
                 textTransform: 'uppercase', letterSpacing: '0.12em',
-                color: mode === m ? 'var(--paper)' : 'var(--paper-faint)',
+                color: mode === m ? 'var(--paper)' : 'var(--paper-dim)',
+                background: 'transparent',
+                border: 'none',
                 borderBottom: `2px solid ${mode === m ? 'var(--green)' : 'transparent'}`,
                 marginBottom: -1,
                 cursor: 'pointer',
               }}
             >
               {m === 'login' ? 'sign in' : 'register'}
-            </div>
+            </button>
           ))}
         </div>
 
@@ -86,10 +93,11 @@ export function LoginScreen() {
         <form onSubmit={(e) => void handleSubmit(e)}>
           {mode === 'register' && (
             <div style={{ marginBottom: 12 }}>
-              <label className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+              <label htmlFor="login-name" className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
                 // display name (optional)
               </label>
               <input
+                id="login-name"
                 className="field"
                 type="text"
                 value={name}
@@ -102,10 +110,11 @@ export function LoginScreen() {
           )}
 
           <div style={{ marginBottom: 12 }}>
-            <label className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+            <label htmlFor="login-email" className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
               // email
             </label>
             <input
+              id="login-email"
               className="field"
               type="email"
               value={email}
@@ -118,10 +127,11 @@ export function LoginScreen() {
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <label className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+            <label htmlFor="login-password" className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", textTransform: 'uppercase', letterSpacing: '0.12em' }}>
               // password {mode === 'register' && <span className="t-ghost">(min 8 chars)</span>}
             </label>
             <input
+              id="login-password"
               className="field"
               type="password"
               value={password}

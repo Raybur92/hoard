@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
@@ -27,6 +28,7 @@ const ALL_STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold'
 export function GameDetailDesktop() {
   const { id } = useParams<{ id: string }>();
   const { data: ug, loading, error, update } = useGame(id);
+  useDocumentTitle(ug?.game.title ?? 'Game');
   const [statusOpen, setStatusOpen] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
@@ -130,28 +132,35 @@ export function GameDetailDesktop() {
                       <Icon name="caret" size={9} style={{ marginLeft: 4 }} />
                     </Chip>
                     {statusOpen && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', zIndex: 100, minWidth: 140, padding: '4px 0' }}>
+                      <ul role="menu" aria-label="Change status" style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', zIndex: 100, minWidth: 140, padding: '4px 0', listStyle: 'none' }}>
                         {ALL_STATUSES.map(s => (
-                          <div
-                            key={s}
-                            onClick={() => void changeStatus(s)}
-                            style={{
-                              padding: '6px 14px',
-                              fontSize: "var(--text-2xs)",
-                              fontFamily: 'var(--mono)',
-                              color: s === g.status ? 'var(--paper)' : 'var(--paper-dim)',
-                              background: s === g.status ? 'var(--ink-3)' : 'transparent',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 8,
-                            }}
-                          >
-                            <span style={{ display: 'inline-block', width: 7, height: 7, background: STATUS_COLOR[s] ?? 'var(--paper-faint)', flexShrink: 0 }} />
-                            {s}
-                          </div>
+                          <li key={s} role="presentation">
+                            <button
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={s === g.status}
+                              onClick={() => void changeStatus(s)}
+                              style={{
+                                padding: '6px 14px',
+                                fontSize: "var(--text-2xs)",
+                                fontFamily: 'var(--mono)',
+                                color: s === g.status ? 'var(--paper)' : 'var(--paper-dim)',
+                                background: s === g.status ? 'var(--ink-3)' : 'transparent',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                border: 'none',
+                                width: '100%',
+                                textAlign: 'left',
+                              }}
+                            >
+                              <span style={{ display: 'inline-block', width: 7, height: 7, background: STATUS_COLOR[s] ?? 'var(--paper-dim)', flexShrink: 0 }} aria-hidden="true" />
+                              {s}
+                            </button>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
                   </div>
                   <span style={{ flex: 1 }} />
@@ -254,8 +263,11 @@ export function GameDetailDesktop() {
                   <Marker>// notes · private</Marker>
                   {editingNotes ? (
                     <div style={{ marginTop: 10 }}>
+                      <label htmlFor="game-notes" className="sr-only">Game notes</label>
                       <textarea
+                        // eslint-disable-next-line jsx-a11y/no-autofocus
                         autoFocus
+                        id="game-notes"
                         value={noteDraft}
                         onChange={e => setNoteDraft(e.target.value)}
                         style={{ width: '100%', minHeight: 100, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", lineHeight: 1.6, padding: '10px 14px', resize: 'vertical', boxSizing: 'border-box' }}
@@ -267,16 +279,17 @@ export function GameDetailDesktop() {
                       </div>
                     </div>
                   ) : (
-                    <div
-                      style={{ marginTop: 10, padding: 16, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", lineHeight: 1.6, color: 'var(--paper)', cursor: 'pointer' }}
+                    <button
+                      type="button"
                       onClick={() => { setNoteDraft(g.notes ?? ''); setEditingNotes(true); }}
+                      style={{ marginTop: 10, padding: 16, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", lineHeight: 1.6, color: 'var(--paper)', cursor: 'pointer', textAlign: 'left', width: '100%' }}
                     >
                       <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginBottom: 6 }}>{g.updatedAt.slice(0, 10)}</div>
                       {noteLines.length > 0
                         ? noteLines.map((note, i) => <div key={i}><span className="t-green">&gt;</span> {note}</div>)
                         : <div className="t-faint">no notes yet · click to add</div>
                       }
-                    </div>
+                    </button>
                   )}
                 </div>
               </div>

@@ -43,7 +43,7 @@ export function SettingsNav({ active }: SettingsNavProps) {
   const navigate = useNavigate();
 
   return (
-    <div style={{ width: 220, borderRight: '1px solid var(--rule)', padding: '24px 0', background: 'var(--ink)', flexShrink: 0 }}>
+    <nav aria-label="Settings sections" style={{ width: 220, borderRight: '1px solid var(--rule)', padding: '24px 0', background: 'var(--ink)', flexShrink: 0 }}>
       <div style={{ padding: '0 22px 14px' }}>
         <Marker>// settings</Marker>
       </div>
@@ -51,29 +51,36 @@ export function SettingsNav({ active }: SettingsNavProps) {
         const isActive = active === label;
         const isDanger = label === 'Danger zone';
         return (
-          <div
+          <button
             key={label}
+            type="button"
             onClick={() => navigate(SECTION_PATHS[label])}
+            aria-current={isActive ? 'page' : undefined}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               padding: '8px 22px',
-              fontSize: 12,
+              fontSize: 'var(--text-xs)',
               fontFamily: 'var(--mono)',
               color: isDanger
-                ? isActive ? 'var(--red)' : 'var(--paper-faint)'
+                ? isActive ? 'var(--red)' : 'var(--paper-dim)'
                 : isActive ? 'var(--paper)' : 'var(--paper-dim)',
               background: isActive ? 'var(--ink-2)' : 'transparent',
               borderLeft: `2px solid ${isActive ? (isDanger ? 'var(--red)' : 'var(--green)') : 'transparent'}`,
+              borderTop: 'none',
+              borderRight: 'none',
+              borderBottom: 'none',
               cursor: 'pointer',
+              width: '100%',
+              textAlign: 'left',
             }}
           >
             <Icon name={icon} size={11} />
             <span>{label}</span>
-          </div>
+          </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

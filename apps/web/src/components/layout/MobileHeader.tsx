@@ -24,12 +24,24 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
     }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         {back && (
-          <span
-            style={{ fontSize: "var(--text-md)", color: 'var(--paper-dim)', cursor: 'pointer' }}
+          <button
+            type="button"
+            aria-label="Back"
             onClick={onBack}
+            style={{
+              fontSize: 'var(--text-md)',
+              color: 'var(--paper-dim)',
+              background: 'transparent',
+              border: 'none',
+              padding: 8,
+              margin: -8,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              lineHeight: 1,
+            }}
           >
             ‹
-          </span>
+          </button>
         )}
         <div>
           <div className="t-display" style={{ fontSize: "var(--text-md)", lineHeight: 1, letterSpacing: '0.04em' }}>

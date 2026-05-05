@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
 import { PlatformDot, Toggle } from '../settings';
 import type { PlatConnectStatus } from '../settings';
@@ -19,6 +20,7 @@ export function PlatformDetailMobile() {
   const { code = '' } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const name = PLATFORM_NAMES[code.toLowerCase()] ?? code.toUpperCase();
+  useDocumentTitle(`${name} · platforms`);
   const [activeTab, setActiveTab] = useState<MobileTab>('auth');
   const [platform, setPlatform] = useState<PlatformDetail | null>(null);
   const [npssoInput, setNpssoInput] = useState('');
@@ -132,23 +134,28 @@ export function PlatformDetailMobile() {
       {/* connected: tab strip + content */}
       {isConnected && (
         <>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--rule)', padding: '0 16px' }}>
+          <div role="tablist" aria-label="Platform sections" style={{ display: 'flex', borderBottom: '1px solid var(--rule)', padding: '0 16px' }}>
             {(['auth', 'scope', 'sync', 'log'] as MobileTab[]).map((t) => (
-              <div
+              <button
                 key={t}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === t}
                 onClick={() => setActiveTab(t)}
                 style={{
                   padding: '10px 0', marginRight: 18,
                   fontSize: "var(--text-2xs)", fontFamily: 'var(--mono)',
                   textTransform: 'uppercase', letterSpacing: '0.1em',
-                  color: activeTab === t ? 'var(--paper)' : 'var(--paper-faint)',
+                  color: activeTab === t ? 'var(--paper)' : 'var(--paper-dim)',
+                  background: 'transparent',
+                  border: 'none',
                   borderBottom: `2px solid ${activeTab === t ? 'var(--green)' : 'transparent'}`,
                   marginBottom: -1,
                   cursor: 'pointer',
                 }}
               >
                 {t}
-              </div>
+              </button>
             ))}
           </div>
 

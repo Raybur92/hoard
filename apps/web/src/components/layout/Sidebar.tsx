@@ -63,20 +63,23 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
 
       <div className="group">// command</div>
       {NAV_ITEMS.map(({ label, icon, path }) => (
-        <div
+        <button
           key={label}
+          type="button"
           className={`item${isActive(path) ? ' active' : ''}`}
           onClick={() => navigate(path)}
+          aria-current={isActive(path) ? 'page' : undefined}
         >
           <span className="glyph"><Icon name={icon} size={12} /></span>
           <span>{label}</span>
-        </div>
+        </button>
       ))}
 
       <div className="group">// shelves</div>
       {DEFAULT_SHELVES.map(({ label, color }) => (
-        <div
+        <button
           key={label}
+          type="button"
           className="item"
           onClick={() => navigate(`/library/${encodeURIComponent(label)}`)}
         >
@@ -85,7 +88,7 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
           </span>
           <span>{label}</span>
           <span className="count">{shelfCounts?.[label] ?? ''}</span>
-        </div>
+        </button>
       ))}
 
       <div className="group">// platforms</div>
@@ -98,7 +101,7 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
           : p.syncStatus === 'syncing' ? 'var(--green)'
           : undefined;
         return (
-          <div key={code} className="item" onClick={() => navigate(`/settings/platforms/${code.toLowerCase()}`)}>
+          <button key={code} type="button" className="item" onClick={() => navigate(`/settings/platforms/${code.toLowerCase()}`)}>
             <span className="glyph"><Plat code={code} /></span>
             <span>{label}</span>
             {dotColor && (
@@ -106,24 +109,26 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
                 <Icon name="dotO" size={8} fill={true} />
               </span>
             )}
-          </div>
+          </button>
         );
       })}
 
       <div style={{ flex: 1 }} />
-      <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ width: 22, height: 22, background: 'var(--ink-3)', border: '1px solid var(--rule-bright)', flexShrink: 0 }} />
+      <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 22, height: 22, background: 'var(--ink-3)', border: '1px solid var(--rule-bright)', flexShrink: 0 }} aria-hidden="true" />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
           <span data-testid="sidebar-username" style={{ color: 'var(--paper)', fontSize: "var(--text-2xs)" }}>{user?.name ?? '…'}</span>
           <span style={{ fontSize: "var(--text-2xs)" }}>since {user ? new Date(user.createdAt).getFullYear() : '…'}</span>
         </div>
-        <span
+        <button
+          type="button"
+          aria-label="Sign out"
           title="sign out"
-          style={{ cursor: 'pointer', color: 'var(--paper-faint)', flexShrink: 0, lineHeight: 1 }}
+          style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--paper-dim)', flexShrink: 0, lineHeight: 1 }}
           onClick={() => { void signOut().then(() => navigate('/login')); }}
         >
           <Icon name="x" size={11} />
-        </span>
+        </button>
       </div>
     </aside>
   );

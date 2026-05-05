@@ -69,28 +69,40 @@ export function SearchOverlay({ onClose }: Props) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Search games"
       style={{ position: 'fixed', inset: 0, background: 'rgba(7,9,10,0.88)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 100 }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
+      {/* keyboard-accessible backdrop close */}
+      <button
+        type="button"
+        aria-label="Close search"
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'transparent', border: 'none', cursor: 'default' }}
+      />
       <div
         className="panel"
-        style={{ width: 560, maxHeight: '64vh', display: 'flex', flexDirection: 'column', padding: 0, border: '1px solid var(--rule-bright)', boxShadow: '0 32px 80px rgba(0,0,0,0.7)' }}
-        onClick={(e) => e.stopPropagation()}
+        style={{ position: 'relative', width: 560, maxHeight: '64vh', display: 'flex', flexDirection: 'column', padding: 0, border: '1px solid var(--rule-bright)', boxShadow: '0 32px 80px rgba(0,0,0,0.7)' }}
       >
         {/* input row */}
         <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Icon name="search" size={13} style={{ color: 'var(--paper-faint)', flexShrink: 0 }} />
+          <label htmlFor="search-overlay-input" className="sr-only">Search your library</label>
+          <Icon name="search" size={13} style={{ color: 'var(--paper-dim)', flexShrink: 0 }} />
           <input
+            id="search-overlay-input"
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKey}
             placeholder="search your library…"
+            aria-controls="search-overlay-results"
+            aria-activedescendant={hasResults ? `search-result-${active}` : undefined}
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", color: 'var(--paper)', caretColor: 'var(--green)' }}
           />
           {searching
-            ? <span className="t-faint" style={{ fontSize: "var(--text-3xs)", flexShrink: 0 }}>…</span>
-            : <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", flexShrink: 0, letterSpacing: '0.08em' }}>ESC</span>
+            ? <span className="t-faint" style={{ fontSize: "var(--text-3xs)", flexShrink: 0 }} aria-live="polite">…</span>
+            : <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", flexShrink: 0, letterSpacing: '0.08em' }} aria-hidden="true">ESC</span>
           }
         </div>
 
@@ -98,40 +110,52 @@ export function SearchOverlay({ onClose }: Props) {
         {(hasResults || noResults) && <div style={{ height: 1, background: 'var(--rule)' }} />}
 
         {hasResults && (
-          <div className="thin-scroll" style={{ overflowY: 'auto' }}>
+          <ul
+            id="search-overlay-results"
+            role="listbox"
+            className="thin-scroll"
+            style={{ overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 }}
+          >
             {results.map((g, i) => (
-              <div
-                key={g.id}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => go(g.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '9px 18px',
-                  cursor: 'pointer',
-                  background: i === active ? 'var(--ink-2)' : 'transparent',
-                  borderBottom: i < results.length - 1 ? '1px solid var(--rule)' : 'none',
-                }}
-              >
-                <Cover w={28} h={38} label="" src={g.game.coverUrl} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {g.game.title}
+              <li key={g.id} role="presentation">
+                <button
+                  type="button"
+                  id={`search-result-${i}`}
+                  role="option"
+                  aria-selected={i === active}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => go(g.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '9px 18px',
+                    cursor: 'pointer',
+                    background: i === active ? 'var(--ink-2)' : 'transparent',
+                    borderBottom: i < results.length - 1 ? '1px solid var(--rule)' : 'none',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                    width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit',
+                  }}
+                >
+                  <Cover w={28} h={38} label="" src={g.game.coverUrl} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--text-xs)", color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {g.game.title}
+                    </div>
+                    {g.game.developer && (
+                      <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 1 }}>{g.game.developer}</div>
+                    )}
                   </div>
-                  {g.game.developer && (
-                    <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 1 }}>{g.game.developer}</div>
-                  )}
-                </div>
-                <span style={{ fontSize: "var(--text-2xs)", color: STATUS_COLORS[g.status] ?? 'var(--paper-faint)', textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
-                  {g.status}
-                </span>
-                <Icon name="caret" size={9} style={{ color: 'var(--paper-faint)', transform: 'rotate(-90deg)', flexShrink: 0 }} />
-              </div>
+                  <span style={{ fontSize: "var(--text-2xs)", color: STATUS_COLORS[g.status] ?? 'var(--paper-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
+                    {g.status}
+                  </span>
+                  <Icon name="caret" size={9} style={{ color: 'var(--paper-dim)', transform: 'rotate(-90deg)', flexShrink: 0 }} />
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
 
         {noResults && (
-          <div style={{ padding: '16px 18px', color: 'var(--paper-faint)', fontSize: "var(--text-2xs)" }}>
-            // no results for "{query}"
+          <div style={{ padding: '16px 18px', color: 'var(--paper-dim)', fontSize: "var(--text-2xs)" }} aria-live="polite">
+            // no results for &quot;{query}&quot;
           </div>
         )}
 

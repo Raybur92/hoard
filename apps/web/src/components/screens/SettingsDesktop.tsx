@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { SettingsNav, SettingsRow, Toggle, Radio, PlatformDot } from '../settings';
 import type { SettingsSection, PlatConnectStatus } from '../settings';
@@ -40,6 +41,7 @@ function resolveSection(raw: string | undefined): string {
 }
 
 export function SettingsDesktop() {
+  useDocumentTitle("Settings");
   const { section: rawSection } = useParams<{ section: string }>();
   const section = resolveSection(rawSection);
   const navSection = SECTION_TO_NAV[section] ?? 'Account';
@@ -484,9 +486,14 @@ interface DeleteModalProps {
 }
 
 function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange, onConfirm, onCancel }: DeleteModalProps) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,9,10,0.72)' }} onClick={onCancel} />
+    <div role="dialog" aria-modal="true" aria-labelledby="delete-account-title" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <button type="button" aria-label="Close" onClick={onCancel} style={{ position: 'absolute', inset: 0, background: 'rgba(8,9,10,0.72)', border: 'none', cursor: 'default' }} />
       <div className="panel" style={{
         position: 'relative',
         width: 560,

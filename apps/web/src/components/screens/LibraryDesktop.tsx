@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { Cover } from '../primitives/Cover';
 import { Plat } from '../primitives/Plat';
@@ -83,7 +84,12 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps)
   const navigate = useNavigate();
   const tone = g.progress === 100 ? 'var(--paper)' : g.progress > 0 ? 'var(--green)' : 'var(--paper-faint)';
   return (
-    <div style={{ width: w, flex: '0 0 auto', cursor: 'pointer' }} onClick={() => navigate(`/game/${g.id}`)}>
+    <button
+      type="button"
+      onClick={() => navigate(`/game/${g.id}`)}
+      aria-label={`Open ${g.title}`}
+      style={{ width: w, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
+    >
       <div style={{ position: 'relative' }}>
         <Cover w={w} h={h} src={g.coverUrl} label={g.title.toUpperCase()} dev={g.developer} year={shortYear(g.year)} bright={g.progress > 0} />
         <div style={{ position: 'absolute', top: 6, right: 6 }}>
@@ -91,7 +97,7 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps)
         </div>
         {isBacklog && showHltb && g.hltbHours != null && (
           <div style={{ position: 'absolute', bottom: 4, left: 4, padding: '2px 5px', background: 'rgba(0,0,0,0.78)', border: '1px solid var(--rule-bright)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", letterSpacing: '0.04em', color: 'var(--paper-dim)' }}>
-            <span style={{ color: 'var(--paper-faint)', fontSize: "var(--text-3xs)" }}>HLTB </span>~{g.hltbHours}h
+            <span style={{ color: 'var(--paper-dim)', fontSize: "var(--text-3xs)" }}>HLTB </span>~{g.hltbHours}h
           </div>
         )}
         {g.progress > 0 && (
@@ -101,11 +107,11 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps)
         )}
       </div>
       <div style={{ marginTop: 8, fontSize: "var(--text-2xs)", color: 'var(--paper)', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: "var(--text-2xs)", color: 'var(--paper-faint)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: "var(--text-2xs)", color: 'var(--paper-dim)' }}>
         <span className="t-tnum">{g.playtime}</span>
         <span className="t-tnum">{g.lastPlayed}</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -151,13 +157,15 @@ function Shelf({ idx, shelf, coverW, coverH, showHltb }: ShelfProps) {
       </div>
       <div ref={rowRef} style={{ display: 'flex', gap: SHELF_GAP, overflow: 'hidden' }}>
         {shown.map(g => <ShelfItem key={g.id} g={g} w={coverW} h={coverH} isBacklog={isBacklog} showHltb={showHltb} />)}
-        <div
-          style={{ width: coverW, flex: `0 0 ${coverW}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: coverH, color: 'var(--paper-faint)', fontSize: "var(--text-2xs)", gap: 6, cursor: 'pointer' }}
+        <button
+          type="button"
           onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
+          aria-label={`View all ${shelf.status} games`}
+          style={{ width: coverW, flex: `0 0 ${coverW}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: coverH, color: 'var(--paper-dim)', fontSize: "var(--text-2xs)", gap: 6, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}
         >
           {remaining > 0 && <span style={{ fontSize: "var(--text-lg)" }}>+{remaining}</span>}
           <span className="t-up" style={{ fontSize: "var(--text-2xs)" }}>view all</span>
-        </div>
+        </button>
       </div>
       <div style={{ height: 4, background: 'var(--rule-bright)', marginTop: 10, position: 'relative' }}>
         <div style={{ position: 'absolute', left: 0, right: 0, top: 4, height: 1, background: 'var(--rule)' }} />
@@ -175,6 +183,7 @@ export function LibraryDesktop() {
   const navigate = useNavigate();
   const { status: statusParam } = useParams<{ status?: string }>();
   const isFiltered = !!statusParam;
+  useDocumentTitle(statusParam ? `Library · ${statusParam}` : 'Library');
 
   // Shelves view: top N per status + counts in one round trip.
   const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
@@ -366,13 +375,15 @@ export function LibraryDesktop() {
           <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')}><Plat code="XB" /></Chip>
           <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')}><Plat code="GG" /></Chip>
           <span style={{ flex: 1 }} />
-          <span
+          <button
+            type="button"
             className="t-mono t-faint"
-            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+            aria-label={`Sort by ${SORT_LABELS[sortBy]}, click to change`}
+            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit', color: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}
             onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}
           >
             sort: {SORT_LABELS[sortBy]} <Icon name="arrowD" size={10} />
-          </span>
+          </button>
           <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
             <Icon name="plus" size={10} /> add game
           </Btn>

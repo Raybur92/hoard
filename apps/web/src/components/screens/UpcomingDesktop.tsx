@@ -6,6 +6,7 @@ import { Chip } from '../primitives/Chip';
 import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { useState } from 'react';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useUpcoming } from '../../hooks/useUpcoming';
 import { daysUntil, upcomingDateParts, countdownParts } from '../../lib/utils';
 import { api } from '../../lib/api';
@@ -38,6 +39,7 @@ function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
 }
 
 export function UpcomingDesktop() {
+  useDocumentTitle("Upcoming");
   const [scope, setScope] = useState<'my-platforms' | 'all'>('my-platforms');
   const { data, loading, refetch } = useUpcoming(scope);
 
@@ -236,13 +238,16 @@ export function UpcomingDesktop() {
                         {g.platforms.slice(0, 3).map(p => <Plat key={p} code={toPlatCode(p)} />)}
                       </div>
                       <div style={{ marginTop: 8 }}>
-                        <span
+                        <button
+                          type="button"
                           onClick={() => void handleToggleWishlist(g.igdbId)}
-                          style={{ fontSize: "var(--text-2xs)", cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                          aria-pressed={g.wishlisted}
+                          aria-label={g.wishlisted ? `Stop tracking ${g.title}` : `Add ${g.title} to wishlist`}
+                          style={{ fontSize: "var(--text-2xs)", cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: g.wishlisted ? 'var(--amber)' : 'var(--paper-dim)', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit' }}
                         >
                           <Icon name="star" size={10} fill={g.wishlisted} />
                           {g.wishlisted ? 'tracking' : '+ wishlist'}
-                        </span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -284,12 +289,15 @@ export function UpcomingDesktop() {
                   <div className="t-tnum" style={{ fontSize: "var(--text-sm)", color: 'var(--amber)' }}>
                     {g.releaseDate ? `T-${g.days}d` : 'TBA'}
                   </div>
-                  <div
-                    style={{ marginTop: 2, cursor: 'pointer', color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                  <button
+                    type="button"
                     onClick={() => void handleToggleWishlist(g.igdbId)}
+                    aria-pressed={g.wishlisted}
+                    aria-label={g.wishlisted ? `Stop tracking ${g.title}` : `Add ${g.title} to wishlist`}
+                    style={{ marginTop: 2, cursor: 'pointer', color: g.wishlisted ? 'var(--amber)' : 'var(--paper-dim)', background: 'transparent', border: 'none', padding: 4, margin: -4 }}
                   >
                     <Icon name="star" size={10} fill={g.wishlisted} />
-                  </div>
+                  </button>
                 </div>
               </div>
             ))}

@@ -1,3 +1,4 @@
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { MobileHeader } from '../layout/MobileHeader';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
@@ -34,6 +35,7 @@ function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
 }
 
 export function UpcomingMobile() {
+  useDocumentTitle("Upcoming");
   const { data, loading, refetch } = useUpcoming();
 
   async function handleToggleWishlist(igdbId: number) {
@@ -97,13 +99,16 @@ export function UpcomingMobile() {
             <div className="panel" style={{ padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <Marker>// next drop</Marker>
-                <span
-                  style={{ fontSize: "var(--text-2xs)", cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: featured.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                <button
+                  type="button"
                   onClick={() => void handleToggleWishlist(featured.igdbId)}
+                  aria-pressed={featured.wishlisted}
+                  aria-label={featured.wishlisted ? `Stop tracking ${featured.title}` : `Add ${featured.title} to wishlist`}
+                  style={{ fontSize: "var(--text-2xs)", cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, color: featured.wishlisted ? 'var(--amber)' : 'var(--paper-dim)', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit' }}
                 >
                   <Icon name="star" size={10} fill={featured.wishlisted} />
                   {featured.wishlisted ? 'tracking' : '+ wishlist'}
-                </span>
+                </button>
               </div>
               <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                 <Cover w={64} h={86} src={featured.coverUrl} label={featured.title.toUpperCase()} dev={featured.developer ?? ''} bright />
@@ -160,12 +165,15 @@ export function UpcomingMobile() {
                 <div className="t-tnum" style={{ fontSize: "var(--text-xs)", color: 'var(--amber)' }}>
                   {g.releaseDate ? `T-${g.days}d` : 'TBA'}
                 </div>
-                <div
-                  style={{ cursor: 'pointer', color: g.wishlisted ? 'var(--amber)' : 'var(--paper-faint)' }}
+                <button
+                  type="button"
                   onClick={() => void handleToggleWishlist(g.igdbId)}
+                  aria-pressed={g.wishlisted}
+                  aria-label={g.wishlisted ? `Stop tracking ${g.title}` : `Add ${g.title} to wishlist`}
+                  style={{ cursor: 'pointer', color: g.wishlisted ? 'var(--amber)' : 'var(--paper-dim)', background: 'transparent', border: 'none', padding: 4, margin: -4 }}
                 >
                   <Icon name="star" size={10} fill={g.wishlisted} />
-                </div>
+                </button>
               </div>
             </div>
           ))}

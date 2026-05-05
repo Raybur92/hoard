@@ -11,20 +11,26 @@ export interface CoverProps {
   bright?: boolean;
   style?: CSSProperties;
   children?: ReactNode;
+  /** Mark the cover as decorative (alt=""). Use only when the parent
+   *  context already announces the game (e.g., a button labelled "Open Elden Ring").
+   *  Default: descriptive alt derived from `label` or 'Game cover'. */
+  decorative?: boolean;
 }
 
-export function Cover({ w, h, src, label, year, dev, bright, style, children }: CoverProps) {
+export function Cover({ w, h, src, label, year, dev, bright, style, children, decorative }: CoverProps) {
   if (src) {
     // For numeric widths, downscale IGDB URLs to the smallest variant that
     // covers the rendered size. Non-IGDB URLs pass through.
     const sized = typeof w === 'number' ? igdbCoverSize(src, w) : src;
     const widthAttr = typeof w === 'number' ? w : undefined;
     const heightAttr = typeof h === 'number' ? h : undefined;
+    // WCAG 1.1.1: provide descriptive alt unless explicitly decorative.
+    const altText = decorative ? '' : (label && label.length > 0 ? `${label} cover art` : 'Game cover');
     return (
       <div style={{ width: w, height: h, overflow: 'hidden', flexShrink: 0, ...style }}>
         <img
           src={sized ?? src}
-          alt={label ?? ''}
+          alt={altText}
           width={widthAttr}
           height={heightAttr}
           loading="lazy"

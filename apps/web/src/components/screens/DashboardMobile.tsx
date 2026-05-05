@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
@@ -43,6 +44,7 @@ function asciiChart(platforms: PlatformStat[]): string {
 }
 
 export function DashboardMobile() {
+  useDocumentTitle("Dashboard");
   const { data, loading } = useDashboard();
   const user = useCurrentUser();
   const platformChart = useMemo(

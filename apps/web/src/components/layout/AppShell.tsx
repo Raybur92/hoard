@@ -10,16 +10,19 @@ export function AppShell() {
 
   return (
     <SearchModalProvider>
+      <a className="skip-link" href="#main-content">Skip to content</a>
       {bp === 'desktop' ? (
         <div className="app-shell hoard-noise">
           <Sidebar />
-          <div className="app-main">
+          <main id="main-content" className="app-main">
             <Outlet />
-          </div>
+          </main>
         </div>
       ) : (
         <MobileFrame>
-          <Outlet />
+          <main id="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+            <Outlet />
+          </main>
           <MobileTabBar />
         </MobileFrame>
       )}

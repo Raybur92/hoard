@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
@@ -57,6 +58,7 @@ function nowPlayingTitle(title: string) {
 }
 
 export function DashboardDesktop() {
+  useDocumentTitle("Dashboard");
   const { data, loading, error } = useDashboard();
   const user = useCurrentUser();
   const [pickIdx, setPickIdx] = useState(0);

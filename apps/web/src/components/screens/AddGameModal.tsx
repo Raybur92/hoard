@@ -33,7 +33,10 @@ export function AddGameModal({ onClose, onAdded }: Props) {
 
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -76,58 +79,84 @@ export function AddGameModal({ onClose, onAdded }: Props) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-game-title"
       style={{ position: 'fixed', inset: 0, background: 'rgba(7,9,10,0.88)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="panel" style={{ width: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: 0, border: '1px solid var(--rule-bright)' }}>
+      {/* backdrop captures clicks outside the panel; uses a button for keyboard a11y */}
+      <button
+        type="button"
+        aria-label="Close add-game dialog"
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'transparent', border: 'none', cursor: 'default' }}
+      />
+      <div className="panel" style={{ position: 'relative', width: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: 0, border: '1px solid var(--rule-bright)' }}>
         {/* header */}
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="t-mono t-up" style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-dim)' }}>// add game</span>
-          <span style={{ cursor: 'pointer', color: 'var(--paper-faint)' }} onClick={onClose}><Icon name="x" size={11} /></span>
+          <h2 id="add-game-title" className="t-mono t-up" style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', margin: 0, fontWeight: 'normal' }}>// add game</h2>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--paper-dim)', padding: 4, margin: -4 }}
+          >
+            <Icon name="x" size={11} />
+          </button>
         </div>
 
         {/* search */}
         <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
+          <label htmlFor="add-game-search" className="sr-only">Search IGDB by title</label>
           <div className="field" style={{ width: '100%' }}>
-            <span className="pre">$</span>
+            <span className="pre" aria-hidden="true">$</span>
             <input
+              id="add-game-search"
               ref={inputRef}
               value={query}
               onChange={(e) => { setSelected(null); setQuery(e.target.value); }}
               placeholder="search IGDB by title…"
               style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--mono)', fontSize: "var(--text-xs)", color: 'var(--paper)' }}
             />
-            {searching && <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>…</span>}
+            {searching && <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }} aria-live="polite">…</span>}
           </div>
         </div>
 
         {/* results */}
         {!selected && results.length > 0 && (
-          <div className="thin-scroll" style={{ maxHeight: 260, overflowY: 'auto', borderBottom: '1px solid var(--rule)' }}>
+          <ul className="thin-scroll" role="listbox" aria-label="Search results" style={{ maxHeight: 260, overflowY: 'auto', borderBottom: '1px solid var(--rule)', listStyle: 'none', margin: 0, padding: 0 }}>
             {results.map((r) => (
-              <div
-                key={r.igdbId}
-                onClick={() => setSelected(r)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', cursor: 'pointer', borderBottom: '1px solid var(--rule)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ink-2)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <Cover w={32} h={44} label="" src={r.coverUrl} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
-                  <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
-                    {r.developer ?? 'Unknown'}{r.releaseYear ? ` · ${r.releaseYear}` : ''}
+              <li key={r.igdbId} role="option" aria-selected={false}>
+                <button
+                  type="button"
+                  onClick={() => setSelected(r)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 18px', cursor: 'pointer',
+                    borderBottom: '1px solid var(--rule)', borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                    background: 'transparent',
+                    width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--ink-2)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <Cover w={32} h={44} label="" src={r.coverUrl} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--text-xs)", color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                    <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>
+                      {r.developer ?? 'Unknown'}{r.releaseYear ? ` · ${r.releaseYear}` : ''}
+                    </div>
                   </div>
-                </div>
-                <Icon name="caret" size={10} style={{ transform: 'rotate(-90deg)', color: 'var(--paper-faint)' }} />
-              </div>
+                  <Icon name="caret" size={10} style={{ transform: 'rotate(-90deg)', color: 'var(--paper-dim)' }} />
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
 
         {!selected && query.length >= 2 && !searching && results.length === 0 && (
-          <div style={{ padding: '20px 18px', color: 'var(--paper-faint)', fontSize: "var(--text-2xs)" }}>
-            no results for "{query}"
+          <div style={{ padding: '20px 18px', color: 'var(--paper-dim)', fontSize: "var(--text-2xs)" }}>
+            no results for &quot;{query}&quot;
           </div>
         )}
 
@@ -142,15 +171,24 @@ export function AddGameModal({ onClose, onAdded }: Props) {
                   {selected.developer ?? 'Unknown'}{selected.releaseYear ? ` · ${selected.releaseYear}` : ''}
                 </div>
               </div>
-              <span style={{ cursor: 'pointer', fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }} onClick={() => setSelected(null)}>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                style={{
+                  background: 'transparent', border: 'none', padding: '4px 6px',
+                  cursor: 'pointer', fontSize: "var(--text-3xs)", color: 'var(--paper-dim)',
+                  fontFamily: 'inherit',
+                }}
+              >
                 change
-              </span>
+              </button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginBottom: 6 }}>// platform</div>
+                <label htmlFor="add-game-platform" className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginBottom: 6, display: 'block' }}>// platform</label>
                 <select
+                  id="add-game-platform"
                   value={platform}
                   onChange={(e) => setPlatform(e.target.value)}
                   style={{ width: '100%', background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", padding: '5px 8px' }}
@@ -161,8 +199,9 @@ export function AddGameModal({ onClose, onAdded }: Props) {
                 </select>
               </div>
               <div>
-                <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginBottom: 6 }}>// status</div>
+                <label htmlFor="add-game-status" className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginBottom: 6, display: 'block' }}>// status</label>
                 <select
+                  id="add-game-status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value as GameStatus)}
                   style={{ width: '100%', background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", padding: '5px 8px' }}

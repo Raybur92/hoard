@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
@@ -21,6 +22,7 @@ export function GameDetailMobile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: ug, loading, error } = useGame(id);
+  useDocumentTitle(ug?.game.title ?? 'Game');
 
   if (loading || !ug) {
     return (
@@ -65,12 +67,14 @@ export function GameDetailMobile() {
     <>
       {/* back-bar header */}
       <div style={{ padding: '8px 16px 10px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--ink)' }}>
-        <span
-          style={{ color: 'var(--paper-dim)', fontSize: "var(--text-base)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+        <button
+          type="button"
+          aria-label="Back to library"
           onClick={() => navigate('/library')}
+          style={{ color: 'var(--paper-dim)', fontSize: "var(--text-base)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', background: 'transparent', border: 'none', padding: 8, margin: -8, fontFamily: 'inherit' }}
         >
           <Icon name="back" size={14} /> library
-        </span>
+        </button>
         <span className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// game record</span>
         <span style={{ color: 'var(--paper-dim)', fontSize: "var(--text-sm)" }}><Icon name="arrowR" size={13} /></span>
       </div>
