@@ -1,6 +1,17 @@
 # Hoard — Manual Integration Tests
 
-Automated tests (Jest + Playwright) cover the unit and E2E layers. The scenarios below require real external accounts or cannot be driven by a headless runner. Run them before shipping a Phase 4 build.
+Automated tests (Jest + Playwright + axe-core) cover unit, integration, E2E, and accessibility. The scenarios below require real external accounts or cannot be driven by a headless runner — run them when touching the relevant code paths.
+
+**Automated coverage** (don't repeat manually unless you've changed the relevant code):
+- `npm run test` — unit + integration (115 API + 69 web).
+- `npm run test:e2e -w apps/web` — Playwright `screens.spec.ts` (assertion + visual snapshots) and `a11y.spec.ts` (axe-core WCAG 2.1 A + AA on every route × desktop + mobile, 12 tests).
+- `npm run test:e2e:offline -w apps/web` — service-worker offline behaviour (3 tests).
+
+**Manual flows below** cover what the headless runner can't:
+- OAuth flows that require a real consent screen (Steam, Google).
+- The PSN NPSSO token retrieval flow that requires a real PSN account.
+- Real-device screen-reader passes (VoiceOver / TalkBack) — pre-launch verification, not on every PR.
+- Mobile pull-to-refresh on actual hardware (Playwright simulates touch but real Safari/Chrome on iOS/Android is the source of truth).
 
 ---
 
@@ -126,6 +137,17 @@ npx ts-node -e "const {prisma} = require('@hoard/db'); prisma.user.deleteMany({ 
 
 ## Notes
 
-- These tests are run manually before any Phase 4 production deploy.
+- Run these flows when you touch the relevant code paths (auth callbacks, NPSSO connect). Not every PR needs a manual pass.
 - Automated coverage for the callback handlers (with mocked HTTP) lives in `apps/api/src/routes/auth.test.ts`.
-- Steam deduplication (two platforms → one UserGame) will be tested in Phase 5 alongside the IGDB sync runner.
+- Steam deduplication (two platforms → one UserGame) is verified in `apps/api/src/services/syncRunner.test.ts`.
+
+## Pre-launch verification (Phase 8 deferred items)
+
+Before turning Hoard from a personal tool into a public product, walk through these once on real hardware:
+
+- **VoiceOver pass on macOS Safari** — navigate every screen using only VoiceOver. Confirm the heading hierarchy is sensible, every button has an accessible name, and the modal focus traps don't escape into the page underneath.
+- **TalkBack pass on Android Chrome** — same flow, same expectations.
+- **Keyboard-only walkthrough** — Tab through every screen on Chrome desktop. Confirm the amber focus ring is visible at every interactive element; Space/Enter activate controls; Escape closes modals.
+- **Pull-to-refresh on real iPhone + Android** — Dashboard / Library / Upcoming. Confirm the `// pull down…` → `// release to refresh` → `// refreshing…` indicator transitions cleanly and refetch happens on release.
+- **OfflineBanner z-index audit** — go offline on a real device, confirm the banner renders above content and doesn't get hidden behind the mobile tab bar's safe-area inset.
+- **WAVE browser-extension audit** — optional sanity check on top of axe-core. Should report zero errors per route.

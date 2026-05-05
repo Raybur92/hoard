@@ -39,14 +39,15 @@ The visual language is non-negotiable:
 | Layer | Technology | Notes |
 |---|---|---|
 | Frontend | React 19 + TypeScript + Vite | No Next.js — this is a pure SPA with a separate API |
-| Styling | Custom CSS variables (no Tailwind) | Design system is hand-crafted; every token is defined |
-| Routing | React Router v6 | Client-side only |
-| Backend | Node.js + Express + TypeScript | Deployed to Railway |
+| Styling | Custom CSS variables (no Tailwind) | Design system is hand-crafted; every token is defined. 11-step typography scale (`--text-3xs` → `--text-display`) and 4-step line-height scale enforce floors for interactive / body text (Phase 8 PR 1). |
+| Routing | React Router v6 | Client-side only. URL state for Library `?sort=`/`?view=` and Upcoming `?scope=` (Phase 8 PR 5). |
+| Backend | Node.js + Express + TypeScript | Deployed to Railway. Rate limiter skips in dev / CI; production-only. |
 | Database | PostgreSQL via Supabase | |
 | ORM | Prisma | Schema in `packages/db/` |
 | Frontend hosting | Vercel | SPA config |
 | Auth | Email/password + Google OAuth + Steam OpenID | JWT in HTTP-only cookies — never localStorage |
-| Delivery | PWA | Installable on desktop (Chrome) and mobile (Safari/Chrome) |
+| Delivery | PWA | Installable on desktop (Chrome) and mobile (Safari/Chrome). `viewport-fit=cover` + `100dvh` + `env(safe-area-inset-*)` for notch / home indicator. |
+| Accessibility | WCAG 2.1 AA enforced | `eslint-plugin-jsx-a11y` blocks regressions in CI; `@axe-core/playwright` runs against every route on every PR; Lighthouse Accessibility threshold ≥ 95. |
 | Game metadata | IGDB via Twitch OAuth | Covers search, upcoming releases, cover art |
 | How Long to Beat | `hltbapi.codepotatoes.de` community REST API | `/steam/{appId}` endpoint; requires Game.steamAppId |
 | Steam library | Steam Web API (`IPlayerService/GetOwnedGames`) | Via OpenID OAuth |
@@ -212,6 +213,18 @@ Backend integration tests mock Prisma at the module level (each test file: `jest
 
 **10. Supabase RLS**
 RLS is enabled on every public table even though the codebase doesn't use Supabase's PostgREST API. Reason: Supabase's anon key is public (often leaked accidentally), and without RLS, anyone with the project URL + anon key can hit `https://<ref>.supabase.co/rest/v1/User` and read every row including `User.password`. Prisma uses the `postgres` role which bypasses RLS, so application queries are unaffected. Captured in migration `20260504100000_enable_rls_on_public_tables`.
+
+**11. WCAG 2.1 AA accessibility**
+Hard requirement, not a personal-tool nicety. Hoard may be released as a product later, so accessibility is enforced from launch. Triple-layered guardrails: (a) `eslint-plugin-jsx-a11y` (recommended ruleset) blocks PRs that introduce new violations — `<div onClick>` without keyboard support, missing form labels, etc. all fail lint. (b) `@axe-core/playwright` E2E (`apps/web/tests/e2e/a11y.spec.ts`) asserts zero WCAG 2.1 A + AA violations on Dashboard / Library / Upcoming / GameDetail / Settings / Login on both desktop and mobile viewports — 12 tests, all passing. (c) Lighthouse CI threshold raised to Accessibility ≥ 95 (was 90 in earlier phases). Manual VoiceOver / TalkBack / WAVE walkthroughs are pre-launch tasks, not blocking CI.
+
+**12. Typography & line-height tokens**
+Every font-size in the codebase uses `var(--text-*)` from a constrained 11-step scale (`--text-3xs` 10px → `--text-display` 96px). Floor: interactive text ≥ `--text-xs` (12 px); body content ≥ `--text-sm` (13 px). Receipt internals, barcodes, big-numbers, and the `.plat` 9 px badge are documented exceptions. `--paper-faint` is banned as a *text* color anywhere font-size < 17 px (the `.t-faint` utility class is mapped to `--paper-dim` ≥ 9.4:1 contrast); the raw `--paper-faint` token is still legitimate for decorative borders / dividers. Line-height tokens: `--lh-tight 1.15` / `--lh-snug 1.3` / `--lh-normal 1.5` / `--lh-relaxed 1.7`. Magic-number font-sizes outside the documented exceptions are a regression.
+
+**13. Mobile parity scope (Phase 8 PR 4)**
+Mobile screens are full peers of desktop, with two intentional exceptions: (a) `LibraryMobile` does not have a view-mode toggle (shelves / grid / list) — the mobile viewport is too narrow for the list/grid distinction to be useful; shelves is the only mobile-readable mode. (b) `PlatformDetailMobile` does not show the activity log tab — low-value content that needs lots of vertical space, rarely consulted on mobile. Every other Desktop interaction is wired on Mobile (status picker, notes editor, action buttons, filter chips, sort, scope toggle, sync-frequency picker, etc.). The whole-card-tap pattern is preferred over multi-button rows where viewport is tight.
+
+**14. Mobile shell is platform-correct (Phase 8 PR 2)**
+No fake / hardcoded chrome. The OS status bar is painted by `apple-mobile-web-app-status-bar-style="black-translucent"`; the app draws no chrome of its own there. Mobile tab bar uses `repeat(4, 1fr)` grid (matching the actual tab count); active tab indicated by both color + 2 px amber top border (color alone fails WCAG H1); press feedback via `:active`; light haptic via `navigator.vibrate?.(8)`; safe-area-inset respected so the home indicator gesture region is clear. `MobileFrame` renders exactly the children — no decorative shell.
 
 ---
 

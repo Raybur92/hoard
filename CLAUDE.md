@@ -94,6 +94,18 @@ These are non-negotiable. Do not deviate without explicit instruction.
 - `--red` `#e2553a` — dropped, errors
 - `--blue` `#69a1d4` — on hold, info
 
+**Typography scale (tokens.css, added in Phase 8 PR 1):**
+`--text-3xs: 10px` · `--text-2xs: 11px` · `--text-xs: 12px` · `--text-sm: 13px` · `--text-base: 14px` · `--text-md: 17px` · `--text-lg: 22px` · `--text-xl: 28px` · `--text-2xl: 44px` · `--text-display-sm: 56px` · `--text-display: 96px`
+
+**Floor rules** (enforced by audit, not by lint):
+- Interactive text ≥ `--text-xs` (12 px)
+- Body content ≥ `--text-sm` (13 px)
+- `--paper-faint` is banned as a *text* color anywhere font-size < `--text-md` (17 px) — the `.t-faint` utility class is mapped to `--paper-dim` (~9.4:1 contrast). `--paper-faint` is still legitimate for decorative borders / dividers.
+- Receipt internals (`.receipt`, `.barcode`, `.bignum`) and platform glyphs (`.plat`) are documented exceptions.
+
+**Line-height tokens:**
+`--lh-tight: 1.15` · `--lh-snug: 1.3` · `--lh-normal: 1.5` · `--lh-relaxed: 1.7`
+
 **Key utility classes:**
 `.t-display` `.t-mono` `.t-sans` `.t-up` `.t-tnum`
 `.t-dim` `.t-faint` `.t-ghost` `.t-amber` `.t-green` `.t-red`
@@ -105,15 +117,17 @@ These are non-negotiable. Do not deviate without explicit instruction.
 `.receipt` `.receipt.zigzag` `.marker` `.bignum` `.shelf-label`
 `.hr-dot` `.hr-dash` `.hr-solid` `.hr-double`
 `.kv` `.ascii` `.spark` `.status-sigil`
-`.sidebar` `.topbar` `.m-status` `.m-tabbar`
+`.sr-only` `.skip-link`
+`.sidebar` `.topbar` `.m-tabbar`
 
 ---
 
 ## Responsive Breakpoint
 
 - `≥ 1024px` → desktop layout (sidebar + topbar)
-- `< 1024px` → mobile layout (status bar + tab bar)
+- `< 1024px` → mobile layout (mobile header + tab bar)
 - Use the `useBreakpoint()` hook — do not use media queries directly in component logic
+- Mobile shell uses `100dvh` + `viewport-fit=cover` + `env(safe-area-inset-*)` (notch / Dynamic Island / home indicator). The OS status bar is painted by `apple-mobile-web-app-status-bar-style="black-translucent"`; the app draws no chrome of its own there.
 
 ---
 
@@ -222,21 +236,34 @@ Production URLs:
 - **Railway region must match Supabase region.** API was originally deployed in `us-west` (California) and every DB query paid ~150-200 ms transatlantic RTT, then the pgbouncer overhead on top — the dashboard's 7-query `Promise.all` took ~10 s. Moving to `EU West (Amsterdam)` dropped query time to ~50 ms. Settings → Region.
 - **`DATABASE_URL` query string must include `?pgbouncer=true&connection_limit=5`.** `pgbouncer=true` disables Prisma prepared statements (required for transaction-mode pgbouncer). `connection_limit=5` lets parallel `Promise.all` queries actually run in parallel — `connection_limit=1` (the original value) serialized them, multiplying any per-query latency by 7 on the dashboard. Same value should be set in `apps/api/.env` for local dev.
 - **Railway Watch Paths must use one glob per line, not commas.** Watch Paths set as `apps/api/**,packages/**,railway.toml,package*.json` (single line, comma-separated) is parsed as ONE literal pattern with commas in it and matches nothing — every push gets "Skipped: No changes to watched files." Correct format is one pattern per line. Service Settings → Source.
+- **API rate limiter must skip in dev / CI.** With 5 parallel Playwright workers each running multiple tests with multiple data fetches, the default 100 req/min/IP global limiter blew through its budget mid-suite. `/api/auth/me` started returning 429, the frontend read it as auth failure, RequireAuth redirected to `/login`, and visual snapshots silently captured the login screen instead of the actual route. Fix lives in `apps/api/src/index.ts`: both `globalLimiter` and `authLimiter` carry `skip: () => process.env.NODE_ENV !== 'production'`. Production rate limiting still in force.
+- **Playwright `webServer` must start both API and web.** A single `npm run dev` from `apps/web/` only starts the Vite frontend on :5173 — not the API on :3001. Without the API, every authenticated route 401s, RequireAuth bounces to `/login`, snapshots are wrong. `apps/web/playwright.config.ts` now uses an array of webServer configs that boots `dev:api` (cwd: monorepo root) + `dev:web` and waits for both before tests run. Symptom of the old config: byte-identical mobile snapshot files (e.g., 3 PNGs all 25,213 bytes) because they all captured the same login redirect.
+- **Mobile snapshots can drift silently.** Phase 8 PRs that touch mobile screens (typography, mobile shell, semantic h1, parity ports, IA polish) all change the rendered output. After landing one, run `npm run test:e2e:update -w apps/web` to regenerate the four `*-mobile-darwin.png` baselines, then eyeball each one in Preview before committing — the byte-size signature is a useful sanity check (login-redirect captures all weigh ~25 KB).
 
 See `docs/PLAN.md` → Phase Status table for full live status.
 
-All phases complete through Phase 7. App is deployed and reachable from anywhere. Email/password and Google OAuth login both verified end-to-end. Steam OpenID still works locally and just needs the same redirect URI verification on prod.
+All phases complete through Phase 8. App is deployed, accessible (WCAG 2.1 AA), and feature-aligned across desktop and mobile. Email/password and Google OAuth login both verified end-to-end. Steam OpenID still works locally and just needs the same redirect URI verification on prod.
 
 **Test commands:**
-- `npm run test` — 103 API tests + 40 web tests, all passing
-- `npm run test:e2e` — Playwright E2E (28 tests) against dev server
-- `npm run test:e2e:offline --workspace=apps/web` — Playwright offline E2E (3 tests) against production preview build with active service worker
+- `npm run test` — 115 API tests + 69 web tests, all passing
+- `npm run test:e2e -w apps/web` — Playwright E2E suite (auto-starts both `dev:api` + `dev:web`). Includes:
+  - `screens.spec.ts` — assertions + visual snapshots for every route
+  - `a11y.spec.ts` — axe-core (WCAG 2.1 A + AA) on Dashboard / Library / Upcoming / GameDetail / Settings / Login on desktop + mobile (12 tests)
+- `npm run test:e2e:update -w apps/web` — same, but regenerate visual snapshots
+- `npm run test:e2e:offline -w apps/web` — Playwright offline E2E (3 tests) against production preview build with active service worker
 
 **CI workflows:**
-- `.github/workflows/ci.yml` — lint + format + typecheck + tests + builds on every PR
-- `.github/workflows/lighthouse.yml` — Lighthouse CI on PRs touching `apps/web/**`; thresholds: Performance ≥ 80, Accessibility ≥ 90, Best-practices ≥ 90 (all errors); local run shows 99 / 100 / 100. PWA category was retired in Lighthouse 12 — installability is verified by the offline E2E test instead.
+- `.github/workflows/ci.yml` — lint + format + typecheck + tests + builds on every PR. Lint includes `eslint-plugin-jsx-a11y` (added Phase 8 PR 3) — `<div onClick>` without keyboard support, missing form labels, and similar a11y patterns block CI.
+- `.github/workflows/lighthouse.yml` — Lighthouse CI on PRs touching `apps/web/**`. Thresholds: Performance ≥ 80, Accessibility ≥ 95 (raised from 90 in PR 3), Best-practices ≥ 90. Local run shows 99 / 100 / 100. PWA category was retired in Lighthouse 12 — installability is verified by the offline E2E test instead.
 
 **Recent fixes landed (most recent first):**
+- **Phase 8 — Mobile Parity, iOS-HIG & Accessibility (5 PRs, 2026-05-05).** Composite mobile UX score moved from ~3/10 to ~8/10. Headlines:
+  - **PR 1** — typography scale + line-height tokens, `:focus-visible` styles, `prefers-reduced-motion`, chip/btn/field min sizes raised, `--paper-faint` text contrast fixed (`.t-faint` remapped to `--paper-dim`), inline `fontSize` literal sweep across 24 components.
+  - **PR 2** — fake "9:41" status bar deleted, mobile tab bar fixed (4-col grid, safe-area insets, 2 px amber active border, press feedback, haptic tick), `viewport-fit=cover` + `100dvh`, `MobileHeader` search wired to `SearchOverlay`, tab-bar icons replaced with meaningful glyphs (`home`/`rows`/`clock`/`user`).
+  - **PR 3** — full WCAG 2.1 AA pass: `eslint-plugin-jsx-a11y` (90 lint errors → 0), ~50 `<div onClick>` → `<button>`, semantic `<h1>`/`<h2>`/landmarks, `<label htmlFor>` everywhere, `role="dialog"` + focus traps + Escape on every modal, `useDocumentTitle` per route, skip-link, `Cover.tsx` alt-text strategy, `axe-core` E2E (12/12 passing), Lighthouse a11y threshold 90 → 95, rate limiter skips in dev, Playwright `webServer` starts both API + web.
+  - **PR 4** — mobile parity port (15 items): `GameDetailMobile` is now a real editor (status bottom-sheet, notes editor, action buttons), `DashboardMobile` gets backlog picker + tappable now-playing + genre breakdown, `LibraryMobile` gets filter chips on filtered view + cover-density preference, `UpcomingMobile` gets scope toggle + DLC/remake labels, `PlatformDetailMobile` gets sync-frequency radios + scope checklist, `SettingsMobile` platform rows expanded. Skipped: view-mode toggle, activity log tab.
+  - **PR 5** — empty / first-run states with CTAs across Dashboard / Library / Upcoming, retry buttons on every data-fetching screen, URL state for Library `?sort=`/`?view=` and Upcoming `?scope=`, pull-to-refresh on mobile data screens via `usePullToRefresh` hook + `PullableScroll` primitive, `navigate(-1)` audit complete.
+- **scripts/list-users.ts and scripts/delete-users.ts** — debugging utilities for the User table; `delete-users.ts` carries a history block of what was deleted and when. Tested 2026-05-05 by purging 5 stale sign-ups (test/diag/unused accounts).
 - Lint cleanup: 86 pre-existing errors → 0 errors (2 non-blocking HMR warnings remain). ESLint config gained a `scripts/**` override; test middleware mocks now use proper Express types; Express `Request`/`Response` are type-only imports across all routes; `auth.test.ts` mocks `dotenv/config` so OAuth env-dependence is deterministic regardless of local `.env`.
 - Supabase RLS: enabled on all 7 public tables. Captured in migration `20260504100000_enable_rls_on_public_tables`. Closes 8 Supabase Security Advisor errors (rls_disabled_in_public + sensitive_columns_exposed on User.password).
 - Phase 7 — Production deploy + Google OAuth + custom domain: API on Railway (`api.gamehoardr.com`), web on Vercel (`gamehoardr.com`), DNS at Porkbun, SSL auto-provisioned. Google OAuth client wired with new origins/redirect URIs. iOS Safari + Chrome incognito both work because both subdomains share `.gamehoardr.com` parent (cookies are first-party).
@@ -260,3 +287,14 @@ All phases complete through Phase 7. App is deployed and reachable from anywhere
 - Steam OpenID on production not yet click-tested — wiring is in code and was working locally; just needs you to log in once via `https://gamehoardr.com/login` to confirm the redirect URI resolves correctly.
 - Xbox / GOG library sync: stubs returning `[]`. Manual add covers the gap (same approach as Nintendo / Epic).
 - `package.json#prisma` config block is deprecated in Prisma 6.19 — Prisma 7 will require `prisma.config.ts`. Migrate when convenient (warning only, not blocking).
+- Phase 8 success criteria deferred to pre-launch verification (not blocking):
+  - Manual VoiceOver / TalkBack walkthroughs (axe-core covers structural a11y; manual screen-reader passes are pre-launch)
+  - WAVE browser-extension audit (covered by axe-core's WCAG 2.1 A + AA tags)
+  - Real-device pull-to-refresh test on iPhone + Android Chrome
+  - OfflineBanner z-index audit on real devices
+- Phase 8 deferred features (intentional v2 punts, not bugs):
+  - Quick-sync trigger from Sidebar / TopBar (sync currently buried in `Settings → Platforms → {platform}`)
+  - Page-transition animations on route changes (skipped to preserve the terminal aesthetic's instant-feedback character)
+  - Library view-mode toggle on mobile (mobile too narrow for useful list/grid distinction)
+  - Activity-log tab on `PlatformDetailMobile` (low value, lots of vertical space)
+- Pre-existing flaky E2E assertion tests (Pragmata / Death Stranding 2 in Upcoming agenda; ELDEN RING in GameDetail) hard-code titles that vary with the live IGDB feed. Real fix is to assert on selectors / regex patterns rather than literal game names — worth a quick test cleanup pass when convenient.
