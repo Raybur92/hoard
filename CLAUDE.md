@@ -171,9 +171,15 @@ Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics,
   - **Part 6** (`0977cef`): API rate limiter (`globalLimiter` + `authLimiter`) gains `skip: () => NODE_ENV !== 'production'`. Production rate limiting still in force; dev / Playwright runs no longer trip the 100 req/min/IP threshold mid-suite.
   - **End state:** axe-core 12/12 passing across Dashboard / Library / Upcoming / GameDetail / Settings / Login on desktop + mobile. Lint 0 errors. 115 API + 69 web unit tests pass. Visual snapshots regenerated against the working config.
 
-- **PR 4 — Mobile parity: pending. Scope decision still open.** Wire `GameDetailMobile` interactions (status picker, notes editor, action buttons), port the backlog picker + now-playing actions to `DashboardMobile`, add platform filter / sort to `LibraryMobile`, scope toggle to `UpcomingMobile`, sync-frequency picker to `PlatformDetailMobile`. Per-feature decision needed before implementation: which Desktop features genuinely belong on mobile vs. which should stay desktop-only.
+- **PR 4 — Mobile parity: done** (commit `15695fc`, scope option A approved 2026-05-05). 15 ports + 2 documented skips:
+  - **GameDetailMobile** is now a real editor: status bottom-sheet picker (with focus trap, role="dialog", safe-area-inset-bottom), tap-to-edit notes textarea inline in the receipt with blur-save + "// saved" toast, action buttons wired (`start` → status='Playing', `+ note` → focuses textarea, `share` → navigator.share with clipboard fallback), back caret uses `navigate(-1)`.
+  - **DashboardMobile**: backlog picker + shuffle (closes the AGENT.md decision #4 violation), genre breakdown panel with proportional bars, now-playing card wrapped as a `<button>` that opens the game detail. (Decision: skipped porting the unwired desktop "resume / log session / +note" buttons — they're dead UI on desktop too.)
+  - **LibraryMobile**: filter chip strip on the filtered single-shelf view (existed on the unfiltered shelves view), `usePreferences()` consumed for cover density (3 tiers: cozy 96×128 / standard 84×112 / dense 72×96), `MobileShelf` slot count adapts. View-mode toggle SKIPPED (mobile too narrow for useful list/grid distinction).
+  - **UpcomingMobile**: scope state lifted; two-chip toggle (wishlist / all releases) above the month strip; DLC + remake category labels inline on agenda cards.
+  - **PlatformDetailMobile**: sync-frequency picker (4 radios in a `role="radiogroup"`), full 4-row scope checklist (replaces the one-line summary). Activity log tab SKIPPED.
+  - **SettingsMobile**: platform list rows show full name + game count + last sync ("488 games · synced 2h ago") instead of just code+who.
 
-- **PR 5 — IA & polish: pending.** First-run / empty-state CTAs, retry buttons on errors, `navigate(-1)` audit, URL-persisted sort/view/scope, pull-to-refresh on mobile data screens.
+- **PR 5 — IA & polish: pending.** First-run / empty-state CTAs, retry buttons on errors, `navigate(-1)` audit (most done in PR 4), URL-persisted sort/view/scope, pull-to-refresh on mobile data screens.
 
 WCAG 2.1 AA is the bar (Hoard may be released as a product later, so accessibility is a hard prerequisite, not a personal-tool nicety). PR 3 met the bar.
 
