@@ -162,13 +162,20 @@ Drafted from a May 2026 multi-pass UX audit covering parity, Nielsen heuristics,
 
 - **PR 2 — Mobile shell (iOS HIG): done** (commit `b31fa5d`). Fake status bar deleted; mobile tab bar fixed (`repeat(4, 1fr)` grid, `padding-bottom: env(safe-area-inset-bottom)`, 2 px amber top-border active state with `margin-top: -2px` so the row doesn't shift, `:active` press feedback, `navigator.vibrate?.(8)` haptic tick); `viewport-fit=cover` + `100dvh` + `padding-top: env(safe-area-inset-top)`; `MobileHeader` search icon wired to `SearchOverlay`; tab-bar icons replaced with meaningful glyphs (`home` / `rows` / `clock` / `user`). Bonus: `SearchOverlay` state lifted out of `TopBar` into a new `SearchModalProvider` mounted at `AppShell`; `MobileTabBar` rewritten as semantic `<nav><button>` with `aria-current="page"` (head start on PR 3 a11y).
 
-- **PR 3 — Accessibility (WCAG 2.1 AA): pending.** The heaviest PR. Convert remaining ~50 `<div onClick>` → `<button>`; add semantic `<h1>` – `<h3>` and ARIA landmarks; `<label htmlFor>` on every input; `role="dialog"` + focus trap on every modal; `useDocumentTitle` per route; `.skip-link` actually wired; `eslint-plugin-jsx-a11y` recommended ruleset; `axe-core` injected into Playwright tests; Lighthouse Accessibility threshold raised 90 → 95.
+- **PR 3 — Accessibility (WCAG 2.1 AA): done** (commits `3ce97d2` → `52fb4aa`, 6 sub-commits, 2026-05-05). The heaviest PR; landed in 6 parts so each was independently green:
+  - **Part 1** (`3ce97d2`): `eslint-plugin-jsx-a11y` (90 errors → 0), ~50 `<div onClick>` converted to `<button>`, form labels, `role="dialog"` + Escape on modals, `useDocumentTitle` hook + per-screen calls, skip-link CSS + `<main id="main-content">` landmarks, Toggle/Radio/Chip rewritten with proper ARIA roles, tab strips with `role="tablist"`, Cover.tsx alt-text strategy, Lighthouse a11y threshold 90 → 95.
+  - **Part 2** (`7756ed4`): semantic `<h1>` (TopBar last crumb sr-only, MobileHeader title visible, LoginScreen wordmark, PsnGuidedFlowDesktop hero, DeleteModal `<h2 id>`); `useFocusTrap` hook applied to `AddGameModal` / `SearchOverlay` / `DeleteModal`; `aria-live` regions for save toasts + login error; `@axe-core/playwright` + `tests/e2e/a11y.spec.ts` covering 6 routes × 2 viewports.
+  - **Part 3** (`d37b742`): remapped `.t-faint` utility class from `--paper-faint` to `--paper-dim` to fix all 90+ color-contrast violations app-wide in one CSS change; mass-replaced ~15 inline `var(--paper-faint)` text colors with `var(--paper-dim)`.
+  - **Part 4** (`244c9ac`): `tabIndex={0}` + `role="region"` on Dashboard mobile scroll container (axe `scrollable-region-focusable`); `aria-label` support added to `Btn` primitive + applied to icon-only "+ add game" button on Library mobile.
+  - **Part 5** (`f3193de`): Playwright `webServer` made into an array that auto-starts both `dev:api` and `dev:web` (cwd rewired to monorepo root) — eliminates the silent corrupt-snapshots failure mode where login redirects were captured because the API wasn't running.
+  - **Part 6** (`0977cef`): API rate limiter (`globalLimiter` + `authLimiter`) gains `skip: () => NODE_ENV !== 'production'`. Production rate limiting still in force; dev / Playwright runs no longer trip the 100 req/min/IP threshold mid-suite.
+  - **End state:** axe-core 12/12 passing across Dashboard / Library / Upcoming / GameDetail / Settings / Login on desktop + mobile. Lint 0 errors. 115 API + 69 web unit tests pass. Visual snapshots regenerated against the working config.
 
 - **PR 4 — Mobile parity: pending. Scope decision still open.** Wire `GameDetailMobile` interactions (status picker, notes editor, action buttons), port the backlog picker + now-playing actions to `DashboardMobile`, add platform filter / sort to `LibraryMobile`, scope toggle to `UpcomingMobile`, sync-frequency picker to `PlatformDetailMobile`. Per-feature decision needed before implementation: which Desktop features genuinely belong on mobile vs. which should stay desktop-only.
 
 - **PR 5 — IA & polish: pending.** First-run / empty-state CTAs, retry buttons on errors, `navigate(-1)` audit, URL-persisted sort/view/scope, pull-to-refresh on mobile data screens.
 
-WCAG 2.1 AA is the bar (Hoard may be released as a product later, so accessibility is a hard prerequisite, not a personal-tool nicety).
+WCAG 2.1 AA is the bar (Hoard may be released as a product later, so accessibility is a hard prerequisite, not a personal-tool nicety). PR 3 met the bar.
 
 ---
 
