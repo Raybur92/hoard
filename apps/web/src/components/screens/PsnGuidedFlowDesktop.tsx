@@ -229,11 +229,11 @@ export function PsnGuidedFlowDesktop() {
                   <span className="pre" style={{ color: 'var(--green)' }}>https://</span>
                   <span style={{ color: 'var(--paper-dim)' }}>ca.account.sony.com/api/v1/ssocookie</span>
                 </div>
-                <Icon name="refresh" size={11} style={{ color: 'var(--paper-faint)' }} />
+                <Icon name="refresh" size={11} style={{ color: 'var(--paper-dim)' }} />
               </div>
 
               <div style={{ padding: 18, flex: 1, fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", lineHeight: 1.7, color: 'var(--paper-dim)', overflow: 'auto' }}>
-                <div style={{ color: 'var(--paper-faint)', fontSize: "var(--text-3xs)", marginBottom: 10 }}>view-source · application/json</div>
+                <div style={{ color: 'var(--paper-dim)', fontSize: "var(--text-3xs)", marginBottom: 10 }}>view-source · application/json</div>
                 <div>{'{'}</div>
                 <div style={{ paddingLeft: 18 }}>
                   "npsso":{' '}
@@ -248,7 +248,7 @@ export function PsnGuidedFlowDesktop() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', alignItems: 'center' }}>
               <Icon name="info" size={11} /> 64 chars · hex/letters only · expires 60 days from issue
             </div>
           </div>

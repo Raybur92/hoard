@@ -241,7 +241,7 @@ export function GameDetailDesktop() {
                         <span>howlongtobeat.com</span>
                         <Icon name="ext" size={11} />
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, fontSize: "var(--text-3xs)", color: 'var(--paper-dim)' }}>
                         <span><span className="t-mono t-tnum t-amber" style={{ fontSize: "var(--text-base)" }}>{pctOfMain}</span>&nbsp;of main</span>
                         <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--rule)' }} />
                         <span><span className="t-mono t-tnum" style={{ fontSize: "var(--text-base)", color: 'var(--paper)' }}>{stillOwed}</span>&nbsp;still owed</span>

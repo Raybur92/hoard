@@ -157,7 +157,7 @@ export function DashboardDesktop() {
                       <Plat code={p.code} />
                       <span className="t-dim">{PLATFORM_NAMES[p.code] ?? p.code}</span>
                     </div>
-                    <div key={`${p.code}-r`} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--paper-faint)' }}>
+                    <div key={`${p.code}-r`} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--paper-dim)' }}>
                       <span>{p.lastSyncAt ? `synced ${formatRelative(p.lastSyncAt)}` : 'never synced'}</span>
                       <span style={{ color: p.syncStatus === 'ok' ? 'var(--green)' : p.syncStatus === 'stale' ? 'var(--amber)' : 'var(--red)' }}>
                         {p.syncStatus}
@@ -245,7 +245,7 @@ export function DashboardDesktop() {
               <div className="panel" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <Marker>// games last-played · 24 wk</Marker>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: "var(--text-3xs)", color: 'var(--paper-dim)' }}>
                     <span>less</span>
                     <div className="heat-cell" /><div className="heat-cell l1" /><div className="heat-cell l2" />
                     <div className="heat-cell l3" /><div className="heat-cell l4" /><div className="heat-cell l5" />
@@ -320,7 +320,7 @@ export function DashboardDesktop() {
                       <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 3 }}>
                         {displayPick.game.developer} · {displayPick.game.releaseYear}
                       </div>
-                      <div style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', marginTop: 3 }}>
+                      <div style={{ fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', marginTop: 3 }}>
                         {displayPick.hltb?.mainStory
                           ? <span>HLTB ~{Math.round(displayPick.hltb.mainStory / 60)}h</span>
                           : null}

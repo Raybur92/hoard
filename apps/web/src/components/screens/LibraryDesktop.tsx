@@ -357,8 +357,8 @@ export function LibraryDesktop() {
           <div className="field" style={{ width: 320 }}>
             <span className="pre">$</span>
             <span style={{ color: 'var(--paper)' }}>find</span>
-            <span style={{ color: 'var(--paper-faint)' }}>{totalGames} games · type to filter</span>
-            <span style={{ marginLeft: 'auto', fontSize: "var(--text-3xs)", color: 'var(--paper-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ color: 'var(--paper-dim)' }}>{totalGames} games · type to filter</span>
+            <span style={{ marginLeft: 'auto', fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <Icon name="search" size={11} /> K
             </span>
           </div>

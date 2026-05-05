@@ -148,7 +148,7 @@ export function PlatformDetailDesktop() {
             {/* unsupported (Nintendo / Epic) */}
             {!info.syncable && (
               <div className="panel" style={{ marginTop: 24, padding: 18, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <Icon name="info" size={16} style={{ color: 'var(--paper-faint)', marginTop: 2 }} />
+                <Icon name="info" size={16} style={{ color: 'var(--paper-dim)', marginTop: 2 }} />
                 <div>
                   <div style={{ fontSize: "var(--text-sm)", color: 'var(--paper)' }}>manual import only</div>
                   <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 6, lineHeight: 1.5 }}>

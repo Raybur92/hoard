@@ -229,8 +229,8 @@ export function UpcomingDesktop() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                         <div style={{ fontSize: "var(--text-base)", color: 'var(--paper)', lineHeight: 1.15 }}>{g.title}</div>
-                        {g.category === 2 && <span className="chip" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>DLC</span>}
-                        {g.category === 8 && <span className="chip" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', borderColor: 'var(--rule-bright)' }}>remake</span>}
+                        {g.category === 2 && <span className="chip" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', borderColor: 'var(--rule-bright)' }}>DLC</span>}
+                        {g.category === 8 && <span className="chip" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', borderColor: 'var(--rule-bright)' }}>remake</span>}
                       </div>
                       <div className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>{g.developer}</div>
                       <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>{g.genres[0] ?? '—'}</div>
@@ -280,8 +280,8 @@ export function UpcomingDesktop() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: "var(--text-xs)", lineHeight: 1.1, display: 'flex', alignItems: 'baseline', gap: 5 }}>
                     <span>{g.title}</span>
-                    {g.category === 2 && <span style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>DLC</span>}
-                    {g.category === 8 && <span style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-faint)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>remake</span>}
+                    {g.category === 2 && <span style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>DLC</span>}
+                    {g.category === 8 && <span style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>remake</span>}
                   </div>
                   <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 2 }}>{g.developer} · {g.platStr}</div>
                 </div>

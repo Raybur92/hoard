@@ -134,7 +134,7 @@ export function DashboardMobile() {
                 <div className="prog green" style={{ marginTop: 8 }}>
                   <span style={{ width: `${npPct}%` }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: "var(--text-3xs)", color: 'var(--paper-faint)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: "var(--text-3xs)", color: 'var(--paper-dim)' }}>
                   <span>{npPct}%</span>
                   <span>{npHltb}</span>
                 </div>

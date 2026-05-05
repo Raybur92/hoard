@@ -106,7 +106,12 @@ select:focus-visible {
 .t-tnum    { font-feature-settings: 'tnum', 'zero'; font-variant-numeric: tabular-nums; }
 .t-up      { text-transform: uppercase; letter-spacing: 0.08em; }
 .t-dim     { color: var(--paper-dim); }
-.t-faint   { color: var(--paper-faint); }
+/* .t-faint historically used --paper-faint (#6b6f72), which at 4.2:1 on void
+   fails WCAG AA for normal text. Remapped in Phase 8 PR 3 to --paper-dim
+   (~9.4:1) so every existing `.t-faint` usage clears AA without touching
+   markup. The raw `--paper-faint` token is still used for decorative
+   borders / dividers / placeholder strokes where contrast rules don't apply. */
+.t-faint   { color: var(--paper-dim); }
 .t-ghost   { color: var(--paper-ghost); }
 .t-amber   { color: var(--amber); }
 .t-green   { color: var(--green); }
