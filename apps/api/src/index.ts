@@ -60,11 +60,19 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ── Rate limiting ─────────────────────────────────────────────────────
+// Skipped entirely outside production: Playwright runs 5 workers in parallel
+// and burned through the 100/min/IP budget mid-suite, causing later tests to
+// 429 on /api/auth/me — which the frontend reads as auth failure → redirect
+// to /login → snapshot captures login screen instead of the actual route.
+// Rate limiting still matters in production where the load is real users.
+const skipInDev = (): boolean => process.env['NODE_ENV'] !== 'production';
+
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInDev,
   message: { error: 'Too many requests — please try again in a moment' },
 });
 
@@ -73,6 +81,7 @@ const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInDev,
   message: { error: 'Too many authentication attempts — please wait before trying again' },
 });
 
