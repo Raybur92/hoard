@@ -225,10 +225,31 @@ Hard requirement, not a personal-tool nicety. Hoard may be released as a product
 Every font-size in the codebase uses `var(--text-*)` from a constrained 11-step scale (`--text-3xs` 10px → `--text-display` 96px). Floor: interactive text ≥ `--text-xs` (12 px); body content ≥ `--text-sm` (13 px). Receipt internals, barcodes, big-numbers, and the `.plat` 9 px badge are documented exceptions. `--paper-faint` is banned as a *text* color anywhere font-size < 17 px (the `.t-faint` utility class is mapped to `--paper-dim` ≥ 9.4:1 contrast); the raw `--paper-faint` token is still legitimate for decorative borders / dividers. Line-height tokens: `--lh-tight 1.15` / `--lh-snug 1.3` / `--lh-normal 1.5` / `--lh-relaxed 1.7`. Magic-number font-sizes outside the documented exceptions are a regression.
 
 **13. Mobile parity scope (Phase 8 PR 4)**
-Mobile screens are full peers of desktop, with two intentional exceptions: (a) `LibraryMobile` does not have a view-mode toggle (shelves / grid / list) — the mobile viewport is too narrow for the list/grid distinction to be useful; shelves is the only mobile-readable mode. (b) `PlatformDetailMobile` does not show the activity log tab — low-value content that needs lots of vertical space, rarely consulted on mobile. Every other Desktop interaction is wired on Mobile (status picker, notes editor, action buttons, filter chips, sort, scope toggle, sync-frequency picker, etc.). The whole-card-tap pattern is preferred over multi-button rows where viewport is tight.
+Mobile screens are full peers of desktop, with one intentional exception: `PlatformDetailMobile` does not show the activity log tab — low-value content that needs lots of vertical space, rarely consulted on mobile. Every other Desktop interaction is wired on Mobile (status picker, notes editor, action buttons, filter chips, sort, scope toggle, sync-frequency picker, etc.). The whole-card-tap pattern is preferred over multi-button rows where viewport is tight. *(Library view-mode toggle was removed from both desktop and mobile in PR A — see decision 17.)*
 
 **14. Mobile shell is platform-correct (Phase 8 PR 2)**
 No fake / hardcoded chrome. The OS status bar is painted by `apple-mobile-web-app-status-bar-style="black-translucent"`; the app draws no chrome of its own there. Mobile tab bar uses `repeat(4, 1fr)` grid (matching the actual tab count); active tab indicated by both color + 2 px amber top border (color alone fails WCAG H1); press feedback via `:active`; light haptic via `navigator.vibrate?.(8)`; safe-area-inset respected so the home indicator gesture region is clear. `MobileFrame` renders exactly the children — no decorative shell.
+
+**15. HLTB layered fallback chain (Post-8 PR D)**
+Time-to-beat data has no single reliable source — HLTB's official site is bot-protected, the community proxy `hltbapi.codepotatoes.de` is ID-keyed only, and IGDB has its own `time_to_beat` endpoint with sparser coverage. We layer them: `/steam/{steamAppId}` → IGDB `/game_time_to_beats` (separate endpoint, NOT a sub-field on `/games`). For non-Steam games, `scripts/backfill-psn-hltb.ts` does Steam Store title-search to find an `appid` first. `HltbData.source` distinguishes `'hltb'` from `'igdb'`; `Game.hltbId` and `Game.gogAppId` are captured from the codepotatoes.de payload for future deep-links / GOG sync. `howlongtobeat-core` (Feb 2026 npm) is rejected — same fragility profile as the package that already broke once.
+
+**16. Two distinct searches with two distinct shortcuts (Post-8 PR A — D2)**
+TopBar's Cmd-K opens an IGDB-wide global search (can find games the user doesn't own and upcoming releases). The Library page's `/`-shortcut focuses a separate input that queries only the user's owned games (via `/api/games?q=`). Both are honest about scope. Library shelves view drops sort + plat-filter chips entirely (Post-8 PR A — D4) since they only operated on the top-12 per shelf returned by `/api/games/shelves` — those controls live on the filtered single-shelf page where the full set is loaded.
+
+**17. Library view-mode is permanent shelves-only (Post-8 PR A — D5)**
+The view-mode chips (shelves / grid / list) and the corresponding `prefs.libraryView` setting were removed from desktop and mobile. Grid + list layouts were never built; the chip toggle had zero observable effect. `User.libraryView` schema column is kept as a no-op default to avoid a migration. Desktop also lost the `?view=` URL param.
+
+**18. Mobile back buttons + Apple HIG hit areas (Post-8 PR A — D6 + D7)**
+`MobileHeader` defaults `onBack` to `navigate(-1)` when no handler is supplied (was silently dead UI on every Settings + PlatformDetail sub-page). Clickable mobile icons use the `.m-icon-btn` utility — 44×44pt min hit area, transparent default, `:active` press flash, `-webkit-tap-highlight-color: transparent`, paired with `aria-label` and `navigator.vibrate?.(8)`. Apple HIG-compliant touch targets enforced for all bare clickable icons.
+
+**19. Mobile shell viewport lock (Post-8 PR A — D7)**
+`html, body` get `overflow: hidden` + `overscroll-behavior: none` to kill iOS rubber-band of the entire page. Inner scroll surfaces (`.thin-scroll`, `.app-content`, `.app-mobile-content`, `PullableScroll`) get `overscroll-behavior: contain` — keeps native bounce inside the scroll surface but prevents propagation. Header + tab bar stay in place during drag.
+
+**20. Real Upcoming wishlist scope + Path-B persistence (Post-8 PR B — D1)**
+Three real scopes on `/api/igdb/upcoming`: `my-platforms` (IGDB feed, hype-filtered, your platforms), `all` (IGDB feed, hype-filtered, all platforms), `wishlist` (DB read of `WishlistRelease` rows; no hype/platform filter). The wishlist-toggle endpoint persists every IGDB field — `releaseDate`, `platforms`, `synopsis`, `hype`, `category`, `releaseDateCategory` — instead of dropping them. Without this fix, the IGDB-down fallback feed showed wishlisted games as TBA / no platforms even when we'd had the data.
+
+**21. Wipe library scope (Post-8 PR C — D10)**
+`POST /api/auth/me/wipe-library` deletes the user's `UserGame` rows and disconnects every platform (deletes the `Platform` row). **Preserves `Game`, `HltbData`, `WishlistRelease`, account, preferences, login history.** Wipe is destructive but bounded — wishlist and account state survive. Two-step typed-confirmation modal (`WIPE` keyword) mirrors the delete-account flow (`HOARD` keyword); the modal component is generalised via a `variant` prop.
 
 ---
 

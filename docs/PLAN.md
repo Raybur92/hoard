@@ -3,8 +3,8 @@
 > **Scope:** This file covers execution only — phases, deliverables, success criteria, testing, and current status.
 > For project context, design philosophy, tech stack, data model, key decisions, and risks: read `AGENT.md`.
 > For commands, hard rules, and design system reference: read `CLAUDE.md`.
-> Active workstream docs:
-> - `docs/INTERACTION_DEBT_PLAN.md` (drafted 2026-05-06) — post-Phase-8 audit + interaction-debt PR plan.
+> Workstream docs (no active workstream right now):
+> - `docs/INTERACTION_DEBT_PLAN.md` (complete 2026-05-06) — post-Phase-8 audits + 4-PR cleanup. Covers data-flow audit, interaction audit, hot fixes, and PRs A/B/C/D.
 > - `docs/PERFORMANCE_PLAN.md` (complete 2026-05-04) — performance & UX workstream record.
 
 ---

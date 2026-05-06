@@ -301,15 +301,18 @@ All phases complete through Phase 8. App is deployed, accessible (WCAG 2.1 AA), 
 - Steam OpenID on production blocked by missing `API_URL` env var on Railway (discovered 2026-05-06 when Luigi tried to connect his Steam account and Steam redirected him back to `localhost:3001`). [auth.ts:40](../apps/api/src/routes/auth.ts#L40) defaults to `localhost:3001` when `API_URL` is unset; Steam's `return_to` + `realm` are derived from it. Fix: set `API_URL=https://api.gamehoardr.com` in Railway → API service → Variables. Documented in `docs/ENV.md`.
 - Xbox / GOG library sync: stubs returning `[]`. Manual add covers the gap (same approach as Nintendo / Epic).
 - `package.json#prisma` config block is deprecated in Prisma 6.19 — Prisma 7 will require `prisma.config.ts`. Migrate when convenient (warning only, not blocking).
+- HLTB residual gap: ~37% of games have no time-to-beat data in either HLTB or IGDB (older indies, niche regional editions, DLC). Accepted silently per Rule 8.
 - Phase 8 success criteria deferred to pre-launch verification (not blocking):
   - Manual VoiceOver / TalkBack walkthroughs (axe-core covers structural a11y; manual screen-reader passes are pre-launch)
   - WAVE browser-extension audit (covered by axe-core's WCAG 2.1 A + AA tags)
   - Real-device pull-to-refresh test on iPhone + Android Chrome
   - OfflineBanner z-index audit on real devices
-- Phase 8 deferred features (intentional v2 punts, not bugs):
-  - Quick-sync trigger from Sidebar / TopBar (sync currently buried in `Settings → Platforms → {platform}`)
+- Deferred features (intentional v2 punts, not bugs):
+  - Quick-sync trigger from Sidebar / TopBar (Settings → Platforms has a real `sync all` button after PR C, but a sidebar one-click sync would be more discoverable)
   - Page-transition animations on route changes (skipped to preserve the terminal aesthetic's instant-feedback character)
-  - Library view-mode toggle on mobile (mobile too narrow for useful list/grid distinction)
   - Activity-log tab on `PlatformDetailMobile` (low value, lots of vertical space)
+  - PlatformDetail unwired controls (sync-frequency radios, auto-refresh toggle, scope checkboxes, reveal-NPSSO Btn) — kept visible per D11; build the backing User/Platform model fields when ready
+  - Sidebar one-click sync (mentioned above)
 - Pre-existing flaky E2E assertion tests (Pragmata / Death Stranding 2 in Upcoming agenda; ELDEN RING in GameDetail) hard-code titles that vary with the live IGDB feed. Real fix is to assert on selectors / regex patterns rather than literal game names — worth a quick test cleanup pass when convenient.
-- **Interaction debt** — see `docs/INTERACTION_DEBT_PLAN.md` for the full enumerated audit (~20+ unwired controls, 4 stub Settings sections, mobile back-button bug across Settings + PlatformDetail, Upcoming wishlist scope semantics, etc.). PRs A–D are scoped and ready to start.
+- Stub Settings sections (Library / Notifications / Privacy / Data export) currently render `ComingSoonPanel` — full implementations are v2 scope.
+- Possible Upcoming rework (pre-scoped in `docs/INTERACTION_DEBT_PLAN.md` §2.4): wire the `HypeBars` primitive (data already flows through `IgdbUpcomingRelease.hype`); surface `releaseDateCategory` for Q1/Q2 grouping; render `genres[1..n]` badges; persist a top-N upcoming snapshot weekly so Upcoming works fully offline.
