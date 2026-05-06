@@ -157,26 +157,66 @@ Each decision below was made during the planning conversation on 2026-05-06.
 | **D10** | **Wipe library = delete UserGames + disconnect platforms only.** Preserves `Game`, `HltbData`, `WishlistRelease`, account, preferences, login history. Two-step confirmation modal with required typed string ("wipe my library"), mirroring delete-account pattern. | Per Andrea's call: "should not affect Upcoming or anything wishlist related" |
 | **D11** | **PlatformDetail unwired controls stay in place.** Sync-frequency radios, auto-refresh toggle, scope checkboxes, reveal NPSSO Btn — all kept visible but unwired in PR A. Real wiring deferred to a future workstream alongside the backing User/Platform model fields. | Per Andrea's call: "I want to build the backing model in the future." Documents the gap rather than removing visible promises |
 | **D12** | **HLTB extras + completionist on mobile.** `GameDetailMobile` extends the receipt block to include all three rows (main / extras / completionist) using the existing `kv` pattern. | Data is fetched and stored; mobile parity finishes a Phase 8 PR 4 oversight |
-| **D13** | **HLTB coverage diagnostic before any further fix.** Read-only `scripts/audit-hltb.ts` prints counts of: `Game` rows total, with `steamAppId`, with `HltbData`, broken down by platform (Steam-only, PSN-also, manual). Decides whether the gap is structural (PSN games can't be matched) or operational (fetches failing). | Per Andrea's report: "not all games are showing HLTB" — diagnose before fixing |
+| **D13** | **HLTB layered fallback chain instead of single source.** Diagnostic ran 2026-05-06 — gap split into 269-game operational + 342-game structural. Approach: layer Steam-ID lookup → Steam Store title-search → IGDB `time_to_beat` as a reliable-sources-only chain. Reject `howlongtobeat-core` despite its richer data because of fragility (same risk profile as the npm package we already had break). Capture `hltbId` and `gogAppId` from the codepotatoes.de payload as a bonus — unblocks real HLTB deep-links and future GOG sync. | Honest about source limitations; doesn't introduce bot-prone deps; closes most of the structural gap pragmatically |
 | **D14** | **Upcoming month-strip tabs become functional.** Clicking a month filters featured + agenda + 2-col grid to that month. | Bundled into PR A as a small fix — the tabs are styled like tabs already |
 
 ---
 
 ## 5. PR plan
 
-### PR D — HLTB coverage diagnostic (run first)
+### PR D — HLTB coverage: layered fallback chain
 
-**Goal:** Quantify the HLTB gap.
+**Goal:** Move HLTB-or-equivalent coverage from 34% → as close to 100% as reliable sources allow, without introducing bot-fragile dependencies.
 
-**Deliverable:** `scripts/audit-hltb.ts` — read-only, prints counts. No DB writes. Output decides scope of follow-up fix.
+**Diagnostic completed (2026-05-06):** `scripts/audit-hltb.ts` revealed:
+- 929 total Game rows; 318 (34.2%) have HLTB
+- 579 (62.3%) have a `steamAppId`; only 310 of those have HLTB → **269-game operational gap** (steamAppId present but no HLTB row, easy backfill)
+- 350 (37.7%) have no `steamAppId`; only 8 of those have HLTB → **342-game structural gap** (PSN/Nintendo/Epic/manual)
 
-**Expected outputs:**
-- Total `Game` rows
-- With `steamAppId` (Steam + PSN-with-Steam-Store-match)
-- With `HltbData` row, by source (Steam direct, PSN backfilled via Steam Store, manual-add)
-- Coverage percentage by platform
+**Research findings (codepotatoes.de + alternatives):**
+- codepotatoes.de has **no search endpoint**. All `/search`, `/find`, `/lookup`, `/title`, `/q`, `/games`, `/api/search` paths 404.
+- It does have **three working ID-keyed endpoints**: `/steam/{steamAppId}`, `/gog/{gogAppId}`, `/hltb/{hltbId}`. All return the same payload shape.
+- The payload is **richer than we use** — includes `hltbId` (HLTB's real game id) and `gogAppId` (cross-platform key). Both worth capturing.
+- `howlongtobeat-core` (npm, Feb 2026) reverse-engineers HLTB's bot-protected internal API by fetching session tokens and parsing JS bundles. Search by title works, but the fragility profile is identical to the old `howlongtobeat` package we already had break under us. **Rejected** as a dependency.
+- IGDB has a `time_to_beat` field with `hastily / normally / completely` sub-fields. Not currently requested in our `getGame` / `searchGames` / `getGameBySteamId` field lists ([igdb.ts:146](../apps/api/src/services/igdb.ts#L146)).
 
-**Decision:** based on findings, either ship a one-time backfill, fix a runner bug, or accept the gap (PSN-only / Nintendo / Epic games structurally can't have HLTB without manual Steam Store search).
+**Approach: layered fallback, reliable sources only.**
+
+| Priority | Source | Coverage scope |
+|---|---|---|
+| 1 | `codepotatoes.de/steam/{steamAppId}` *(existing)* | Steam-owned games |
+| 2 | Steam Store title-search → appid → `/steam/{appId}` *(existing PSN backfill pattern)* | Cross-platform games also on Steam (~94% of PSN catalogue) |
+| 3 | **IGDB `time_to_beat` (new)** | Everything else IGDB has data for — closes most of the structural gap |
+
+**Tasks:**
+
+| Step | What | Size |
+|---|---|---|
+| **D1** | Commit `scripts/audit-hltb.ts` | trivial |
+| **D2** | Add `Game.hltbId` (`Int?`) and `Game.gogAppId` (`Int?`) columns. Add `HltbData.source` (`String`, values `'hltb'` / `'igdb'`, default `'hltb'`). One Prisma migration. | small |
+| **D3** | Update `fetchHltbBySteamId` to also return `hltbId` / `gogAppId` from the response. `runSync` and the backfill scripts persist them onto `Game`. Add `fetchHltbByGogId` for future GOG sync. | small |
+| **D4** | Add `time_to_beat.normally` + `time_to_beat.completely` to IGDB field lists. New `igdbTimeToBeatToHltb` mapper. New `fetchHltbWithFallback` orchestrator: tries Steam ID → Steam Store search → IGDB time_to_beat in order. Stores result in HltbData with the right `source`. | medium |
+| **D5** | Backfill: `scripts/backfill-missing-hltb.ts` walks games missing HLTB, runs the layered chain. ~3 req/s rate limit. Logs per-step source. | small |
+| **D6** | Re-run audit; document residual gap (true exclusives that aren't on Steam Store and that IGDB doesn't have time_to_beat for — accept silently per the "HLTB failures must be silent" hard rule). | trivial |
+
+**Schema impact:**
+
+```prisma
+model Game {
+  // existing fields...
+  hltbId    Int?   // HLTB's internal game id (from codepotatoes.de payload)
+  gogAppId  Int?   // GOG App ID (from codepotatoes.de payload, or future GOG sync)
+}
+
+model HltbData {
+  // existing fields...
+  source    String @default("hltb")  // 'hltb' | 'igdb'
+}
+```
+
+**UI impact (handed to PR A):**
+- GameDetail HLTB chip can now deep-link to `https://howlongtobeat.com/game/{hltbId}` when present (real link, not a search-URL fallback).
+- Optional small attribution label "// via igdb" next to time-to-beat numbers when `source === 'igdb'` — defer that styling decision.
 
 ---
 
@@ -277,7 +317,8 @@ Each decision below was made during the planning conversation on 2026-05-06.
 | PR A — Interaction debt | Pending | — | — | Detailed plan in §5. |
 | PR B — Wishlist scope + persistence | Pending | — | — | Detailed plan in §5. |
 | PR C — Sync-all + Wipe library | Pending | — | — | Detailed plan in §5. |
-| PR D — HLTB diagnostic | Pending | — | — | Run first; output decides scope of follow-up fix. |
+| PR D — HLTB diagnostic | Done | — | 2026-05-06 | `scripts/audit-hltb.ts` ran. Findings: 318/929 games have HLTB (34.2%). Gap split: 269 operational (steamAppId present, no HLTB row) + 342 structural (no steamAppId). |
+| PR D — HLTB fallback chain | In progress | — | — | Layered Steam-ID → Steam Store search → IGDB time_to_beat. Schema additions: `Game.hltbId`, `Game.gogAppId`, `HltbData.source`. |
 
 ---
 
