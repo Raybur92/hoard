@@ -49,7 +49,7 @@ The visual language is non-negotiable:
 | Delivery | PWA | Installable on desktop (Chrome) and mobile (Safari/Chrome). `viewport-fit=cover` + `100dvh` + `env(safe-area-inset-*)` for notch / home indicator. |
 | Accessibility | WCAG 2.1 AA enforced | `eslint-plugin-jsx-a11y` blocks regressions in CI; `@axe-core/playwright` runs against every route on every PR; Lighthouse Accessibility threshold ≥ 95. |
 | Game metadata | IGDB via Twitch OAuth | Covers search, upcoming releases, cover art |
-| How Long to Beat | `hltbapi.codepotatoes.de` community REST API | `/steam/{appId}` endpoint; requires Game.steamAppId |
+| How Long to Beat | `hltbapi.codepotatoes.de` (HLTB community proxy) + IGDB `/game_time_to_beats` fallback | Layered chain: Steam-ID → IGDB time_to_beat. Captures `Game.hltbId` + `Game.gogAppId` from the codepotatoes.de payload. |
 | Steam library | Steam Web API (`IPlayerService/GetOwnedGames`) | Via OpenID OAuth |
 | PSN library | `psn-api` npm + NPSSO token | User pastes token from browser cookies |
 | Xbox library | OpenXBL API | Requires API key from user |
@@ -152,8 +152,10 @@ Platform
 Game
   id, igdbId (unique), title, developer
   steamAppId (unique, nullable) — populated during Steam sync; used for HLTB lookups
+  hltbId (nullable) — HLTB internal game id; captured from codepotatoes.de payload; enables real HLTB deep-link
+  gogAppId (nullable) — captured from codepotatoes.de payload; future GOG sync key
   releaseYear, genres: String[]
-  coverUrl (from IGDB), metadata: JSON
+  coverUrl (from IGDB), metadata: JSON  [metadata field is currently unused — flagged for cleanup]
 
 UserGame
   id, userId, gameId
@@ -165,6 +167,7 @@ UserGame
 HltbData
   id, gameId (unique)
   mainStory, mainExtras, completionist (all in minutes)
+  source: 'hltb' | 'igdb' (default 'hltb') — distinguishes HLTB community data from IGDB time_to_beat fallback
   fetchedAt (refreshed every 30 days)
 
 WishlistRelease
@@ -257,7 +260,16 @@ Do not build these in v1, even if they seem small:
 
 **IGDB:** Twitch OAuth client credentials (token cached server-side, refreshed on expiry). Rate limit: 4 req/s on free tier. All IGDB responses must be cached (LRU, 5-minute TTL for search, 24-hour for upcoming). Used for: game search, metadata, cover art, upcoming releases feed.
 
-**HowLongToBeat:** Uses the community REST API at `hltbapi.codepotatoes.de` — endpoint `/steam/{steamAppId}` returns `mainStory`, `mainStoryWithExtras`, `completionist` in hours. Requires `Game.steamAppId` to be populated. The `howlongtobeat` npm package is dead (HLTB changed their API to require a bot-protected key). Fetch triggered in the background when a `UserGame` is created or status changes to `Playing`/`Backlog`. Result stored in `HltbData`. If the fetch fails for any reason, store `null` and show "—" in the UI. Never block a user action on HLTB availability. Games without a `steamAppId` (non-Steam games) will not have HLTB data.
+**HowLongToBeat:** Layered fallback chain (post-Phase-8 PR D, 2026-05-06):
+
+1. **`hltbapi.codepotatoes.de/steam/{steamAppId}`** — community proxy keyed by Steam App ID. Returns `mainStory`, `mainStoryWithExtras`, `completionist` in hours, plus `hltbId` and `gogAppId` (captured onto Game). Requires `Game.steamAppId` to be set.
+2. **IGDB `/game_time_to_beats`** — IGDB's own dedicated time-to-beat endpoint, keyed by `game_id`. NOT a sub-field on `/games` — common gotcha. Returns `hastily / normally / completely` in seconds. We map `normally → mainStory`, `completely → completionist`, no `mainExtras` equivalent. Fallback used when path 1 returns nothing.
+
+For non-Steam games (PSN/Nintendo/Epic/manual), `scripts/backfill-psn-hltb.ts` runs Steam Store title-search → if a match is found, the game gets a `steamAppId` and re-enters path 1.
+
+The original `howlongtobeat` npm package is dead (HLTB rolled out Cloudflare bot protection requiring per-request tokens). The newer `howlongtobeat-core` (Feb 2026) reverse-engineers the bot-protected internal API and was rejected for the same fragility profile that already broke the previous package.
+
+Fetch triggered in the background when a `UserGame` is created or status changes to `Playing`/`Backlog`. Result stored in `HltbData` with `source: 'hltb' | 'igdb'`. If every layer fails, store nothing and show "—" in the UI. Never block a user action on HLTB availability. The residual structural gap (titles in neither HLTB nor IGDB) is accepted silently.
 
 ---
 
@@ -266,7 +278,7 @@ Do not build these in v1, even if they seem small:
 | Risk | What to watch for |
 |---|---|
 | PSN NPSSO token format changes | Pin `psn-api` version. If sync breaks, users re-enter their token. |
-| HLTB API changes | `hltbapi.codepotatoes.de` is community-maintained — it may go down or change. Silent failure path is in place. Show "—", never an error. If it breaks, the fallback is null HltbData. |
+| HLTB API changes | `hltbapi.codepotatoes.de` is community-maintained — it may go down or change. Silent failure path is in place; IGDB `/game_time_to_beats` covers as a secondary fallback. If both break, store nothing and show "—". |
 | IGDB rate limit | LRU cache is mandatory, not optional. Batch requests where possible. |
 | GOG API instability | Degrade to manual-add gracefully if OAuth flow fails. |
 | OpenXBL paid tier required | Validate whether free tier returns full library before implementing. |
