@@ -26,11 +26,17 @@ jest.mock('@hoard/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
       deleteMany: jest.fn(),
     },
     platform: {
       upsert: jest.fn(),
+      deleteMany: jest.fn(),
     },
+    userGame: {
+      deleteMany: jest.fn(),
+    },
+    $transaction: jest.fn(),
   },
 }));
 
@@ -384,5 +390,40 @@ describe('GET /api/auth/google/callback — connect mode', () => {
       expect.objectContaining({ data: expect.objectContaining({ googleId: 'g-999' }) }),
     );
     expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+});
+
+/* ── wipe-library (PR C — D10) ── */
+
+describe('POST /api/auth/me/wipe-library', () => {
+  it('deletes UserGames and Platforms in a transaction; returns counts', async () => {
+    (prisma.$transaction as jest.Mock).mockResolvedValue([
+      { count: 488 }, // UserGame deleteMany
+      { count: 2 },   // Platform deleteMany
+    ]);
+
+    const res = await request(app)
+      .post('/api/auth/me/wipe-library')
+      .set('Cookie', makeSessionCookie('test-user-id'));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true, gamesDeleted: 488, platformsDisconnected: 2 });
+
+    // The transaction received the two deleteMany calls — covered by the
+    // mock above. Confirms the route went through prisma.$transaction.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not touch User, Game, HltbData, or WishlistRelease tables', async () => {
+    (prisma.$transaction as jest.Mock).mockResolvedValue([{ count: 0 }, { count: 0 }]);
+
+    await request(app)
+      .post('/api/auth/me/wipe-library')
+      .set('Cookie', makeSessionCookie('test-user-id'));
+
+    // Per D10: wipe-library is library + platforms only. Account, prefs,
+    // wishlist, and shared Game/HltbData rows must stay.
+    expect(prisma.user.delete).not.toHaveBeenCalled();
+    expect(prisma.user.deleteMany).not.toHaveBeenCalled();
   });
 });

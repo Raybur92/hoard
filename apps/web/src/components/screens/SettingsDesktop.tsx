@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -51,9 +51,19 @@ export function SettingsDesktop() {
   const { user } = useUser();
   const [platforms, setPlatforms] = useState<PlatformDetail[]>([]);
 
-  useEffect(() => {
-    void api.platformStatus().then((r) => setPlatforms(r.platforms)).catch(() => null);
+  const refetchPlatforms = useCallback(async (): Promise<PlatformDetail[]> => {
+    try {
+      const r = await api.platformStatus();
+      setPlatforms(r.platforms);
+      return r.platforms;
+    } catch {
+      return [];
+    }
   }, []);
+
+  useEffect(() => {
+    void refetchPlatforms();
+  }, [refetchPlatforms]);
 
   return (
     <>
@@ -62,7 +72,7 @@ export function SettingsDesktop() {
         <SettingsNav active={navSection} />
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '28px 40px 40px', maxWidth: 880 }}>
           {section === 'account'       && <AccountSection user={user} />}
-          {section === 'platforms'     && <PlatformsSection platforms={platforms} />}
+          {section === 'platforms'     && <PlatformsSection platforms={platforms} refetch={refetchPlatforms} />}
           {section === 'appearance'    && <AppearanceSection />}
           {section === 'danger'        && <DangerSection user={user} />}
           {section === 'library'       && <StubSection title="library" />}
@@ -210,7 +220,7 @@ const PLATFORM_META: Array<{
   { code: 'EP', name: 'Epic Games',       syncable: false, via: 'manual import only' },
 ];
 
-function PlatformsSection({ platforms }: { platforms: PlatformDetail[] }) {
+function PlatformsSection({ platforms, refetch }: { platforms: PlatformDetail[]; refetch: () => Promise<PlatformDetail[]> }) {
   const navigate = useNavigate();
   const connectedCodes = new Set(platforms.map((p) => p.code));
 
@@ -218,6 +228,47 @@ function PlatformsSection({ platforms }: { platforms: PlatformDetail[] }) {
   const available = PLATFORM_META.filter((m) => !connectedCodes.has(m.code as PlatformCode));
 
   const getDetail = (code: string) => platforms.find((p) => p.code === code);
+
+  // PR C — C3: sync-all kicks off every connected, syncable platform's sync
+  // in parallel, then polls platform-status every 2s until none are 'syncing'.
+  // The button is disabled while a sync is running. aria-live updates a
+  // status message ("// syncing 2 platforms…" → "// done — synced").
+  const [syncing, setSyncing] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
+  const syncableConnected = platforms.filter((p) => p.syncable);
+
+  async function handleSyncAll() {
+    if (syncableConnected.length === 0 || syncing) return;
+    setSyncing(true);
+    setLiveStatus(`// syncing ${syncableConnected.length} platforms…`);
+
+    // Kick off every sync in parallel — the route is fire-and-forget so each
+    // call returns ~immediately after marking the platform as 'syncing'.
+    await Promise.all(
+      syncableConnected.map((p) => api.syncPlatform(p.code).catch(() => null)),
+    );
+
+    // Poll until nothing is still 'syncing'. Cap at ~60s per platform.
+    const maxAttempts = 30;
+    let attempts = 0;
+    while (attempts < maxAttempts) {
+      attempts++;
+      await new Promise((r) => setTimeout(r, 2000));
+      const fresh = await refetch();
+      const stillSyncing = fresh.filter((p) => p.syncStatus === 'syncing');
+      if (stillSyncing.length === 0) break;
+    }
+
+    const final = await refetch();
+    const errored = final.filter((p) => p.syncStatus === 'error');
+    setLiveStatus(
+      errored.length > 0
+        ? `// done — ${errored.length} failed (${errored.map((p) => p.code).join(', ')})`
+        : '// done — all platforms synced',
+    );
+    setSyncing(false);
+    setTimeout(() => setLiveStatus(null), 6000);
+  }
 
   return (
     <>
@@ -228,8 +279,28 @@ function PlatformsSection({ platforms }: { platforms: PlatformDetail[] }) {
             platforms
           </div>
         </div>
-        <Btn sm><Icon name="refresh" size={11} /> sync all</Btn>
+        <Btn sm onClick={() => void handleSyncAll()} disabled={syncing || syncableConnected.length === 0}>
+          <Icon name="refresh" size={11} /> {syncing ? 'syncing…' : 'sync all'}
+        </Btn>
       </div>
+
+      {liveStatus && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="t-mono"
+          style={{
+            marginTop: 14,
+            padding: '8px 12px',
+            border: '1px solid var(--rule-bright)',
+            color: liveStatus.includes('failed') ? 'var(--red)' : 'var(--paper-dim)',
+            fontSize: 'var(--text-2xs)',
+            letterSpacing: '0.1em',
+          }}
+        >
+          {liveStatus}
+        </div>
+      )}
 
       <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {connected.map((meta) => {
@@ -416,18 +487,36 @@ function AppearanceSection() {
 
 function DangerSection({ user }: { user: AuthUser | null }) {
   const navigate = useNavigate();
-  const [confirmText, setConfirmText] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const confirmed = confirmText === 'HOARD';
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showWipeModal, setShowWipeModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [wipeConfirm, setWipeConfirm] = useState('');
+  const [working, setWorking] = useState<null | 'delete' | 'wipe'>(null);
+  const [wipeResult, setWipeResult] = useState<string | null>(null);
 
   async function handleDelete() {
-    setDeleting(true);
+    setWorking('delete');
     try {
       await api.deleteAccount();
       navigate('/login');
     } catch {
-      setDeleting(false);
+      setWorking(null);
+    }
+  }
+
+  async function handleWipe() {
+    setWorking('wipe');
+    try {
+      const r = await api.wipeLibrary();
+      setShowWipeModal(false);
+      setWipeConfirm('');
+      setWipeResult(`// ${r.gamesDeleted} games removed · ${r.platformsDisconnected} platforms disconnected`);
+      // Auto-clear the toast after a few seconds
+      setTimeout(() => setWipeResult(null), 5000);
+    } catch {
+      // leave modal open — user can retry or cancel
+    } finally {
+      setWorking(null);
     }
   }
 
@@ -441,13 +530,19 @@ function DangerSection({ user }: { user: AuthUser | null }) {
         irreversible actions. read carefully.
       </div>
 
+      {wipeResult && (
+        <div role="status" aria-live="polite" className="t-mono" style={{ marginTop: 18, padding: '10px 14px', border: '1px solid var(--green)', color: 'var(--green)', fontSize: 'var(--text-2xs)', letterSpacing: '0.1em' }}>
+          {wipeResult}
+        </div>
+      )}
+
       <div style={{ marginTop: 28 }}>
         <SettingsRow
           label="wipe library"
-          hint="delete all tracked games, statuses, ratings, and notes. platform connections stay."
+          hint="delete all tracked games, statuses, ratings, and notes. disconnects every platform. wishlist, account, and preferences stay."
           danger
         >
-          <Btn sm style={{ color: 'var(--red)', borderColor: 'var(--red)' }}>
+          <Btn sm style={{ color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => setShowWipeModal(true)}>
             <Icon name="trash" size={10} /> wipe library
           </Btn>
         </SettingsRow>
@@ -457,38 +552,66 @@ function DangerSection({ user }: { user: AuthUser | null }) {
           hint="permanently erases your account and all data. cannot be undone."
           danger
         >
-          <Btn sm style={{ color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => setShowModal(true)}>
+          <Btn sm style={{ color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => setShowDeleteModal(true)}>
             <Icon name="trash" size={10} /> delete account
           </Btn>
         </SettingsRow>
       </div>
 
-      {showModal && (
-        <DeleteModal
-          userName={user?.name ?? 'your account'}
-          confirmText={confirmText}
-          confirmed={confirmed}
-          deleting={deleting}
-          onTextChange={setConfirmText}
+      {showDeleteModal && (
+        <ConfirmModal
+          variant="delete-account"
+          subject={user?.name ?? 'your account'}
+          confirmKeyword="HOARD"
+          confirmText={deleteConfirm}
+          working={working === 'delete'}
+          onTextChange={setDeleteConfirm}
           onConfirm={() => void handleDelete()}
-          onCancel={() => { setShowModal(false); setConfirmText(''); }}
+          onCancel={() => { setShowDeleteModal(false); setDeleteConfirm(''); }}
+        />
+      )}
+
+      {showWipeModal && (
+        <ConfirmModal
+          variant="wipe-library"
+          subject="your library"
+          confirmKeyword="WIPE"
+          confirmText={wipeConfirm}
+          working={working === 'wipe'}
+          onTextChange={setWipeConfirm}
+          onConfirm={() => void handleWipe()}
+          onCancel={() => { setShowWipeModal(false); setWipeConfirm(''); }}
         />
       )}
     </>
   );
 }
 
-interface DeleteModalProps {
-  userName: string;
+interface ConfirmModalProps {
+  variant: 'delete-account' | 'wipe-library';
+  subject: string;
+  confirmKeyword: string;
   confirmText: string;
-  confirmed: boolean;
-  deleting: boolean;
+  working: boolean;
   onTextChange: (v: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange, onConfirm, onCancel }: DeleteModalProps) {
+function ConfirmModal({ variant, subject, confirmKeyword, confirmText, working, onTextChange, onConfirm, onCancel }: ConfirmModalProps) {
+  const confirmed = confirmText === confirmKeyword;
+  const isDelete = variant === 'delete-account';
+  const titleId = `${variant}-modal-title`;
+  const headline = isDelete
+    ? <>delete {subject}<br />and everything in it.</>
+    : <>wipe {subject}<br />but keep the account.</>;
+  const description = isDelete
+    ? 'this will permanently erase your hoard. there is no recovery, no soft-delete window, no support ticket that brings it back.'
+    : 'deletes every tracked game, status, rating, and note. disconnects every connected platform. your wishlist, account, and preferences stay. you can re-sync from scratch afterwards.';
+  const cancelLabel = isDelete ? 'cancel · keep my hoard' : 'cancel · keep my library';
+  const confirmLabel = isDelete
+    ? (working ? 'deleting…' : 'delete forever')
+    : (working ? 'wiping…' : 'wipe library');
   const trapRef = useFocusTrap<HTMLDivElement>(true);
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
@@ -496,7 +619,7 @@ function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange,
     return () => document.removeEventListener('keydown', onKey);
   }, [onCancel]);
   return (
-    <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby="delete-account-title" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <button type="button" aria-label="Close" onClick={onCancel} style={{ position: 'absolute', inset: 0, background: 'rgba(8,9,10,0.72)', border: 'none', cursor: 'default' }} />
       <div className="panel" style={{
         position: 'relative',
@@ -519,16 +642,16 @@ function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange,
               // destructive · permanent · cannot be undone
             </span>
           </div>
-          <h2 id="delete-account-title" className="t-display" style={{ fontSize: 26, marginTop: 14, color: 'var(--paper)', letterSpacing: '-0.01em', lineHeight: 1.1, margin: '14px 0 0', fontWeight: 'normal' }}>
-            delete {userName}<br />and everything in it.
+          <h2 id={titleId} className="t-display" style={{ fontSize: 26, marginTop: 14, color: 'var(--paper)', letterSpacing: '-0.01em', lineHeight: 1.1, margin: '14px 0 0', fontWeight: 'normal' }}>
+            {headline}
           </h2>
           <div style={{ marginTop: 16, fontSize: "var(--text-xs)", color: 'var(--paper-dim)', lineHeight: 1.55 }}>
-            this will permanently erase your hoard. there is no recovery, no soft-delete window, no support ticket that brings it back.
+            {description}
           </div>
 
           <div style={{ marginTop: 22 }}>
             <div className="t-up" style={{ fontSize: "var(--text-3xs)", letterSpacing: '0.12em', color: 'var(--paper-dim)' }}>
-              // type <span style={{ color: 'var(--red)' }}>HOARD</span> to confirm
+              // type <span style={{ color: 'var(--red)' }}>{confirmKeyword}</span> to confirm
             </div>
             <input
               className="field"
@@ -548,8 +671,8 @@ function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange,
                 padding: '0 12px',
                 outline: 'none',
               }}
-              placeholder="type HOARD"
-              maxLength={5}
+              placeholder={`type ${confirmKeyword}`}
+              maxLength={confirmKeyword.length}
             />
             {confirmed && (
               <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -564,15 +687,15 @@ function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange,
               onClick={onCancel}
               style={{ flex: 1, height: 44, fontSize: "var(--text-xs)", background: 'var(--paper)', color: 'var(--void)', border: '1px solid var(--paper)' }}
             >
-              <Icon name="back" size={12} style={{ color: 'var(--void)' }} /> cancel · keep my hoard
+              <Icon name="back" size={12} style={{ color: 'var(--void)' }} /> {cancelLabel}
             </button>
             <button
               className="btn"
-              disabled={!confirmed || deleting}
+              disabled={!confirmed || working}
               onClick={onConfirm}
-              style={{ height: 38, fontSize: "var(--text-2xs)", color: 'var(--red)', borderColor: 'var(--red)', background: 'transparent', opacity: (confirmed && !deleting) ? 1 : 0.4 }}
+              style={{ height: 38, fontSize: "var(--text-2xs)", color: 'var(--red)', borderColor: 'var(--red)', background: 'transparent', opacity: (confirmed && !working) ? 1 : 0.4 }}
             >
-              <Icon name="trash" size={11} /> {deleting ? 'deleting…' : 'delete forever'}
+              <Icon name="trash" size={11} /> {confirmLabel}
             </button>
           </div>
         </div>

@@ -2,7 +2,13 @@
 
 > **Scope:** Drafted 2026-05-06 after the Phase 8 close, triggered by friend Luigi's first real-world test. Captures three things: (1) the hot fixes that shipped immediately when bugs surfaced, (2) two systematic audits (data-flow source→schema→UI map, and an interaction-by-interaction sweep across every screen), (3) the locked PR plan to clear the interaction debt before the next feature workstream (Upcoming rework).
 >
-> **Status:** **Audits complete; hot fixes shipped; PRs A–D pending start.** Hot fixes (PSN status logic + Steam connect 404 + Library single-shelf filter+sort) landed same day. PR D (HLTB diagnostic) is the next action.
+> **Status:** **Workstream complete (2026-05-06).** All four PRs landed same day after the audits + hot fixes:
+> - PR D — HLTB layered fallback chain (coverage 34% → 63%)
+> - PR A — Interaction debt cleanup (9 items)
+> - PR B — Real wishlist scope + Path-B persistence fix
+> - PR C — Sync-all + wipe-library with feedback
+>
+> Total: 129 API + 69 web tests pass. Lint clean. Production matches code.
 >
 > **Why a separate doc:** `docs/PLAN.md` covers feature phases and is already large. `docs/PERFORMANCE_PLAN.md` set the precedent for capturing a focused workstream as a permanent record. This file follows that template.
 
@@ -296,7 +302,7 @@ model HltbData {
 
 ---
 
-### PR C — Sync-all + Wipe library
+### PR C — Sync-all + Wipe library ✅ Done 2026-05-06
 
 **Goal:** Wire two Settings actions properly with full feedback.
 
@@ -318,7 +324,7 @@ model HltbData {
 | Interaction audit | Done | — | 2026-05-06 | §3 of this doc. |
 | PR A — Interaction debt | Done | — | 2026-05-06 | All 9 items shipped. **A4** mobile back default to navigate(-1) + 44pt hit areas via new `.m-icon-btn`. **A5** body+inner overscroll-behavior locks the mobile shell against rubber-band. **A3** dropped sort/plat-filter/view-mode chips from Library shelves view + removed the orphaned libraryView setting. **A1** real `<input>` + `?q=` server endpoint already supported it; `/` shortcut focuses on /library*. **A2** Cmd-K already wired (audit was wrong). **A6/A7** ComingSoonPanel for 4 stub Settings sections + V2 markers on Account visibility/sessions. **A8** HLTB extras + completionist on GameDetailMobile receipt. **A9** Dashboard `see full upcoming feed` → real `<Link>`; now-playing `resume`/`+note` wired (deleted unsupported `log session`); GameDetail HLTB chip → real `<a>` to `howlongtobeat.com/game/{hltbId}` (or search-URL fallback); GameDetailDesktop gets back chip; Upcoming month-strip tabs functional (filter featured + agenda by month, "all" pseudo-tab clears). 125 API + 69 web tests pass; lint clean. |
 | PR B — Wishlist scope + persistence | Done | — | 2026-05-06 | Real `?scope=wishlist` on `/api/igdb/upcoming` reads persisted `WishlistRelease` rows directly (no IGDB round trip, no hype filter). New `getReleaseDetails(igdbId)` IGDB helper returns the full release shape; the wishlist-toggle endpoint now persists `releaseDate` / `platforms` / `synopsis` / `hype` / `category` / `releaseDateCategory` instead of dropping them. Migration `20260506160000_wishlist_release_category` adds `WishlistRelease.category` column. New `scripts/backfill-wishlist-fields.ts` re-fetched the 7 existing impoverished rows from IGDB; 7/7 updated successfully. Frontend: `UpcomingScope` widened to `'my-platforms' \| 'all' \| 'wishlist'` (3 real chips), wishlist count read separately so it stays honest regardless of active scope, empty-state copy updated for the new scope. 127 API + 69 web tests pass; new tests for the wishlist-scope endpoint + the persistence-shape assertion. |
-| PR C — Sync-all + Wipe library | Pending | — | — | Detailed plan in §5. |
+| PR C — Sync-all + Wipe library | Done | — | 2026-05-06 | **Sync-all** wired on Settings → Platforms (desktop): kicks off every connected, syncable platform's sync in parallel via the existing fire-and-forget `POST /api/platforms/:code/sync`, then polls `platformStatus` every 2s until none are `syncing` (capped 60s/platform). Button enters `syncing…` state; aria-live status panel transitions `// syncing N platforms…` → `// done — all platforms synced` (or `// done — N failed (codes…)` on error). Mobile already syncs per-platform via PlatformDetailMobile. **Wipe library** new endpoint `POST /api/auth/me/wipe-library` deletes the user's UserGames + Platforms in a transaction, preserves Game/HltbData/WishlistRelease/account/preferences. Frontend: existing DeleteModal generalised to `ConfirmModal` (variant prop = `'delete-account'` \| `'wipe-library'`); typed-string confirmation matches delete-account pattern (`HOARD` for account, `WIPE` for library). Mobile inline equivalent on Settings → Danger zone. Both desktop + mobile show a green aria-live success toast `// N games removed · M platforms disconnected`. 129 API + 69 web tests pass. |
 | PR D — HLTB diagnostic | Done | — | 2026-05-06 | `scripts/audit-hltb.ts` ran. Findings: 318/929 games have HLTB (34.2%). Gap split: 269 operational (steamAppId present, no HLTB row) + 342 structural (no steamAppId). |
 | PR D — HLTB fallback chain | Done | — | 2026-05-06 | Migration `20260506140000_game_hltb_id_gog_id_hltb_source` applied (`Game.hltbId`, `Game.gogAppId`, `HltbData.source`). New `getTimeToBeat(igdbId)` in igdb.ts hits the dedicated `/game_time_to_beats` endpoint (mid-PR correction — was initially attempted as a sub-field on `/games`, which IGDB silently omits). New `fetchHltbWithFallback` orchestrator (Steam-ID → IGDB time_to_beat). New `scripts/backfill-missing-hltb.ts` ran end-to-end: 46 HLTB-sourced + 218 IGDB-sourced (264 new rows). **Coverage moved 318/929 → 586/929 (34.2% → 63.1%).** Residual gap of 343 games where neither source has data — accepted silently per Rule 8. |
 

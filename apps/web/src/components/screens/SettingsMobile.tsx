@@ -44,6 +44,9 @@ export function SettingsMobile() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [wipeConfirm, setWipeConfirm] = useState('');
+  const [wiping, setWiping] = useState(false);
+  const [wipeResult, setWipeResult] = useState<string | null>(null);
   const { prefs, updatePref } = usePreferences();
 
   useEffect(() => {
@@ -325,6 +328,7 @@ export function SettingsMobile() {
 
   if (section === 'danger') {
     const deleteReady = deleteConfirm === 'HOARD';
+    const wipeReady = wipeConfirm === 'WIPE';
 
     async function handleDelete() {
       setDeleting(true);
@@ -336,17 +340,49 @@ export function SettingsMobile() {
       }
     }
 
+    async function handleWipe() {
+      setWiping(true);
+      try {
+        const r = await api.wipeLibrary();
+        setWipeConfirm('');
+        setWipeResult(`// ${r.gamesDeleted} games removed · ${r.platformsDisconnected} platforms disconnected`);
+        setTimeout(() => setWipeResult(null), 5000);
+      } catch { /* leave editor visible — user can retry */ }
+      setWiping(false);
+    }
+
     return (
       <>
         {backHeader('danger zone', '// settings')}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 16px 24px' }}>
+          {wipeResult && (
+            <div role="status" aria-live="polite" className="t-mono" style={{ marginBottom: 14, padding: '8px 12px', border: '1px solid var(--green)', color: 'var(--green)', fontSize: 'var(--text-3xs)', letterSpacing: '0.1em' }}>
+              {wipeResult}
+            </div>
+          )}
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
             <div style={{ fontSize: "var(--text-sm)", color: 'var(--red)' }}>wipe library</div>
             <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4, lineHeight: 1.4 }}>
-              delete all tracked games and statuses. platform connections stay.
+              delete every tracked game and disconnect every platform. wishlist, account, and preferences stay.
             </div>
-            <Btn sm style={{ marginTop: 10, color: 'var(--red)', borderColor: 'var(--red)' }}>
-              <Icon name="trash" size={10} /> wipe library
+            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 14 }}>
+              // type <span style={{ color: 'var(--red)' }}>WIPE</span> to confirm
+            </div>
+            <input
+              className="field"
+              style={{ marginTop: 8, fontSize: "var(--text-sm)", letterSpacing: '0.14em', width: '100%' }}
+              value={wipeConfirm}
+              onChange={(e) => setWipeConfirm(e.target.value.toUpperCase())}
+              placeholder="WIPE"
+              maxLength={4}
+              aria-label="Type WIPE to confirm wiping the library"
+            />
+            <Btn
+              sm
+              style={{ marginTop: 10, color: 'var(--red)', borderColor: 'var(--red)', opacity: (wipeReady && !wiping) ? 1 : 0.4 }}
+              {...(wipeReady && !wiping ? { onClick: () => void handleWipe() } : {})}
+            >
+              <Icon name="trash" size={10} /> {wiping ? 'wiping…' : 'wipe library'}
             </Btn>
           </div>
           <div style={{ padding: '14px 0' }}>

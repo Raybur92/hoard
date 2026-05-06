@@ -178,6 +178,7 @@ WishlistRelease
   coverUrl: String | null
   synopsis: String | null
   hype: Int | null
+  category: Int @default(0) — IGDB category (0=main_game, 2=DLC, 8=remake) — drives DLC/remake chip on Upcoming
   userId (tracks whether this user is tracking it)
 ```
 

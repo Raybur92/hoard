@@ -161,6 +161,14 @@ export const api = {
     return r;
   },
 
+  wipeLibrary: async () => {
+    const r = await post<{ ok: boolean; gamesDeleted: number; platformsDisconnected: number }>('/api/auth/me/wipe-library');
+    // After a wipe everything that was scoped to the user's library is gone —
+    // dashboard, shelves, counts, platform status all need re-fetching.
+    cache.invalidate('');
+    return r;
+  },
+
   // platforms
   platformStatus: () =>
     get<PlatformStatusResponse>('/api/platforms/status'),

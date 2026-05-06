@@ -193,6 +193,27 @@ router.delete('/auth/me', requireUser, async (req: Request, res: Response): Prom
   res.json({ ok: true });
 });
 
+// POST /api/auth/me/wipe-library — reset library state without deleting account
+//
+// Per PR C decision (D10): deletes the user's UserGame rows and Platform
+// rows (matching the per-platform disconnect endpoint, which also deletes
+// the row rather than nulling credentials). Preserves Game, HltbData,
+// WishlistRelease, account, preferences, login history. Caller must confirm
+// via the typed-string modal just like delete-account; the route trusts that
+// and only sees the userId.
+router.post('/auth/me/wipe-library', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const userId = req.userId;
+  const [deletedGames, deletedPlatforms] = await prisma.$transaction([
+    prisma.userGame.deleteMany({ where: { userId } }),
+    prisma.platform.deleteMany({ where: { userId } }),
+  ]);
+  res.json({
+    ok: true,
+    gamesDeleted: deletedGames.count,
+    platformsDisconnected: deletedPlatforms.count,
+  });
+});
+
 /* ── Google OAuth ── */
 
 const GOOGLE_CLIENT_ID = process.env['GOOGLE_CLIENT_ID'] ?? '';
