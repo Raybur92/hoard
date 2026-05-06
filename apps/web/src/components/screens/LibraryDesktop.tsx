@@ -271,12 +271,20 @@ export function LibraryDesktop() {
       return (
         <>
           <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam ?? '').toLowerCase()]} />
-          <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div className="skel" style={{ width: 88, height: 24 }} />
             <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
             <div className="skel" style={{ width: 80, height: 12 }} />
             <div className="skel" style={{ width: 60, height: 11 }} />
+            <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
+            <div className="skel" style={{ width: 28, height: 11 }} />
+            <div className="skel" style={{ width: 38, height: 22 }} />
+            <div className="skel" style={{ width: 32, height: 22 }} />
+            <div className="skel" style={{ width: 32, height: 22 }} />
+            <div className="skel" style={{ width: 32, height: 22 }} />
+            <div className="skel" style={{ width: 32, height: 22 }} />
             <span style={{ flex: 1 }} />
+            <div className="skel" style={{ width: 110, height: 14 }} />
             <div className="skel" style={{ width: 96, height: 24 }} />
           </div>
           <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px' }}>
@@ -342,14 +350,30 @@ export function LibraryDesktop() {
     return (
       <>
         <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam).toLowerCase()]} />
-        <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Btn sm onClick={() => navigate('/library')}>
             <Icon name="back" size={10} /> shelves
           </Btn>
           <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
           <span className="t-up" style={{ fontSize: "var(--text-2xs)", color: accent }}>{cfg?.name ?? statusParam}</span>
           <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {items.length} titles</span>
+          <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
+          <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
+          <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
+          <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')} ariaLabel="Filter by Steam"><Plat code="ST" /></Chip>
+          <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')} ariaLabel="Filter by PlayStation"><Plat code="PS" /></Chip>
+          <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')} ariaLabel="Filter by Xbox"><Plat code="XB" /></Chip>
+          <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')} ariaLabel="Filter by GOG"><Plat code="GG" /></Chip>
           <span style={{ flex: 1 }} />
+          <button
+            type="button"
+            className="t-mono t-faint"
+            aria-label={`Sort by ${SORT_LABELS[sortBy]}, click to change`}
+            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit', color: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}
+            onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}
+          >
+            sort: {SORT_LABELS[sortBy]} <Icon name="arrowD" size={10} />
+          </button>
           <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
             <Icon name="plus" size={10} /> add game
           </Btn>
