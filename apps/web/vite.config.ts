@@ -12,6 +12,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        // Activate new SW immediately on deploy instead of waiting for every
+        // tab to close. Required so users actually receive bug fixes without
+        // having to hard-refresh — see Luigi's Steam-connect 404 incident.
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             // Stale-while-revalidate for shell endpoints fired on every nav.
