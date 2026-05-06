@@ -15,12 +15,12 @@ npm run dev:web      # frontend only
 npm run dev:api      # backend only
 
 # Quality
-npm run typecheck    # TypeScript check across all packages
-npm run lint         # ESLint + Prettier across all packages
-npm run test         # all tests (Vitest + Jest)
-npm run test:web     # Vitest (frontend unit + component)
-npm run test:api     # Jest + Supertest (backend integration)
-npm run test:e2e     # Playwright E2E
+npm run typecheck                          # TypeScript check across all packages
+npm run lint                               # ESLint + Prettier across all packages
+npm run test                               # all tests (Vitest + Jest, both workspaces)
+npm run test --workspace=apps/api          # Jest + Supertest only (backend integration)
+npm run test --workspace=apps/web          # Vitest only (frontend unit + component)
+npm run test:e2e                           # Playwright E2E
 
 # Database
 npx prisma migrate dev        # create + apply migration (packages/db)
@@ -36,7 +36,8 @@ npx prisma db seed            # seed with mock data
 | What | Where |
 |---|---|
 | Execution plan + phase status | `docs/PLAN.md` |
-| Performance & UX workstream (active) | `docs/PERFORMANCE_PLAN.md` |
+| Interaction debt + audits + PR plan (active workstream) | `docs/INTERACTION_DEBT_PLAN.md` |
+| Performance & UX workstream (complete 2026-05-04) | `docs/PERFORMANCE_PLAN.md` |
 | Environment variables reference | `docs/ENV.md` |
 | Design source of truth | `project/` — HTML/CSS/JS prototypes |
 | Design system CSS | `project/styles.css` → port to `apps/web/src/styles/` |
@@ -157,9 +158,17 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: No active phase — Phase 8 (Mobile Parity, iOS-HIG & Accessibility) complete 2026-05-05. Production is fast, accessible, and feature-aligned across desktop and mobile; ready for next feature work.**
+**Active: Post-8 — Interaction Debt & Audit workstream (drafted 2026-05-06).** See `docs/INTERACTION_DEBT_PLAN.md`.
 
-Composite mobile UX score moved from ~3/10 baseline to ~8/10 across all 5 PRs. See `docs/PLAN.md` → Phase 8 for the complete per-PR breakdown with deliverables and decisions.
+Triggered by friend Luigi's first real-world test, which surfaced two bugs (PSN sync put every game in Backlog; Steam connect 404'd on production with a Vercel error page). Both fixed same-day in commit `6c624a0`. After that, two systematic audits — a data-flow Source→Schema→UI map and an interaction-by-interaction sweep — captured the full interaction debt before starting the next feature workstream (Upcoming rework).
+
+**Sequence:**
+- **PR D — HLTB diagnostic** (next): read-only `scripts/audit-hltb.ts` to quantify HLTB coverage gap by platform before any backfill.
+- **PR A — Interaction debt**: library-only search input with `/` shortcut + Cmd-K global, mobile-shell wiggle fix, mobile back buttons + clickable-icon sweep per Apple HIG, Settings stubs as "coming soon" panels, Library shelves view simplification (drop view-mode + sort + plat-filter — all stay on filtered single-shelf pages), HLTB extras+completionist on mobile, bundled cleanups (Dashboard CTAs, Upcoming month tabs, etc.).
+- **PR B — Real wishlist scope** server-side + Path-B persistence fix so wishlisted releases keep `releaseDate`/`platforms`/`synopsis`/`hype`/`category`.
+- **PR C — Sync-all + wipe-library** with proper microinteraction feedback.
+
+14 decisions locked. Phase 8 is closed; this is a post-Phase-8 cleanup workstream.
 
 ---
 
@@ -257,6 +266,7 @@ All phases complete through Phase 8. App is deployed, accessible (WCAG 2.1 AA), 
 - `.github/workflows/lighthouse.yml` — Lighthouse CI on PRs touching `apps/web/**`. Thresholds: Performance ≥ 80, Accessibility ≥ 95 (raised from 90 in PR 3), Best-practices ≥ 90. Local run shows 99 / 100 / 100. PWA category was retired in Lighthouse 12 — installability is verified by the offline E2E test instead.
 
 **Recent fixes landed (most recent first):**
+- **Post-8 — Interaction debt audit + hot fixes from Luigi's first test (2026-05-06).** Commit `6c624a0`: PSN sync was placing every imported game in Backlog because `runSync` hardcoded `status: 'Backlog'` on create. The "Steam → On Hold if played" rule Andrea remembered came from a one-time `scripts/backfill-status.ts` run, not from the runner. Fixed: status now derived from total merged playtime (`> 0 → OnHold`, else `Backlog`) — platform-agnostic. Steam connect button on `PlatformDetailDesktop` used a bare `/api/auth/steam` path which on production resolves to `gamehoardr.com/api/auth/steam` (Vercel 404, `fra1::...`); same button on `PlatformDetailMobile` had no onClick at all. Both fixed via `API_BASE` prefix matching the LoginScreen pattern. Production data corrected via `scripts/backfill-status.ts`: 384 Backlog → OnHold, 287 (no playtime) stayed. Commit `de2090e`: Library single-shelf filter+sort port — desktop now matches the mobile-filtered view (state + handlers were already wired; only JSX missing). Then drafted `docs/INTERACTION_DEBT_PLAN.md` capturing two systematic audits (data-flow + interaction) and a 14-decision PR plan (PRs A–D).
 - **Phase 8 — Mobile Parity, iOS-HIG & Accessibility (5 PRs, 2026-05-05).** Composite mobile UX score moved from ~3/10 to ~8/10. Headlines:
   - **PR 1** — typography scale + line-height tokens, `:focus-visible` styles, `prefers-reduced-motion`, chip/btn/field min sizes raised, `--paper-faint` text contrast fixed (`.t-faint` remapped to `--paper-dim`), inline `fontSize` literal sweep across 24 components.
   - **PR 2** — fake "9:41" status bar deleted, mobile tab bar fixed (4-col grid, safe-area insets, 2 px amber active border, press feedback, haptic tick), `viewport-fit=cover` + `100dvh`, `MobileHeader` search wired to `SearchOverlay`, tab-bar icons replaced with meaningful glyphs (`home`/`rows`/`clock`/`user`).
@@ -298,3 +308,4 @@ All phases complete through Phase 8. App is deployed, accessible (WCAG 2.1 AA), 
   - Library view-mode toggle on mobile (mobile too narrow for useful list/grid distinction)
   - Activity-log tab on `PlatformDetailMobile` (low value, lots of vertical space)
 - Pre-existing flaky E2E assertion tests (Pragmata / Death Stranding 2 in Upcoming agenda; ELDEN RING in GameDetail) hard-code titles that vary with the live IGDB feed. Real fix is to assert on selectors / regex patterns rather than literal game names — worth a quick test cleanup pass when convenient.
+- **Interaction debt** — see `docs/INTERACTION_DEBT_PLAN.md` for the full enumerated audit (~20+ unwired controls, 4 stub Settings sections, mobile back-button bug across Settings + PlatformDetail, Upcoming wishlist scope semantics, etc.). PRs A–D are scoped and ready to start.
