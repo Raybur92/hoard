@@ -294,7 +294,7 @@ All phases complete through Phase 8. App is deployed, accessible (WCAG 2.1 AA), 
 - Shareable receipt: OWNED ON + PROGRESS sections converted from `<pre>` to flexbox `.row` divs with CSS dotted spacers and self-sizing section header lines.
 
 **Known gaps (low priority, none blocking):**
-- Steam OpenID on production not yet click-tested — wiring is in code and was working locally; just needs you to log in once via `https://gamehoardr.com/login` to confirm the redirect URI resolves correctly.
+- Steam OpenID on production blocked by missing `API_URL` env var on Railway (discovered 2026-05-06 when Luigi tried to connect his Steam account and Steam redirected him back to `localhost:3001`). [auth.ts:40](../apps/api/src/routes/auth.ts#L40) defaults to `localhost:3001` when `API_URL` is unset; Steam's `return_to` + `realm` are derived from it. Fix: set `API_URL=https://api.gamehoardr.com` in Railway → API service → Variables. Documented in `docs/ENV.md`.
 - Xbox / GOG library sync: stubs returning `[]`. Manual add covers the gap (same approach as Nintendo / Epic).
 - `package.json#prisma` config block is deprecated in Prisma 6.19 — Prisma 7 will require `prisma.config.ts`. Migrate when convenient (warning only, not blocking).
 - Phase 8 success criteria deferred to pre-launch verification (not blocking):

@@ -15,6 +15,7 @@ Copy the respective `.env.example` files to `.env` and fill in the values.
 | `JWT_SECRET` | yes | (random 32+ chars) | Used to sign HTTP-only JWTs |
 | `JWT_EXPIRES_IN` | no | `7d` | Defaults to 7d |
 | `WEB_URL` | yes | `http://localhost:5173` | Allowed CORS origin |
+| `API_URL` | yes (prod) | `https://api.gamehoardr.com` | Public origin of the API. Used as Steam OpenID `return_to` + `realm`, and as the fallback for `GOOGLE_REDIRECT_URI`. Defaults to `http://localhost:3001` for dev. **Without this set in production, Steam OpenID redirects users back to `localhost:3001` after sign-in (broken).** |
 | `GOOGLE_CLIENT_ID` | Phase 4 | — | Google OAuth 2.0 app client ID |
 | `GOOGLE_CLIENT_SECRET` | Phase 4 | — | Google OAuth 2.0 app client secret |
 | `GOOGLE_REDIRECT_URI` | Phase 4 | `http://localhost:3001/api/auth/google/callback` | Must match Google console |
