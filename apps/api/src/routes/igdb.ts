@@ -26,13 +26,47 @@ router.get('/igdb/search', requireUser, async (req: Request, res: Response): Pro
 });
 
 const upcomingQuerySchema = z.object({
-  scope: z.enum(['my-platforms', 'all']).default('my-platforms'),
+  scope: z.enum(['my-platforms', 'all', 'wishlist']).default('my-platforms'),
 });
 
-// GET /api/igdb/upcoming?scope=my-platforms|all
+import type { ReleaseDateCategory } from '@hoard/types';
+
+// GET /api/igdb/upcoming?scope=my-platforms|all|wishlist
+//
+// `wishlist` was added in PR B (D1). Returns the user's persisted
+// WishlistRelease rows shaped exactly like the live IGDB feed, so the chip
+// labelled "wishlist" finally means what it says — was previously aliased to
+// `my-platforms`, which silently filtered tracked releases by hype + platform.
 router.get('/igdb/upcoming', requireUser, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
   const { scope } = upcomingQuerySchema.parse(req.query);
+
+  // Wishlist scope reads directly from the DB — no IGDB round trip and no
+  // hype/platform filtering. Matches the user's intuition that "wishlist"
+  // shows everything I've starred.
+  if (scope === 'wishlist') {
+    const releases = await prisma.wishlistRelease.findMany({
+      where: { userId },
+      orderBy: [{ releaseDate: { sort: 'asc', nulls: 'last' } }],
+    });
+    const result: IgdbUpcomingRelease[] = releases.map((w) => ({
+      igdbId: w.igdbId,
+      title: w.title,
+      developer: w.developer,
+      releaseDate: w.releaseDate?.toISOString() ?? null,
+      releaseDateCategory: w.releaseDateCategory as ReleaseDateCategory,
+      platforms: w.platforms,
+      genres: w.genres,
+      coverUrl: w.coverUrl,
+      synopsis: w.synopsis,
+      wishlisted: true,
+      category: w.category,
+      hype: w.hype,
+    }));
+    res.json(result);
+    return;
+  }
+
   const allPlatforms = scope === 'all';
 
   try {

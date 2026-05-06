@@ -283,6 +283,46 @@ limit 1;`,
   return result;
 }
 
+const releaseDetailsCache = makeCache<IgdbUpcomingRelease | null>(ONE_DAY);
+
+// Fetch a single game by igdbId in the rich upcoming-release shape — needed
+// by the wishlist-toggle endpoint so persisted rows aren't impoverished
+// (releaseDate / platforms / synopsis / hype / category / releaseDateCategory
+// were all dropped by the previous getGame()-based code path).
+export async function getReleaseDetails(igdbId: number): Promise<IgdbUpcomingRelease | null> {
+  const key = String(igdbId);
+  const cached = releaseDetailsCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const results = await igdbPost(
+    'games',
+    `fields id, name, first_release_date, cover.url, genres.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category;
+where id = ${igdbId};
+limit 1;`,
+  );
+  const raw = results[0];
+  if (!raw) {
+    releaseDetailsCache.set(key, null);
+    return null;
+  }
+  const mapped: IgdbUpcomingRelease = {
+    igdbId: raw.id,
+    title: raw.name,
+    developer: getDeveloper(raw.involved_companies),
+    releaseDate: raw.first_release_date ? new Date(raw.first_release_date * 1000).toISOString() : null,
+    releaseDateCategory: categoriseRelease(raw.first_release_date),
+    platforms: raw.platforms?.map((p) => p.name) ?? [],
+    genres: raw.genres?.map((g) => g.name) ?? [],
+    coverUrl: normalizeCover(raw.cover?.url),
+    synopsis: raw.summary ?? null,
+    wishlisted: false,  // caller fills this in
+    category: raw.category ?? 0,
+    hype: raw.hypes ?? null,
+  };
+  releaseDetailsCache.set(key, mapped);
+  return mapped;
+}
+
 const timeToBeatCache = makeCache<IgdbTimeToBeat | null>(ONE_DAY);
 
 // IGDB exposes time-to-beat at the dedicated /game_time_to_beats endpoint
@@ -327,4 +367,5 @@ export function clearCaches(): void {
   steamCache.clear();
   upcomingCache.clear();
   timeToBeatCache.clear();
+  releaseDetailsCache.clear();
 }

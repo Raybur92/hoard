@@ -204,6 +204,6 @@ export const api = {
   igdbSearch: (q: string) =>
     get<IgdbSearchResult[]>(`/api/igdb/search?q=${encodeURIComponent(q)}`),
 
-  igdbUpcoming: (scope: 'my-platforms' | 'all' = 'my-platforms') =>
+  igdbUpcoming: (scope: 'my-platforms' | 'all' | 'wishlist' = 'my-platforms') =>
     get<IgdbUpcomingRelease[]>(`/api/igdb/upcoming${scope === 'all' ? '?scope=all' : ''}`),
 };

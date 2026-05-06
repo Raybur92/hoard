@@ -223,6 +223,7 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
     hype: w.hype,
     synopsis: w.synopsis,
     coverUrl: w.coverUrl ?? null,
+    category: w.category,
   }));
 
   const activity = buildActivity(aggUserGames);

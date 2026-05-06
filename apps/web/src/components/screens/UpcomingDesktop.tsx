@@ -8,7 +8,7 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import { useUpcoming } from '../../hooks/useUpcoming';
+import { useUpcoming, type UpcomingScope } from '../../hooks/useUpcoming';
 import { daysUntil, upcomingDateParts, countdownParts } from '../../lib/utils';
 import { api } from '../../lib/api';
 import type { IgdbUpcomingRelease } from '@hoard/types';
@@ -43,16 +43,27 @@ export function UpcomingDesktop() {
   useDocumentTitle("Upcoming");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const scope: 'my-platforms' | 'all' = searchParams.get('scope') === 'all' ? 'all' : 'my-platforms';
-  const setScope = (s: 'my-platforms' | 'all') => {
+  // Three real scopes after PR B (D1):
+  //   my-platforms — IGDB feed, hype-filtered, restricted to user's platforms
+  //   all          — IGDB feed, hype-filtered, all platforms
+  //   wishlist     — only games this user has starred (DB read, no hype filter)
+  const scopeParam = searchParams.get('scope');
+  const scope: UpcomingScope =
+    scopeParam === 'all' ? 'all'
+    : scopeParam === 'wishlist' ? 'wishlist'
+    : 'my-platforms';
+  const setScope = (s: UpcomingScope) => {
     const next = new URLSearchParams(searchParams);
-    if (s === 'all') next.set('scope', 'all'); else next.delete('scope');
+    if (s === 'my-platforms') next.delete('scope'); else next.set('scope', s);
     setSearchParams(next, { replace: true });
   };
   // null = show all months; click a month tab to filter (PR A — A9d).
   // Clicking the active month again toggles back to all.
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const { data, loading, error, refetch } = useUpcoming(scope);
+  // Honest wishlist count, regardless of which scope is active (PR B — D1).
+  const { data: wishlistData } = useUpcoming('wishlist');
+  const wishlistCount = wishlistData?.length ?? 0;
 
   async function handleToggleWishlist(igdbId: number) {
     try {
@@ -100,22 +111,25 @@ export function UpcomingDesktop() {
         <div style={{ padding: '16px 32px 0', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 6, alignItems: 'baseline' }}>
           <span style={{ flex: 1 }} />
           <div style={{ padding: '6px 0', display: 'flex', gap: 6, alignItems: 'center' }}>
-            <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}><Icon name="star" size={11} /> wishlist · 0</Chip>
-            <Chip on={scope === 'all'} onClick={() => setScope(scope === 'all' ? 'my-platforms' : 'all')}>all releases</Chip>
+            <Chip on={scope === 'wishlist'} onClick={() => setScope('wishlist')}><Icon name="star" size={11} /> wishlist · {wishlistCount}</Chip>
+            <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}>my platforms</Chip>
+            <Chip on={scope === 'all'} onClick={() => setScope('all')}>all releases</Chip>
           </div>
         </div>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 32px' }}>
           <div className="panel" style={{ padding: 32, maxWidth: 480, width: '100%', textAlign: 'center' }}>
             <Marker>// nothing on the horizon</Marker>
             <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", lineHeight: 1.55 }}>
-              {scope === 'my-platforms'
+              {scope === 'wishlist'
+                ? 'you haven\'t starred anything yet. switch to "all releases" and tap + on something that catches your eye.'
+                : scope === 'my-platforms'
                 ? 'no upcoming releases on your connected platforms. switch to "all releases" or wishlist a game from there.'
                 : 'no upcoming releases match the current hype threshold. lower it in settings → appearance.'}
             </p>
             <div style={{ marginTop: 18, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-              {scope === 'my-platforms'
-                ? <Btn variant="primary" onClick={() => setScope('all')}>show all releases</Btn>
-                : <Btn variant="primary" onClick={() => navigate('/settings/appearance')}><Icon name="cog" size={11} /> tune hype threshold</Btn>}
+              {scope === 'all'
+                ? <Btn variant="primary" onClick={() => navigate('/settings/appearance')}><Icon name="cog" size={11} /> tune hype threshold</Btn>
+                : <Btn variant="primary" onClick={() => setScope('all')}>show all releases</Btn>}
             </div>
           </div>
         </div>
@@ -190,8 +204,9 @@ export function UpcomingDesktop() {
           })}
           <span style={{ flex: 1 }} />
           <div style={{ padding: '6px 0', display: 'flex', gap: 6, alignItems: 'center' }}>
-            <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}><Icon name="star" size={11} /> wishlist · {items.length}</Chip>
-            <Chip on={scope === 'all'} onClick={() => setScope(scope === 'all' ? 'my-platforms' : 'all')}>all releases</Chip>
+            <Chip on={scope === 'wishlist'} onClick={() => setScope('wishlist')}><Icon name="star" size={11} /> wishlist · {wishlistCount}</Chip>
+            <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}>my platforms</Chip>
+            <Chip on={scope === 'all'} onClick={() => setScope('all')}>all releases</Chip>
           </div>
         </div>
 

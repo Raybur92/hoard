@@ -17,9 +17,9 @@ jest.mock('../middleware/user', () => ({
   requireAuth: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
 }));
 
-const mockGetGame = jest.fn();
+const mockGetReleaseDetails = jest.fn();
 jest.mock('../services/igdb', () => ({
-  getGame: (...args: unknown[]) => mockGetGame(...args),
+  getReleaseDetails: (...args: unknown[]) => mockGetReleaseDetails(...args),
 }));
 
 import { app } from '../index';
@@ -27,7 +27,7 @@ import { prisma } from '@hoard/db';
 
 beforeEach(() => {
   jest.resetAllMocks();
-  mockGetGame.mockReset();
+  mockGetReleaseDetails.mockReset();
 });
 
 const makeRelease = (overrides: Partial<{ id: string; igdbId: number; title: string; platforms: string[] }> = {}) => ({
@@ -43,6 +43,7 @@ const makeRelease = (overrides: Partial<{ id: string; igdbId: number; title: str
   hype: 10,
   synopsis: null,
   coverUrl: null,
+  category: 0,
 });
 
 describe('GET /api/upcoming', () => {
@@ -85,15 +86,21 @@ describe('POST /api/upcoming/:igdbId/wishlist', () => {
     expect(prisma.wishlistRelease.delete).toHaveBeenCalledWith({ where: { id: 'w-1' } });
   });
 
-  it('creates a new wishlist entry from IGDB metadata when none exists', async () => {
+  it('creates a new wishlist entry capturing the full release shape (PR B persistence fix)', async () => {
     (prisma.wishlistRelease.findFirst as jest.Mock).mockResolvedValue(null);
-    mockGetGame.mockResolvedValue({
+    mockGetReleaseDetails.mockResolvedValue({
       igdbId: 99,
       title: 'New Game',
       developer: 'Studio',
-      releaseYear: null,
+      releaseDate: '2026-06-01T00:00:00.000Z',
+      releaseDateCategory: 'Q2',
+      platforms: ['PC (Microsoft Windows)', 'PlayStation 5'],
       genres: ['Action'],
       coverUrl: 'https://example.com/cover.jpg',
+      synopsis: 'An action game.',
+      wishlisted: false,
+      category: 0,
+      hype: 42,
     });
     (prisma.wishlistRelease.create as jest.Mock).mockResolvedValue(makeRelease({ id: 'w-new', igdbId: 99, title: 'New Game' }));
 
@@ -102,7 +109,20 @@ describe('POST /api/upcoming/:igdbId/wishlist', () => {
     expect(res.status).toBe(200);
     expect(res.body.tracked).toBe(true);
     expect(res.body.release.title).toBe('New Game');
-    expect(prisma.wishlistRelease.create).toHaveBeenCalled();
+
+    // The whole point of the fix: every IGDB field reaches the create call,
+    // not just title/developer/coverUrl/genres.
+    const createArgs = (prisma.wishlistRelease.create as jest.Mock).mock.calls[0][0].data;
+    expect(createArgs).toMatchObject({
+      igdbId: 99,
+      title: 'New Game',
+      releaseDateCategory: 'Q2',
+      platforms: ['PC (Microsoft Windows)', 'PlayStation 5'],
+      synopsis: 'An action game.',
+      hype: 42,
+      category: 0,
+    });
+    expect(createArgs.releaseDate).toEqual(new Date('2026-06-01T00:00:00.000Z'));
   });
 
   it('returns 400 for a non-numeric igdbId', async () => {
@@ -114,7 +134,7 @@ describe('POST /api/upcoming/:igdbId/wishlist', () => {
 
   it('returns 404 when IGDB does not return the game', async () => {
     (prisma.wishlistRelease.findFirst as jest.Mock).mockResolvedValue(null);
-    mockGetGame.mockResolvedValue(null);
+    mockGetReleaseDetails.mockResolvedValue(null);
 
     const res = await request(app).post('/api/upcoming/123456/wishlist');
 

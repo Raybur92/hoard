@@ -84,6 +84,9 @@ export interface WishlistRelease {
   hype: number | null;
   synopsis: string | null;
   coverUrl: string | null;
+  // IGDB category (e.g. main_game=0, dlc_addon=2, remake=8). Drives the
+  // DLC / remake chip on Upcoming. Persisted from PR B onward.
+  category: number;
 }
 
 export interface PlatformStat {

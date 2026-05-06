@@ -137,6 +137,7 @@ model WishlistRelease {
   hype                Int?
   synopsis            String?
   coverUrl            String?
+  category            Int      @default(0)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

@@ -8,7 +8,7 @@ import { Chip } from '../primitives/Chip';
 import { Btn } from '../primitives/Btn';
 import { PullableScroll } from '../primitives/PullableScroll';
 import { Icon } from '../primitives/Icon';
-import { useUpcoming } from '../../hooks/useUpcoming';
+import { useUpcoming, type UpcomingScope } from '../../hooks/useUpcoming';
 import { api } from '../../lib/api';
 import { daysUntil, upcomingDateParts, countdownParts } from '../../lib/utils';
 import type { IgdbUpcomingRelease } from '@hoard/types';
@@ -42,15 +42,22 @@ function enrichItem(w: IgdbUpcomingRelease): UpcomingItem {
 export function UpcomingMobile() {
   useDocumentTitle("Upcoming");
   const [searchParams, setSearchParams] = useSearchParams();
-  const scope: 'my-platforms' | 'all' = searchParams.get('scope') === 'all' ? 'all' : 'my-platforms';
-  const setScope = (s: 'my-platforms' | 'all') => {
+  // Three real scopes after PR B (D1) — see UpcomingDesktop for rationale.
+  const scopeParam = searchParams.get('scope');
+  const scope: UpcomingScope =
+    scopeParam === 'all' ? 'all'
+    : scopeParam === 'wishlist' ? 'wishlist'
+    : 'my-platforms';
+  const setScope = (s: UpcomingScope) => {
     const next = new URLSearchParams(searchParams);
-    if (s === 'all') next.set('scope', 'all'); else next.delete('scope');
+    if (s === 'my-platforms') next.delete('scope'); else next.set('scope', s);
     setSearchParams(next, { replace: true });
   };
   // PR A — A9d: clicking a month tab filters featured + agenda. null = all.
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const { data, loading, error, refetch } = useUpcoming(scope);
+  const { data: wishlistData } = useUpcoming('wishlist');
+  const wishlistCount = wishlistData?.length ?? 0;
 
   async function handleToggleWishlist(igdbId: number) {
     try {
@@ -95,14 +102,17 @@ export function UpcomingMobile() {
       <>
         <MobileHeader title="upcoming" sub="// nothing tracked" />
         <div style={{ display: 'flex', gap: 6, padding: '8px 16px 0' }}>
-          <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}><Icon name="star" size={10} /> wishlist</Chip>
+          <Chip on={scope === 'wishlist'} onClick={() => setScope('wishlist')}><Icon name="star" size={10} /> wishlist · {wishlistCount}</Chip>
+          <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}>my platforms</Chip>
           <Chip on={scope === 'all'} onClick={() => setScope('all')}>all releases</Chip>
         </div>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div className="panel" style={{ padding: 20, width: '100%', textAlign: 'center' }}>
             <Marker>// nothing on the horizon</Marker>
             <p style={{ marginTop: 12, color: 'var(--paper-dim)', fontSize: "var(--text-xs)", lineHeight: 1.5 }}>
-              {scope === 'my-platforms'
+              {scope === 'wishlist'
+                ? 'no starred releases yet. switch to "all releases" and tap + on something.'
+                : scope === 'my-platforms'
                 ? 'no upcoming releases on your platforms. try "all releases".'
                 : 'no upcoming releases match. lower the hype threshold in settings.'}
             </p>
@@ -132,10 +142,13 @@ export function UpcomingMobile() {
     <>
       <MobileHeader title="upcoming" sub={sub} />
 
-      {/* scope toggle — mirrors desktop's my-platforms / all chip pair */}
-      <div style={{ display: 'flex', gap: 6, padding: '8px 16px 0' }}>
-        <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')} ariaLabel="Show only games on your platforms">
-          <Icon name="star" size={10} /> wishlist
+      {/* scope toggle — three real scopes after PR B (D1) */}
+      <div className="thin-scroll" style={{ display: 'flex', gap: 6, padding: '8px 16px 0', overflowX: 'auto' }}>
+        <Chip on={scope === 'wishlist'} onClick={() => setScope('wishlist')} ariaLabel="Show your wishlisted releases">
+          <Icon name="star" size={10} /> wishlist · {wishlistCount}
+        </Chip>
+        <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')} ariaLabel="Show upcoming releases on your platforms">
+          my platforms
         </Chip>
         <Chip on={scope === 'all'} onClick={() => setScope('all')} ariaLabel="Show all upcoming releases">all releases</Chip>
       </div>

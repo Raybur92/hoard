@@ -107,4 +107,52 @@ describe('GET /api/igdb/upcoming', () => {
 
     expect(res.status).toBe(503);
   });
+
+  it('scope=wishlist returns persisted WishlistRelease rows shaped as upcoming feed (PR B)', async () => {
+    // Wishlist scope reads only from the DB — no IGDB call.
+    (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([
+      {
+        igdbId: 42, title: 'Wishlisted Game', developer: 'Studio',
+        releaseDate: new Date('2026-08-01'), releaseDateCategory: 'Q3',
+        platforms: ['PlayStation 5'], genres: ['RPG'],
+        coverUrl: 'https://example.com/cover.jpg', synopsis: 'epic',
+        hype: 50, category: 0,
+      },
+    ]);
+
+    const res = await request(app).get('/api/igdb/upcoming?scope=wishlist');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({
+      igdbId: 42,
+      title: 'Wishlisted Game',
+      releaseDateCategory: 'Q3',
+      platforms: ['PlayStation 5'],
+      synopsis: 'epic',
+      hype: 50,
+      category: 0,
+      wishlisted: true,
+    });
+    // Live IGDB feed is bypassed entirely.
+    expect(mockGetUpcomingReleases).not.toHaveBeenCalled();
+  });
+
+  it('scope=wishlist passes through hype/platform filtering (no IGDB-side filters)', async () => {
+    // A row with hype below the user's threshold + no platform should still
+    // show up in wishlist scope — it's the user's explicit choice.
+    (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([
+      {
+        igdbId: 1, title: 'Niche', developer: null,
+        releaseDate: null, releaseDateCategory: 'TBA',
+        platforms: [], genres: [], coverUrl: null, synopsis: null,
+        hype: 0, category: 0,
+      },
+    ]);
+
+    const res = await request(app).get('/api/igdb/upcoming?scope=wishlist');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+  });
 });

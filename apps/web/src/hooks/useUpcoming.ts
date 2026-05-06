@@ -3,11 +3,16 @@ import * as cache from '../lib/cache';
 import { useQuery } from './useQuery';
 import type { IgdbUpcomingRelease } from '@hoard/types';
 
-async function fetchUpcoming(scope: 'my-platforms' | 'all'): Promise<IgdbUpcomingRelease[]> {
+export type UpcomingScope = 'my-platforms' | 'all' | 'wishlist';
+
+async function fetchUpcoming(scope: UpcomingScope): Promise<IgdbUpcomingRelease[]> {
   try {
     return await api.igdbUpcoming(scope);
   } catch {
     // IGDB unavailable — fall back to wishlist-only feed.
+    // Post-PR-B persistence fix: WishlistRelease rows now keep releaseDate /
+    // platforms / synopsis / hype / category, so the fallback is full-fidelity
+    // for `wishlist` scope and a graceful subset for the others.
     const fallback = await api.upcoming();
     return fallback.map((w) => ({
       igdbId: w.igdbId,
@@ -20,13 +25,13 @@ async function fetchUpcoming(scope: 'my-platforms' | 'all'): Promise<IgdbUpcomin
       coverUrl: w.coverUrl,
       synopsis: w.synopsis,
       wishlisted: true,
-      category: 0,
+      category: w.category,
       hype: w.hype,
     }));
   }
 }
 
-export function useUpcoming(scope: 'my-platforms' | 'all' = 'my-platforms') {
+export function useUpcoming(scope: UpcomingScope = 'my-platforms') {
   const key = `upcoming:${scope}`;
   const { data, loading, error } = useQuery<IgdbUpcomingRelease[]>(
     key,

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
-import { getGame } from '../services/igdb';
+import { getReleaseDetails } from '../services/igdb';
 import type { WishlistRelease } from '@hoard/types';
 
 const router = Router();
@@ -11,7 +11,7 @@ function mapRelease(w: {
   id: string; igdbId: number; title: string; developer: string | null;
   releaseDate: Date | null; releaseDateCategory: string; platforms: string[];
   genres: string[]; userId: string; hype: number | null; synopsis: string | null;
-  coverUrl: string | null;
+  coverUrl: string | null; category: number;
 }): WishlistRelease {
   return {
     id: w.id,
@@ -26,6 +26,7 @@ function mapRelease(w: {
     hype: w.hype,
     synopsis: w.synopsis,
     coverUrl: w.coverUrl,
+    category: w.category,
   };
 }
 
@@ -71,15 +72,18 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, async (req: Request, res:
     return;
   }
 
-  // Fetch from IGDB to populate the record
-  let igdbGame;
+  // Fetch the rich upcoming-release shape from IGDB so the persisted record
+  // keeps releaseDate / platforms / synopsis / hype / category / releaseDateCategory
+  // (PR B — Path-B persistence fix). Previous code path used getGame() which
+  // returns the slimmer IgdbSearchResult and silently dropped half the fields.
+  let igdbRelease;
   try {
-    igdbGame = await getGame(igdbId);
+    igdbRelease = await getReleaseDetails(igdbId);
   } catch {
-    igdbGame = null;
+    igdbRelease = null;
   }
 
-  if (!igdbGame) {
+  if (!igdbRelease) {
     res.status(404).json({ error: 'Game not found in IGDB' });
     return;
   }
@@ -88,13 +92,16 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, async (req: Request, res:
     data: {
       userId: req.userId,
       igdbId,
-      title: igdbGame.title,
-      developer: igdbGame.developer,
-      releaseDate: null,
-      releaseDateCategory: 'TBA',
-      platforms: [],
-      genres: igdbGame.genres,
-      coverUrl: igdbGame.coverUrl,
+      title: igdbRelease.title,
+      developer: igdbRelease.developer,
+      releaseDate: igdbRelease.releaseDate ? new Date(igdbRelease.releaseDate) : null,
+      releaseDateCategory: igdbRelease.releaseDateCategory,
+      platforms: igdbRelease.platforms,
+      genres: igdbRelease.genres,
+      coverUrl: igdbRelease.coverUrl,
+      synopsis: igdbRelease.synopsis,
+      hype: igdbRelease.hype,
+      category: igdbRelease.category,
     },
   });
 
