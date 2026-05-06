@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Icon } from '../primitives/Icon';
 import { useSearchModal } from '../../hooks/useSearchModal';
 
@@ -10,8 +11,23 @@ export interface MobileHeaderProps {
   onBack?: () => void;
 }
 
+function tickHaptic(): void {
+  navigator.vibrate?.(8);
+}
+
 export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderProps) {
   const search = useSearchModal();
+  const navigate = useNavigate();
+
+  // Apple HIG: every navigation control needs a real action. When a screen
+  // sets `back` but doesn't supply onBack, default to the browser back stack
+  // so the caret never reads as decorative — covers the SettingsMobile +
+  // PlatformDetailMobile dead-back-button regression flagged by the audit.
+  const handleBack = (): void => {
+    tickHaptic();
+    if (onBack) onBack();
+    else navigate(-1);
+  };
 
   return (
     <div style={{
@@ -26,17 +42,12 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
         {back && (
           <button
             type="button"
-            aria-label="Back"
-            onClick={onBack}
+            aria-label="Go back"
+            onClick={handleBack}
+            className="m-icon-btn"
             style={{
               fontSize: 'var(--text-md)',
               color: 'var(--paper-dim)',
-              background: 'transparent',
-              border: 'none',
-              padding: 8,
-              margin: -8,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
               lineHeight: 1,
             }}
           >
@@ -58,18 +69,9 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
         {right ?? (
           <button
             type="button"
-            onClick={() => search.open()}
+            onClick={() => { tickHaptic(); search.open(); }}
             aria-label="Search games"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: 8,
-              margin: -8,
-              color: 'inherit',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-            }}
+            className="m-icon-btn"
           >
             <Icon name="search" size={18} />
           </button>

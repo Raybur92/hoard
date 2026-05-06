@@ -3,6 +3,18 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
 
+/* Lock the viewport so the mobile shell never wiggles. The app uses inner
+   scroll surfaces (.app-content / .app-mobile-content / PullableScroll) for
+   all real scrolling, so removing body-level scroll has no visual cost on
+   desktop. On iOS Safari this also kills the rubber-band bounce of the
+   entire page when an inner scroll hits its top/bottom — rubber-band still
+   works inside the inner surfaces, just doesn't propagate to body.
+   Per Apple HIG: "header and footer stay in place" on mobile. */
+html, body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--void);
   color: var(--paper);
@@ -514,6 +526,11 @@ select:focus-visible {
 
 /* ---------- scrollbar ---------- */
 
+/* Stop scroll-chain from leaking up to body (iOS rubber-band fix; pairs with
+   the html, body overscroll-behavior: none rule at the top of the file).
+   `contain` keeps native rubber-band INSIDE the scroll surface — so users
+   still get the iOS bounce feedback, it just doesn't propagate. */
+.thin-scroll                             { overscroll-behavior: contain; }
 .thin-scroll::-webkit-scrollbar         { width: 6px; height: 6px; }
 .thin-scroll::-webkit-scrollbar-thumb   { background: var(--rule-bright); }
 .thin-scroll::-webkit-scrollbar-track   { background: transparent; }
@@ -640,6 +657,34 @@ select:focus-visible {
 .m-tabbar .item.active   { color: var(--paper); border-top-color: var(--amber); }
 .m-tabbar .item .glyph   { line-height: 1; display: flex; align-items: center; }
 
+/* ---------- mobile icon-button (Apple HIG 44pt tap target) ---------- */
+
+/* Use on any mobile <button> that wraps a single Icon / character — back
+   carets, header search button, modal-close X, etc. Hit-area visually
+   stays the same as the icon (negative margins absorb the padding) but
+   touch targets meet 44×44pt. */
+.m-icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 8px;
+  margin: -8px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-icon-btn:active {
+  background: var(--ink-2);
+  /* Subtle press affordance without shifting layout */
+  border-radius: 4px;
+}
+
 /* ---------- app shell layout ---------- */
 
 .app-shell {
@@ -660,6 +705,7 @@ select:focus-visible {
 .app-content {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--sp-6);
 }
 .app-mobile {
@@ -677,6 +723,7 @@ select:focus-visible {
 .app-mobile-content {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ---------- skeleton loading ---------- */

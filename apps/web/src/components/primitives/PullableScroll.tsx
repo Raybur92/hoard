@@ -32,7 +32,7 @@ export function PullableScroll({ onRefresh, ariaLabel, className = 'thin-scroll'
       role="region"
       aria-label={ariaLabel}
       aria-busy={refreshing}
-      style={{ flex: 1, overflow: 'auto', position: 'relative', ...style }}
+      style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', position: 'relative', ...style }}
     >
       {(translate > 0 || refreshing) && (
         <div

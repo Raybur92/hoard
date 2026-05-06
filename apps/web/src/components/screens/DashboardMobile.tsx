@@ -148,12 +148,6 @@ export function DashboardMobile() {
       <MobileHeader
         title="hoard"
         sub={syncSub}
-        right={
-          <>
-            <span style={{ color: 'var(--green)' }}><Icon name="dotO" size={8} fill={true} /></span>
-            <Icon name="menu" size={14} />
-          </>
-        }
       />
       <PullableScroll onRefresh={refetch} ariaLabel="Dashboard content">
 
