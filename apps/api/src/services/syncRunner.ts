@@ -98,6 +98,8 @@ export async function runSync(
 
       const isNew = !existing;
       const newLastPlayed = sg.lastPlayedAt ?? existing?.lastPlayedAt ?? null;
+      const totalMergedPlaytime = Object.values(mergedPlaytime).reduce<number>((sum, m) => sum + (m ?? 0), 0);
+      const initialStatus = totalMergedPlaytime > 0 ? 'OnHold' : 'Backlog';
       await prisma.userGame.upsert({
         where: { userId_gameId: { userId, gameId: game.id } },
         update: {
@@ -107,7 +109,7 @@ export async function runSync(
         create: {
           userId,
           gameId: game.id,
-          status: 'Backlog',
+          status: initialStatus,
           playtimeByPlatform: mergedPlaytime,
           lastPlayedAt: sg.lastPlayedAt,
         },

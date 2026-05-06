@@ -10,6 +10,17 @@ import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
 import type { PlatformDetail } from '@hoard/types';
 
+const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
+
+const PLATFORM_CONNECT_PATH: Record<string, string | null> = {
+  st: '/api/auth/steam',
+  ps: '/settings/platforms/ps/connect',
+  xb: null,
+  gg: null,
+  nt: null,
+  ep: null,
+};
+
 const PLATFORM_NAMES: Record<string, string> = {
   st: 'Steam', ps: 'PSN', xb: 'Xbox', gg: 'GOG', nt: 'Nintendo', ep: 'Epic Games',
 };
@@ -123,11 +134,20 @@ export function PlatformDetailMobile() {
                 </Btn>
               </div>
             </div>
-          ) : (
-            <Btn variant="primary" style={{ width: '100%' }}>
-              <Icon name="link" size={11} /> connect {name}
-            </Btn>
-          )}
+          ) : (() => {
+            const connectPath = PLATFORM_CONNECT_PATH[code.toLowerCase()];
+            const isApiConnect = connectPath?.startsWith('/api/') ?? false;
+            return isApiConnect ? (
+              <Btn variant="primary" style={{ width: '100%' }}
+                onClick={() => { window.location.href = `${API_BASE}${connectPath!}`; }}>
+                <Icon name="link" size={11} /> connect {name}
+              </Btn>
+            ) : (
+              <Btn variant="primary" style={{ width: '100%' }}>
+                <Icon name="link" size={11} /> connect {name}
+              </Btn>
+            );
+          })()}
         </div>
       )}
 

@@ -10,6 +10,8 @@ import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
 import type { PlatformDetail } from '@hoard/types';
 
+const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
+
 const PLATFORM_INFO: Record<string, {
   name: string;
   fullName: string;
@@ -248,7 +250,7 @@ function ConnectButton({ info, code, npssoInput: _npssoInput, setNpssoInput: _se
   }
   if (info.connectPath?.startsWith('/api/')) {
     return (
-      <Btn sm variant="primary" onClick={() => { window.location.href = info.connectPath!; }}>
+      <Btn sm variant="primary" onClick={() => { window.location.href = `${API_BASE}${info.connectPath!}`; }}>
         <Icon name="link" size={11} /> connect
       </Btn>
     );

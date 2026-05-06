@@ -69,8 +69,17 @@ describe('runSync', () => {
     );
   });
 
-  it('creates a UserGame with Backlog status for a new game', async () => {
+  it('creates a UserGame with OnHold status when synced playtime > 0', async () => {
     await runSync('user-1', [syncedGame]);
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ userId: 'user-1', status: 'OnHold' }),
+      }),
+    );
+  });
+
+  it('creates a UserGame with Backlog status when synced playtime is 0', async () => {
+    await runSync('user-1', [{ ...syncedGame, playtimeMinutes: 0 }]);
     expect(prisma.userGame.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ userId: 'user-1', status: 'Backlog' }),
