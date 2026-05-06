@@ -164,9 +164,11 @@ Each decision below was made during the planning conversation on 2026-05-06.
 
 ## 5. PR plan
 
-### PR D — HLTB coverage: layered fallback chain
+### PR D — HLTB coverage: layered fallback chain ✅ Done 2026-05-06
 
 **Goal:** Move HLTB-or-equivalent coverage from 34% → as close to 100% as reliable sources allow, without introducing bot-fragile dependencies.
+
+**Result:** 318/929 → **586/929 covered (34.2% → 63.1%)**. Residual 343 games have no data in either HLTB or IGDB — accepted silently.
 
 **Diagnostic completed (2026-05-06):** `scripts/audit-hltb.ts` revealed:
 - 929 total Game rows; 318 (34.2%) have HLTB
@@ -178,7 +180,7 @@ Each decision below was made during the planning conversation on 2026-05-06.
 - It does have **three working ID-keyed endpoints**: `/steam/{steamAppId}`, `/gog/{gogAppId}`, `/hltb/{hltbId}`. All return the same payload shape.
 - The payload is **richer than we use** — includes `hltbId` (HLTB's real game id) and `gogAppId` (cross-platform key). Both worth capturing.
 - `howlongtobeat-core` (npm, Feb 2026) reverse-engineers HLTB's bot-protected internal API by fetching session tokens and parsing JS bundles. Search by title works, but the fragility profile is identical to the old `howlongtobeat` package we already had break under us. **Rejected** as a dependency.
-- IGDB has a `time_to_beat` field with `hastily / normally / completely` sub-fields. Not currently requested in our `getGame` / `searchGames` / `getGameBySteamId` field lists ([igdb.ts:146](../apps/api/src/services/igdb.ts#L146)).
+- IGDB exposes time-to-beat at the dedicated **`/game_time_to_beats`** endpoint (NOT as a sub-field on `/games`). Keyed by `game_id`. Returns `hastily / normally / completely` in seconds plus a `count` field. *(First implementation attempt mistakenly added the fields to the games-endpoint query — they returned silently empty. Corrected mid-PR.)*
 
 **Approach: layered fallback, reliable sources only.**
 
@@ -195,7 +197,7 @@ Each decision below was made during the planning conversation on 2026-05-06.
 | **D1** | Commit `scripts/audit-hltb.ts` | trivial |
 | **D2** | Add `Game.hltbId` (`Int?`) and `Game.gogAppId` (`Int?`) columns. Add `HltbData.source` (`String`, values `'hltb'` / `'igdb'`, default `'hltb'`). One Prisma migration. | small |
 | **D3** | Update `fetchHltbBySteamId` to also return `hltbId` / `gogAppId` from the response. `runSync` and the backfill scripts persist them onto `Game`. Add `fetchHltbByGogId` for future GOG sync. | small |
-| **D4** | Add `time_to_beat.normally` + `time_to_beat.completely` to IGDB field lists. New `igdbTimeToBeatToHltb` mapper. New `fetchHltbWithFallback` orchestrator: tries Steam ID → Steam Store search → IGDB time_to_beat in order. Stores result in HltbData with the right `source`. | medium |
+| **D4** | New `getTimeToBeat(igdbId)` in igdb.ts hitting `/game_time_to_beats`. New `igdbTimeToBeatToHltb` mapper (seconds → minutes; normally → mainStory; completely → completionist; mainExtras null). New `fetchHltbWithFallback` orchestrator: tries Steam ID → IGDB time_to_beat in order. Stores result in HltbData with the right `source`. Steam Store title-search step lives in the existing PSN backfill, kept separate. | medium |
 | **D5** | Backfill: `scripts/backfill-missing-hltb.ts` walks games missing HLTB, runs the layered chain. ~3 req/s rate limit. Logs per-step source. | small |
 | **D6** | Re-run audit; document residual gap (true exclusives that aren't on Steam Store and that IGDB doesn't have time_to_beat for — accept silently per the "HLTB failures must be silent" hard rule). | trivial |
 
@@ -318,7 +320,7 @@ model HltbData {
 | PR B — Wishlist scope + persistence | Pending | — | — | Detailed plan in §5. |
 | PR C — Sync-all + Wipe library | Pending | — | — | Detailed plan in §5. |
 | PR D — HLTB diagnostic | Done | — | 2026-05-06 | `scripts/audit-hltb.ts` ran. Findings: 318/929 games have HLTB (34.2%). Gap split: 269 operational (steamAppId present, no HLTB row) + 342 structural (no steamAppId). |
-| PR D — HLTB fallback chain | In progress | — | — | Layered Steam-ID → Steam Store search → IGDB time_to_beat. Schema additions: `Game.hltbId`, `Game.gogAppId`, `HltbData.source`. |
+| PR D — HLTB fallback chain | Done | — | 2026-05-06 | Migration `20260506140000_game_hltb_id_gog_id_hltb_source` applied (`Game.hltbId`, `Game.gogAppId`, `HltbData.source`). New `getTimeToBeat(igdbId)` in igdb.ts hits the dedicated `/game_time_to_beats` endpoint (mid-PR correction — was initially attempted as a sub-field on `/games`, which IGDB silently omits). New `fetchHltbWithFallback` orchestrator (Steam-ID → IGDB time_to_beat). New `scripts/backfill-missing-hltb.ts` ran end-to-end: 46 HLTB-sourced + 218 IGDB-sourced (264 new rows). **Coverage moved 318/929 → 586/929 (34.2% → 63.1%).** Residual gap of 343 games where neither source has data — accepted silently per Rule 8. |
 
 ---
 

@@ -1,7 +1,7 @@
 import { prisma } from '@hoard/db';
 import type { PlatformCode } from '@hoard/types';
-import { searchGames, getGameBySteamId } from './igdb';
-import { fetchHltb } from './hltb';
+import { searchGames, getGameBySteamId, getTimeToBeat } from './igdb';
+import { fetchHltbWithFallback } from './hltb';
 import type { SyncedGame } from './platforms/steam';
 
 export interface SyncResult {
@@ -14,16 +14,39 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function triggerHltbBackground(gameId: string, title: string, steamAppId?: number | null): Promise<void> {
+async function triggerHltbBackground(
+  gameId: string,
+  title: string,
+  steamAppId: number | null | undefined,
+  igdbId: number,
+): Promise<void> {
   void (async () => {
-    const result = await fetchHltb(title, steamAppId);
+    // IGDB time_to_beat lives at /game_time_to_beats — fetch on-demand only
+    // when we'll actually need a fallback. The HLTB Steam-ID lookup runs first
+    // inside fetchHltbWithFallback, so this extra IGDB call only happens when
+    // the Steam-ID path missed (or there was no Steam ID to try).
+    let igdbTimeToBeat: Awaited<ReturnType<typeof getTimeToBeat>> = null;
+    try {
+      igdbTimeToBeat = await getTimeToBeat(igdbId);
+    } catch { /* IGDB unreachable / rate-limited — fall through with null */ }
+    const result = await fetchHltbWithFallback(title, steamAppId, igdbTimeToBeat);
     if (!result) return;
+    if (result.hltbId || result.gogAppId) {
+      await prisma.game.update({
+        where: { id: gameId },
+        data: {
+          ...(result.hltbId ? { hltbId: result.hltbId } : {}),
+          ...(result.gogAppId ? { gogAppId: result.gogAppId } : {}),
+        },
+      });
+    }
     await prisma.hltbData.upsert({
       where: { gameId },
       update: {
         mainStory: result.mainStory,
         mainExtras: result.mainExtras,
         completionist: result.completionist,
+        source: result.source,
         fetchedAt: new Date(),
       },
       create: {
@@ -31,6 +54,7 @@ async function triggerHltbBackground(gameId: string, title: string, steamAppId?:
         mainStory: result.mainStory,
         mainExtras: result.mainExtras,
         completionist: result.completionist,
+        source: result.source,
       },
     });
   })();
@@ -115,11 +139,12 @@ export async function runSync(
         },
       });
 
-      // Trigger background HLTB fetch for new games (or if no HLTB data yet)
+      // Trigger background HLTB fetch for new games (or if no HLTB data yet).
+      // Layered fallback runs Steam-ID → IGDB time_to_beat in fetchHltbWithFallback.
       if (isNew) {
         const hasHltb = await prisma.hltbData.findUnique({ where: { gameId: game.id } });
         if (!hasHltb) {
-          triggerHltbBackground(game.id, game.title, steamAppId);
+          void triggerHltbBackground(game.id, game.title, steamAppId, igdbGame.igdbId);
         }
       }
 

@@ -77,6 +77,8 @@ model Game {
   id          String   @id @default(cuid())
   igdbId      Int      @unique
   steamAppId  Int?     @unique
+  hltbId      Int?
+  gogAppId    Int?
   title       String
   developer   String?
   releaseYear Int?
@@ -116,6 +118,7 @@ model HltbData {
   mainStory      Int?
   mainExtras     Int?
   completionist  Int?
+  source         String   @default("hltb")
   fetchedAt      DateTime @default(now())
 
   game Game @relation(fields: [gameId], references: [id])

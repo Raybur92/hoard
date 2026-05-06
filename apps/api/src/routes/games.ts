@@ -5,17 +5,34 @@ import type { GameStatus as PrismaGameStatus } from '@hoard/db';
 import { z } from 'zod';
 import { requireUser } from '../middleware/user';
 import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
-import { fetchHltb } from '../services/hltb';
+import { fetchHltbWithFallback } from '../services/hltb';
+import { getTimeToBeat } from '../services/igdb';
 import { mapUserGame } from '../lib/mappers';
 
-function triggerHltbBackground(gameId: string, title: string, steamAppId?: number | null): void {
+function triggerHltbBackground(gameId: string, title: string, steamAppId: number | null | undefined, igdbId: number): void {
   void (async () => {
-    const result = await fetchHltb(title, steamAppId);
+    // IGDB time_to_beat fallback — fires only after the HLTB Steam-ID path
+    // misses inside fetchHltbWithFallback. Background trigger so the extra
+    // /game_time_to_beats round-trip is fine.
+    let timeToBeat: Awaited<ReturnType<typeof getTimeToBeat>> = null;
+    try {
+      timeToBeat = await getTimeToBeat(igdbId);
+    } catch { /* IGDB unreachable / rate-limited — fall through with null */ }
+    const result = await fetchHltbWithFallback(title, steamAppId, timeToBeat);
     if (!result) return;
+    if (result.hltbId || result.gogAppId) {
+      await prisma.game.update({
+        where: { id: gameId },
+        data: {
+          ...(result.hltbId ? { hltbId: result.hltbId } : {}),
+          ...(result.gogAppId ? { gogAppId: result.gogAppId } : {}),
+        },
+      });
+    }
     await prisma.hltbData.upsert({
       where: { gameId },
-      update: { mainStory: result.mainStory, mainExtras: result.mainExtras, completionist: result.completionist, fetchedAt: new Date() },
-      create: { gameId, mainStory: result.mainStory, mainExtras: result.mainExtras, completionist: result.completionist },
+      update: { mainStory: result.mainStory, mainExtras: result.mainExtras, completionist: result.completionist, source: result.source, fetchedAt: new Date() },
+      create: { gameId, mainStory: result.mainStory, mainExtras: result.mainExtras, completionist: result.completionist, source: result.source },
     });
   })();
 }
@@ -214,7 +231,7 @@ router.patch('/games/:id', requireUser, async (req: Request, res: Response): Pro
     (updateData.status === 'Playing' || updateData.status === 'Backlog') &&
     !updated.game.hltbData
   ) {
-    triggerHltbBackground(updated.game.id, updated.game.title, updated.game.steamAppId);
+    triggerHltbBackground(updated.game.id, updated.game.title, updated.game.steamAppId, updated.game.igdbId);
   }
 
   res.json(mapUserGame(updated));

@@ -14,10 +14,12 @@ jest.mock('@hoard/db', () => ({
 
 jest.mock('./igdb', () => ({
   searchGames: jest.fn(),
+  getGameBySteamId: jest.fn(),
+  getTimeToBeat: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock('./hltb', () => ({
-  fetchHltb: jest.fn(),
+  fetchHltbWithFallback: jest.fn(),
 }));
 
 import { runSync } from './syncRunner';

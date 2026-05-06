@@ -22,7 +22,11 @@ jest.mock('../middleware/user', () => ({
 }));
 
 jest.mock('../services/hltb', () => ({
-  fetchHltb: jest.fn().mockResolvedValue(null),
+  fetchHltbWithFallback: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('../services/igdb', () => ({
+  getTimeToBeat: jest.fn().mockResolvedValue(null),
 }));
 
 import { app } from '../index';

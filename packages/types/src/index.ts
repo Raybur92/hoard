@@ -235,6 +235,15 @@ export interface IgdbSearchResult {
   coverUrl: string | null;
 }
 
+// Lives at IGDB's /game_time_to_beats endpoint, keyed by game_id. Fetched
+// on-demand via getTimeToBeat(igdbId), not bundled into the games endpoint
+// response. Values are in seconds — caller converts to minutes.
+export interface IgdbTimeToBeat {
+  hastily: number | null;
+  normally: number | null;
+  completely: number | null;
+}
+
 export interface IgdbUpcomingRelease {
   igdbId: number;
   title: string;

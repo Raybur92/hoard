@@ -1,4 +1,4 @@
-import type { IgdbSearchResult, IgdbUpcomingRelease, ReleaseDateCategory } from '@hoard/types';
+import type { IgdbSearchResult, IgdbTimeToBeat, IgdbUpcomingRelease, ReleaseDateCategory } from '@hoard/types';
 
 /* ── Token cache ── */
 
@@ -72,6 +72,15 @@ interface IgdbRawGame {
   category?: number;
   version_parent?: number | null;
   total_rating_count?: number;
+}
+
+interface IgdbRawGameTimeToBeat {
+  id: number;
+  game_id: number;
+  hastily?: number;
+  normally?: number;
+  completely?: number;
+  count?: number;
 }
 
 interface IgdbRawExternalGame {
@@ -274,6 +283,42 @@ limit 1;`,
   return result;
 }
 
+const timeToBeatCache = makeCache<IgdbTimeToBeat | null>(ONE_DAY);
+
+// IGDB exposes time-to-beat at the dedicated /game_time_to_beats endpoint
+// (NOT as a sub-field on /games). Keyed by game_id; returns at most one row
+// per game. Values are in seconds — caller converts to minutes.
+export async function getTimeToBeat(igdbId: number): Promise<IgdbTimeToBeat | null> {
+  const key = String(igdbId);
+  const cached = timeToBeatCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const token = await getToken();
+  const clientId = process.env['TWITCH_CLIENT_ID'] ?? '';
+  const res = await fetch('https://api.igdb.com/v4/game_time_to_beats', {
+    method: 'POST',
+    headers: {
+      'Client-ID': clientId,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'text/plain',
+    },
+    body: `fields hastily, normally, completely; where game_id = ${igdbId}; limit 1;`,
+  });
+  if (!res.ok) {
+    timeToBeatCache.set(key, null);
+    return null;
+  }
+  const data = await res.json() as IgdbRawGameTimeToBeat[];
+  const raw = data[0];
+  const result = raw ? {
+    hastily: raw.hastily ?? null,
+    normally: raw.normally ?? null,
+    completely: raw.completely ?? null,
+  } : null;
+  timeToBeatCache.set(key, result);
+  return result;
+}
+
 export function clearCaches(): void {
   cachedToken = null;
   tokenExpiry = 0;
@@ -281,4 +326,5 @@ export function clearCaches(): void {
   gameCache.clear();
   steamCache.clear();
   upcomingCache.clear();
+  timeToBeatCache.clear();
 }
