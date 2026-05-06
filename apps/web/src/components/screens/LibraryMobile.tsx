@@ -137,15 +137,27 @@ export function LibraryMobile() {
   const { prefs } = usePreferences();
   const { w: coverW, h: coverH } = COVER_DIMS[prefs.coverDensity] ?? COVER_DIMS['standard']!;
 
+  // Library-only search input (PR A — A1c). Mirrors LibraryDesktop: typing
+  // a query swaps the shelves view for a flat result grid scoped to the
+  // user's owned games. No `/` shortcut on mobile — just tap the input.
+  const [searchInput, setSearchInput] = useState('');
+  const trimmedQuery = searchInput.trim();
+  const isSearching = !isFiltered && trimmedQuery.length > 0;
+
   const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
-    useShelves(4, { enabled: !isFiltered });
+    useShelves(4, { enabled: !isFiltered && !isSearching });
   const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
     useGames(
       isFiltered ? { status: statusParam as GameStatus, limit: 500 } : undefined,
       { enabled: isFiltered },
     );
+  const { data: searchData, loading: searchLoading } =
+    useGames(
+      isSearching ? { q: trimmedQuery, limit: 100 } : undefined,
+      { enabled: isSearching },
+    );
 
-  const loading = isFiltered ? filteredLoading : shelvesLoading;
+  const loading = isFiltered ? filteredLoading : isSearching ? searchLoading : shelvesLoading;
   const error = isFiltered ? filteredError : shelvesError;
   const refetch = isFiltered ? refetchFiltered : refetchShelves;
 
@@ -325,18 +337,75 @@ export function LibraryMobile() {
           onAdded={() => { void refetch(); }}
         />
       )}
-      <div style={{ padding: '10px 16px 0', display: 'flex', gap: 6, overflowX: 'auto' }}>
-        <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
-        <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')}><Plat code="ST" /></Chip>
-        <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')}><Plat code="PS" /></Chip>
-        <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')}><Plat code="XB" /></Chip>
-        <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')}><Plat code="GG" /></Chip>
-        <Chip onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}>
-          <Icon name="arrowD" size={10} style={{ marginRight: 4 }} />{SORT_LABELS[sortBy]}
-        </Chip>
+      {/* Library-only search (A1c). Sort + plat-filter chips removed from
+          the shelves view in PR A (D4) — both remain on the filtered
+          single-shelf page where the full set is loaded. */}
+      <div style={{ padding: '8px 16px 4px', flexShrink: 0 }}>
+        <label htmlFor="library-search-mobile" className="field" style={{ width: '100%', cursor: 'text' }}>
+          <span className="pre">$</span>
+          <span style={{ color: 'var(--paper)' }}>find</span>
+          <input
+            id="library-search-mobile"
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={`${totalGames} games · type to filter`}
+            aria-label="Search your library"
+            style={{
+              flex: 1, minWidth: 0,
+              background: 'transparent', border: 'none', outline: 'none',
+              color: 'var(--paper)', fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit',
+              padding: 0,
+            }}
+          />
+          {searchInput && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearchInput('')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--paper-dim)', cursor: 'pointer', padding: '0 4px', fontSize: 'var(--text-md)', lineHeight: 1 }}
+            >
+              ×
+            </button>
+          )}
+        </label>
       </div>
-      <PullableScroll onRefresh={refetch} ariaLabel="Library shelves" style={{ marginTop: 6 }}>
-        {totalGames === 0 ? (
+      <PullableScroll onRefresh={refetch} ariaLabel={isSearching ? 'Library search results' : 'Library shelves'}>
+        {isSearching ? (
+          (() => {
+            const results = (searchData?.games ?? []).map(toGameDisplay);
+            return (
+              <div style={{ padding: '12px 16px 20px' }}>
+                <div className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)' }}>
+                  {searchLoading ? '// searching…' : `// ${results.length} match${results.length === 1 ? '' : 'es'}`}
+                </div>
+                {results.length === 0 && !searchLoading ? (
+                  <p style={{ marginTop: 12, color: 'var(--paper-dim)', fontSize: 'var(--text-xs)', lineHeight: 1.5 }}>
+                    no titles in your library match "{trimmedQuery}".
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+                    {results.map(g => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        aria-label={`Open ${g.title}`}
+                        onClick={() => navigate(`/game/${g.id}`)}
+                        style={{ width: coverW, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left' }}
+                      >
+                        <div style={{ position: 'relative' }}>
+                          <Cover w={coverW} h={coverH} src={g.coverUrl} label={(g.title.split(/[: ]/)[0] ?? g.title).toUpperCase()} bright={g.progress > 0} />
+                          <div style={{ position: 'absolute', top: 4, right: 4 }}><Plat code={g.platformCode} /></div>
+                        </div>
+                        <div style={{ fontSize: "var(--text-3xs)", marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()
+        ) : totalGames === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
             <div className="panel" style={{ padding: 20, width: '100%', textAlign: 'center' }}>
               <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>// no titles yet</span>

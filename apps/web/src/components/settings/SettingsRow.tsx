@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 export interface SettingsRowProps {
-  label: string;
+  label: ReactNode;
   hint?: string;
   danger?: boolean;
   children: ReactNode;

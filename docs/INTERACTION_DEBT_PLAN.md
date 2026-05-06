@@ -222,7 +222,7 @@ model HltbData {
 
 ---
 
-### PR A — Interaction debt
+### PR A — Interaction debt ✅ Done 2026-05-06
 
 **Goal:** Clear every fixable item from §3 without introducing new backend models. All small-to-medium changes; estimated 6–8 commits.
 
@@ -316,7 +316,7 @@ model HltbData {
 | Hot fix — Library single-shelf filter+sort | Done | — | 2026-05-06 | Commit `de2090e`. Mobile parity ported to LibraryDesktop filtered view. |
 | Data audit | Done | — | 2026-05-06 | §2 of this doc. |
 | Interaction audit | Done | — | 2026-05-06 | §3 of this doc. |
-| PR A — Interaction debt | Pending | — | — | Detailed plan in §5. |
+| PR A — Interaction debt | Done | — | 2026-05-06 | All 9 items shipped. **A4** mobile back default to navigate(-1) + 44pt hit areas via new `.m-icon-btn`. **A5** body+inner overscroll-behavior locks the mobile shell against rubber-band. **A3** dropped sort/plat-filter/view-mode chips from Library shelves view + removed the orphaned libraryView setting. **A1** real `<input>` + `?q=` server endpoint already supported it; `/` shortcut focuses on /library*. **A2** Cmd-K already wired (audit was wrong). **A6/A7** ComingSoonPanel for 4 stub Settings sections + V2 markers on Account visibility/sessions. **A8** HLTB extras + completionist on GameDetailMobile receipt. **A9** Dashboard `see full upcoming feed` → real `<Link>`; now-playing `resume`/`+note` wired (deleted unsupported `log session`); GameDetail HLTB chip → real `<a>` to `howlongtobeat.com/game/{hltbId}` (or search-URL fallback); GameDetailDesktop gets back chip; Upcoming month-strip tabs functional (filter featured + agenda by month, "all" pseudo-tab clears). 125 API + 69 web tests pass; lint clean. |
 | PR B — Wishlist scope + persistence | Pending | — | — | Detailed plan in §5. |
 | PR C — Sync-all + Wipe library | Pending | — | — | Detailed plan in §5. |
 | PR D — HLTB diagnostic | Done | — | 2026-05-06 | `scripts/audit-hltb.ts` ran. Findings: 318/929 games have HLTB (34.2%). Gap split: 269 operational (steamAppId present, no HLTB row) + 342 structural (no steamAppId). |

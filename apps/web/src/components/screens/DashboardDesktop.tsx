@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { AddGameModal } from './AddGameModal';
@@ -248,10 +248,15 @@ export function DashboardDesktop() {
                       <div className="prog green"><span style={{ width: '0%' }} /></div>
                     </div>
 
+                    {/* PR A — A9b: `resume` opens game detail; `+ note` opens
+                        game detail with ?focus=notes (the page handler scrolls
+                        to + opens the notes textarea). `log session` was deleted —
+                        no v1 model for time logging. */}
                     <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'center' }}>
-                      <Btn variant="primary"><Icon name="play" size={11} fill={true} /> resume</Btn>
-                      <Btn>log session</Btn>
-                      <Btn>+ note</Btn>
+                      <Btn variant="primary" onClick={() => navigate(`/game/${np.id}`)}>
+                        <Icon name="play" size={11} fill={true} /> resume
+                      </Btn>
+                      <Btn onClick={() => navigate(`/game/${np.id}?focus=notes`)}>+ note</Btn>
                       <span style={{ flex: 1 }} />
                       {npPlatforms.map(({ code, label, h }) => (
                         <span key={code} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -383,9 +388,13 @@ export function DashboardDesktop() {
                       </span>
                     </div>
                   </div>
-                  <div className="t-faint" style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Link
+                    to="/upcoming"
+                    className="t-faint"
+                    style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: 'var(--paper-dim)' }}
+                  >
                     see full upcoming feed <Icon name="arrowR" size={11} />
-                  </div>
+                  </Link>
                 </div>
                 <WishlistCountdown items={wishlistCountdown} />
               </div>

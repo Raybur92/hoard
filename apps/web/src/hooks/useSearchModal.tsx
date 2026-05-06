@@ -13,6 +13,9 @@ export function SearchModalProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
+    // Cmd-K (or Ctrl-K) toggles the global IGDB-wide search overlay. The
+    // Library page has its own `/` shortcut for searching only owned games —
+    // see LibraryDesktop. Both can coexist; `/` is filtered to /library*.
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();

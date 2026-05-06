@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
 import { Cover } from '../primitives/Cover';
@@ -48,6 +49,9 @@ export function UpcomingDesktop() {
     if (s === 'all') next.set('scope', 'all'); else next.delete('scope');
     setSearchParams(next, { replace: true });
   };
+  // null = show all months; click a month tab to filter (PR A — A9d).
+  // Clicking the active month again toggles back to all.
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const { data, loading, error, refetch } = useUpcoming(scope);
 
   async function handleToggleWishlist(igdbId: number) {
@@ -87,7 +91,6 @@ export function UpcomingDesktop() {
   }
 
   const items = data.map(enrichItem).sort((a, b) => a.days - b.days);
-  const featured = items[0];
 
   // Empty state — no upcoming releases tracked at all (or none in scope).
   if (items.length === 0) {
@@ -127,30 +130,64 @@ export function UpcomingDesktop() {
   }
   const months = Object.entries(monthGroups);
 
-  const timelineItems = items
+  // PR A — A9d: month tabs are now interactive. null = show all months;
+  // selecting a month filters the featured / timeline / agenda views to it.
+  const visibleItems = selectedMonth
+    ? items.filter(w => w.parts.month === selectedMonth)
+    : items;
+
+  const timelineItems = visibleItems
     .filter(w => w.releaseDate)
     .slice(0, 8)
     .map((w, i) => ({ ...w, side: i % 2 === 0 ? 'top' : 'bot' }));
   const maxDays = Math.max(...timelineItems.map(w => w.days), 1);
+  const featuredVisible = visibleItems[0];
 
   return (
     <>
       <TopBar crumbs={['hoard', 'upcoming']} />
 
-      {/* month tabs */}
+      {/* month tabs — clicking a month filters featured / timeline / agenda
+          to that month. Click the active month again to clear. */}
         <div style={{ padding: '16px 32px 0', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 6, alignItems: 'baseline' }}>
-          {months.map(([m, n], i) => (
-            <div key={m} style={{
+          <button
+            type="button"
+            onClick={() => setSelectedMonth(null)}
+            aria-pressed={selectedMonth === null}
+            style={{
               padding: '8px 14px',
               fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", letterSpacing: '0.1em',
-              color: i === 0 ? 'var(--paper)' : 'var(--paper-faint)',
-              borderBottom: i === 0 ? '2px solid var(--amber)' : '2px solid transparent',
-              cursor: 'pointer',
+              color: selectedMonth === null ? 'var(--paper)' : 'var(--paper-faint)',
+              borderBottom: selectedMonth === null ? '2px solid var(--amber)' : '2px solid transparent',
+              borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+              background: 'transparent', cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              {m} <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{n}</span>
-            </div>
-          ))}
+            }}
+          >
+            all <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{items.length}</span>
+          </button>
+          {months.map(([m, n]) => {
+            const active = selectedMonth === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setSelectedMonth(active ? null : m)}
+                aria-pressed={active}
+                style={{
+                  padding: '8px 14px',
+                  fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", letterSpacing: '0.1em',
+                  color: active ? 'var(--paper)' : 'var(--paper-faint)',
+                  borderBottom: active ? '2px solid var(--amber)' : '2px solid transparent',
+                  borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                  background: 'transparent', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {m} <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{n}</span>
+              </button>
+            );
+          })}
           <span style={{ flex: 1 }} />
           <div style={{ padding: '6px 0', display: 'flex', gap: 6, alignItems: 'center' }}>
             <Chip on={scope === 'my-platforms'} onClick={() => setScope('my-platforms')}><Icon name="star" size={11} /> wishlist · {items.length}</Chip>
@@ -160,11 +197,13 @@ export function UpcomingDesktop() {
 
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 460px', minHeight: 0 }}>
 
-          {/* left: featured + timeline */}
+          {/* left: featured + timeline (uses visibleItems / featuredVisible
+              when month filter is active — fall back to items when not). */}
           <div className="thin-scroll" style={{ overflow: 'auto', padding: '24px 32px 32px', borderRight: '1px solid var(--rule)' }}>
 
-            {/* featured */}
-            {featured && (() => {
+            {/* featured (uses month-filtered first item when a tab is active) */}
+            {featuredVisible && (() => {
+              const featured = featuredVisible;
               const cd = countdownParts(featured.releaseDate);
               return (
                 <div className="panel" style={{ padding: 24, display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24, alignItems: 'start' }}>
@@ -266,9 +305,9 @@ export function UpcomingDesktop() {
 
             {/* this month list */}
             <div style={{ marginTop: 36 }}>
-              <Marker>// upcoming · {items.length} tracked</Marker>
+              <Marker>// upcoming · {visibleItems.length} tracked{selectedMonth ? ` · ${selectedMonth}` : ''}</Marker>
               <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-                {items.slice(0, 4).map((g) => (
+                {visibleItems.slice(0, 4).map((g) => (
                   <div key={g.igdbId} style={{ display: 'grid', gridTemplateColumns: '60px 76px 1fr', gap: 14, padding: 14, border: '1px solid var(--rule)', background: 'var(--ink)' }}>
                     <div style={{ textAlign: 'center', borderRight: '1px dashed var(--rule-bright)', paddingRight: 8 }}>
                       <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>{g.parts.month}</div>
@@ -306,13 +345,13 @@ export function UpcomingDesktop() {
             </div>
           </div>
 
-          {/* right: agenda */}
+          {/* right: agenda (filtered to selected month when active) */}
           <div className="thin-scroll" style={{ overflow: 'auto' }}>
             <div style={{ padding: '18px 22px 6px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <Marker>// agenda · all tracked</Marker>
-              <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)" }}>{items.length} items</span>
+              <Marker>// agenda · {selectedMonth ?? 'all'}</Marker>
+              <span className="t-mono t-faint" style={{ fontSize: "var(--text-3xs)" }}>{visibleItems.length} items</span>
             </div>
-            {items.map((g) => (
+            {visibleItems.map((g) => (
               <div key={g.igdbId} style={{
                 display: 'grid',
                 gridTemplateColumns: '52px 32px 1fr auto',

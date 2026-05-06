@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { MobileHeader } from '../layout/MobileHeader';
@@ -47,6 +48,8 @@ export function UpcomingMobile() {
     if (s === 'all') next.set('scope', 'all'); else next.delete('scope');
     setSearchParams(next, { replace: true });
   };
+  // PR A — A9d: clicking a month tab filters featured + agenda. null = all.
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const { data, loading, error, refetch } = useUpcoming(scope);
 
   async function handleToggleWishlist(igdbId: number) {
@@ -116,6 +119,12 @@ export function UpcomingMobile() {
   }
   const monthTabs = Object.entries(monthGroups);
 
+  // PR A — A9d: month-tab filtering applied to agenda + featured
+  const visibleItems = selectedMonth
+    ? items.filter(w => w.parts.month === selectedMonth)
+    : items;
+  const featuredVisible = visibleItems[0];
+
   const nextDays = featured?.days ?? 9999;
   const sub = `// ${items.length} releasing · next in ${nextDays < 9999 ? `${nextDays}d` : 'TBA'}`;
 
@@ -131,22 +140,47 @@ export function UpcomingMobile() {
         <Chip on={scope === 'all'} onClick={() => setScope('all')} ariaLabel="Show all upcoming releases">all releases</Chip>
       </div>
 
-      {/* month strip */}
+      {/* month strip — clicking a month filters agenda + featured */}
       <div className="thin-scroll" style={{ display: 'flex', gap: 4, padding: '10px 16px 0', overflowX: 'auto' }}>
-        {monthTabs.map(([m, n], i) => (
-          <div key={m} style={{
+        <button
+          type="button"
+          onClick={() => setSelectedMonth(null)}
+          aria-pressed={selectedMonth === null}
+          style={{
             padding: '5px 10px',
             fontFamily: 'var(--mono)', fontSize: "var(--text-3xs)", letterSpacing: '0.08em',
-            color: i === 0 ? 'var(--void)' : 'var(--paper-dim)',
-            background: i === 0 ? 'var(--paper)' : 'transparent',
-            border: '1px solid ' + (i === 0 ? 'var(--paper)' : 'var(--rule)'),
+            color: selectedMonth === null ? 'var(--void)' : 'var(--paper-dim)',
+            background: selectedMonth === null ? 'var(--paper)' : 'transparent',
+            border: '1px solid ' + (selectedMonth === null ? 'var(--paper)' : 'var(--rule)'),
             whiteSpace: 'nowrap',
-          }}>{m} · {n}</div>
-        ))}
+            cursor: 'pointer',
+          }}
+        >all · {items.length}</button>
+        {monthTabs.map(([m, n]) => {
+          const active = selectedMonth === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setSelectedMonth(active ? null : m)}
+              aria-pressed={active}
+              style={{
+                padding: '5px 10px',
+                fontFamily: 'var(--mono)', fontSize: "var(--text-3xs)", letterSpacing: '0.08em',
+                color: active ? 'var(--void)' : 'var(--paper-dim)',
+                background: active ? 'var(--paper)' : 'transparent',
+                border: '1px solid ' + (active ? 'var(--paper)' : 'var(--rule)'),
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+              }}
+            >{m} · {n}</button>
+          );
+        })}
       </div>
 
-      {/* featured countdown */}
-      {featured && (() => {
+      {/* featured countdown (uses month-filtered first item when active) */}
+      {featuredVisible && (() => {
+        const featured = featuredVisible;
         const cd = countdownParts(featured.releaseDate);
         return (
           <div style={{ padding: '12px 16px 0' }}>
@@ -191,17 +225,17 @@ export function UpcomingMobile() {
         );
       })()}
 
-      {/* agenda list */}
+      {/* agenda list — filtered to selected month when active */}
       <PullableScroll onRefresh={refetch} ariaLabel="Upcoming releases" style={{ padding: '14px 16px 0' }}>
-        <Marker>// the agenda</Marker>
+        <Marker>// the agenda · {selectedMonth ?? 'all'}</Marker>
         <div style={{ marginTop: 10 }}>
-          {items.map((g, i) => (
+          {visibleItems.map((g, i) => (
             <div key={g.igdbId} style={{
               display: 'grid',
               gridTemplateColumns: '40px 36px 1fr auto',
               gap: 10,
               padding: '10px 0',
-              borderBottom: i < items.length - 1 ? '1px dotted var(--rule-bright)' : 'none',
+              borderBottom: i < visibleItems.length - 1 ? '1px dotted var(--rule-bright)' : 'none',
               alignItems: 'center',
             }}>
               <div style={{ textAlign: 'center' }}>

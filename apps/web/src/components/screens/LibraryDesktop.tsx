@@ -186,9 +186,18 @@ export function LibraryDesktop() {
   const isFiltered = !!statusParam;
   useDocumentTitle(statusParam ? `Library · ${statusParam}` : 'Library');
 
+  // Library-only search input — A1. The user wanted "two searches": Cmd-K
+  // global (IGDB-wide, finds games not yet owned) and Library `/` (only games
+  // the user owns). The shelves view turns into a flat search-results grid
+  // while the input has any value.
+  const [searchInput, setSearchInput] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const trimmedQuery = searchInput.trim();
+  const isSearching = !isFiltered && trimmedQuery.length > 0;
+
   // Shelves view: top N per status + counts in one round trip.
   const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
-    useShelves(12, { enabled: !isFiltered });
+    useShelves(12, { enabled: !isFiltered && !isSearching });
 
   // Filtered single-shelf view: paginated single-status fetch.
   const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
@@ -197,16 +206,45 @@ export function LibraryDesktop() {
       { enabled: isFiltered },
     );
 
-  const loading = isFiltered ? filteredLoading : shelvesLoading;
-  const error = isFiltered ? filteredError : shelvesError;
+  // Search results: hits the existing /api/games?q= endpoint (already supports
+  // case-insensitive title match scoped to the user's library).
+  const { data: searchData, loading: searchLoading, error: searchError } =
+    useGames(
+      isSearching ? { q: trimmedQuery, limit: 100 } : undefined,
+      { enabled: isSearching },
+    );
+
+  const loading = isFiltered ? filteredLoading : isSearching ? searchLoading : shelvesLoading;
+  const error = isFiltered ? filteredError : isSearching ? searchError : shelvesError;
   const refetch = isFiltered ? refetchFiltered : refetchShelves;
 
-  const { prefs, updatePref } = usePreferences();
+  // `/` global shortcut — only when on /library*, and only when the active
+  // element isn't already an editable field (so typing "/" inside another
+  // input doesn't hijack focus).
+  useEffect(() => {
+    function isEditable(el: Element | null): boolean {
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      return (el as HTMLElement).isContentEditable;
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isEditable(document.activeElement)) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const { prefs } = usePreferences();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
-  // Sort + view-mode persisted in URL so filtered views are shareable.
-  // URL trumps preferences when present; otherwise falls back to default / pref.
+  // Sort persists in URL so filtered single-shelf views (`/library/Backlog?sort=playtime`)
+  // are shareable. Only consumed on the filtered view — shelves view dropped
+  // the sort control in PR A (D4): it operated on top-12 per shelf only.
   const sortBy: SortBy = (() => {
     const v = searchParams.get('sort');
     return v === 'title' || v === 'playtime' || v === 'lastPlayed' ? v : 'lastPlayed';
@@ -215,17 +253,6 @@ export function LibraryDesktop() {
     const next = new URLSearchParams(searchParams);
     if (s === 'lastPlayed') next.delete('sort'); else next.set('sort', s);
     setSearchParams(next, { replace: true });
-  };
-  const viewMode: 'shelves' | 'grid' | 'list' = (() => {
-    const v = searchParams.get('view');
-    if (v === 'shelves' || v === 'grid' || v === 'list') return v;
-    return prefs.libraryView;
-  })();
-  const setViewMode = (m: 'shelves' | 'grid' | 'list') => {
-    const next = new URLSearchParams(searchParams);
-    if (m === prefs.libraryView) next.delete('view'); else next.set('view', m);
-    setSearchParams(next, { replace: true });
-    void updatePref({ libraryView: m });
   };
   const coverDims = COVER_DIMS[prefs.coverDensity] ?? COVER_DIMS['standard']!;
 
@@ -302,20 +329,7 @@ export function LibraryDesktop() {
         <TopBar crumbs={['hoard', 'library']} />
         <div style={{ padding: '20px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div className="skel" style={{ width: 320, height: 28 }} />
-          <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
-          <div className="skel" style={{ width: 32, height: 11 }} />
-          <div className="skel" style={{ width: 60, height: 22 }} />
-          <div className="skel" style={{ width: 50, height: 22 }} />
-          <div className="skel" style={{ width: 45, height: 22 }} />
-          <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
-          <div className="skel" style={{ width: 28, height: 11 }} />
-          <div className="skel" style={{ width: 38, height: 22 }} />
-          <div className="skel" style={{ width: 32, height: 22 }} />
-          <div className="skel" style={{ width: 32, height: 22 }} />
-          <div className="skel" style={{ width: 32, height: 22 }} />
-          <div className="skel" style={{ width: 32, height: 22 }} />
           <span style={{ flex: 1 }} />
-          <div className="skel" style={{ width: 110, height: 14 }} />
           <div className="skel" style={{ width: 96, height: 24 }} />
         </div>
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '0 32px 40px' }}>
@@ -398,38 +412,48 @@ export function LibraryDesktop() {
     <>
       <TopBar crumbs={['hoard', 'library']} />
 
-      {/* filter bar */}
+      {/* Filter bar — shelves view only.
+          Sort + platform filter were removed in PR A (decision D4): they
+          operated on the top-12 per shelf returned by the shelves endpoint,
+          which silently misled users into thinking sort applied to the full
+          shelf. Both controls live on the filtered single-shelf page where
+          the full set is loaded. The view-mode chips (shelves/grid/list) were
+          removed too — grid + list layouts were never built. */}
       <div style={{ padding: '20px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <div className="field" style={{ width: 320 }}>
+          <label htmlFor="library-search" className="field" style={{ width: 320, cursor: 'text' }}>
             <span className="pre">$</span>
             <span style={{ color: 'var(--paper)' }}>find</span>
-            <span style={{ color: 'var(--paper-dim)' }}>{totalGames} games · type to filter</span>
-            <span style={{ marginLeft: 'auto', fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="search" size={11} /> K
-            </span>
-          </div>
-          <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
-          <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>view</span>
-          <Chip on={viewMode === 'shelves'} onClick={() => setViewMode('shelves')}>shelves</Chip>
-          <Chip on={viewMode === 'grid'}    onClick={() => setViewMode('grid')}>grid</Chip>
-          <Chip on={viewMode === 'list'}    onClick={() => setViewMode('list')}>list</Chip>
-          <div style={{ width: 1, height: 24, background: 'var(--rule)' }} />
-          <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
-          <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
-          <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')}><Plat code="ST" /></Chip>
-          <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')}><Plat code="PS" /></Chip>
-          <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')}><Plat code="XB" /></Chip>
-          <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')}><Plat code="GG" /></Chip>
+            <input
+              id="library-search"
+              ref={searchInputRef}
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={`${totalGames} games · type to filter`}
+              aria-label="Search your library"
+              style={{
+                flex: 1, minWidth: 0,
+                background: 'transparent', border: 'none', outline: 'none',
+                color: 'var(--paper)', fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit',
+                padding: 0,
+              }}
+            />
+            {searchInput ? (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => { setSearchInput(''); searchInputRef.current?.focus(); }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--paper-dim)', cursor: 'pointer', padding: 0, fontSize: 'var(--text-2xs)' }}
+              >
+                ×
+              </button>
+            ) : (
+              <span style={{ marginLeft: 'auto', fontSize: "var(--text-3xs)", color: 'var(--paper-dim)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Icon name="search" size={11} /> /
+              </span>
+            )}
+          </label>
           <span style={{ flex: 1 }} />
-          <button
-            type="button"
-            className="t-mono t-faint"
-            aria-label={`Sort by ${SORT_LABELS[sortBy]}, click to change`}
-            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit', color: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}
-            onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}
-          >
-            sort: {SORT_LABELS[sortBy]} <Icon name="arrowD" size={10} />
-          </button>
           <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
             <Icon name="plus" size={10} /> add game
           </Btn>
@@ -441,9 +465,30 @@ export function LibraryDesktop() {
           />
         )}
 
-      {/* shelves OR empty-state CTA */}
+      {/* search results OR shelves OR empty-state CTA */}
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '0 32px 40px' }}>
-        {totalGames === 0 ? (
+        {isSearching ? (
+          (() => {
+            const results = (searchData?.games ?? []).map(toGameDisplay);
+            const headerNote = searchLoading ? '// searching…' : `// ${results.length} match${results.length === 1 ? '' : 'es'} in your library`;
+            return (
+              <div style={{ paddingTop: 18 }}>
+                <Marker>{headerNote}</Marker>
+                {results.length === 0 && !searchLoading ? (
+                  <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: "var(--text-sm)" }}>
+                    no titles in your library match "{trimmedQuery}". use Cmd-K to search the full IGDB catalogue.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16 }}>
+                    {results.map(g => (
+                      <ShelfItem key={g.id} g={g} w={coverDims.w} h={coverDims.h} isBacklog={false} showHltb={prefs.showHltb} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()
+        ) : totalGames === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 0' }}>
             <div className="panel" style={{ padding: 32, maxWidth: 480, width: '100%', textAlign: 'center' }}>
               <Marker>// no titles yet</Marker>

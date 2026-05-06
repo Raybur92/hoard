@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { Marker } from '../primitives/Marker';
@@ -26,6 +26,7 @@ const ALL_STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold'
 export function GameDetailMobile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: ug, loading, error, update, refetch } = useGame(id);
   useDocumentTitle(ug?.game.title ?? 'Game');
 
@@ -44,6 +45,17 @@ export function GameDetailMobile() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [statusSheetOpen]);
+
+  // PR A — A9b: Dashboard "+ note" navigates here with ?focus=notes so the
+  // user lands directly in the editor.
+  useEffect(() => {
+    if (!ug) return;
+    if (searchParams.get('focus') === 'notes' && !editingNotes) {
+      setNoteDraft(ug.notes ?? '');
+      setEditingNotes(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ug?.id]);
 
   useEffect(() => () => {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -117,6 +129,8 @@ export function GameDetailMobile() {
   const receipt = generateReceipt(g.id, g.addedAt);
 
   const hltbMain = g.hltb?.mainStory ? Math.round(g.hltb.mainStory / 60) : null;
+  const hltbExtras = g.hltb?.mainExtras ? Math.round(g.hltb.mainExtras / 60) : null;
+  const hltbComplete = g.hltb?.completionist ? Math.round(g.hltb.completionist / 60) : null;
   const pctOfMain = hltbMain && totalMin > 0
     ? `${Math.round((totalMin / (hltbMain * 60)) * 100)}%`
     : '—';
@@ -206,6 +220,8 @@ ADDED ........... ${g.addedAt.slice(0, 10)}`}
           <div style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.1em', marginBottom: 6 }}>PROGRESS ─────────────</div>
           <pre style={{ fontSize: "var(--text-3xs)", lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
 {`HLTB main ........ ${hltbMain ? `${hltbMain} h` : '—'}
+HLTB extras ...... ${hltbExtras ? `${hltbExtras} h` : '—'}
+HLTB 100% ........ ${hltbComplete ? `${hltbComplete} h` : '—'}
 % of main ........ ${pctOfMain}
 last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
           </pre>

@@ -36,6 +36,10 @@ export interface Game {
   releaseYear: number | null;
   genres: string[];
   coverUrl: string | null;
+  // Captured from the codepotatoes.de payload during HLTB lookups (PR D).
+  // Used to build the HLTB deep-link on GameDetail and as a future GOG sync key.
+  hltbId: number | null;
+  gogAppId: number | null;
 }
 
 export type PlaytimeByPlatform = Partial<Record<PlatformCode, number>>;

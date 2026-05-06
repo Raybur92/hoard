@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
@@ -27,12 +27,25 @@ const ALL_STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold'
 
 export function GameDetailDesktop() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: ug, loading, error, update, refetch } = useGame(id);
   useDocumentTitle(ug?.game.title ?? 'Game');
   const [statusOpen, setStatusOpen] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const statusRef = useRef<HTMLDivElement>(null);
+
+  // PR A — A9b: Dashboard "+ note" button navigates here with ?focus=notes
+  // so the user lands directly in the editor. Runs once after the game loads.
+  useEffect(() => {
+    if (!ug) return;
+    if (searchParams.get('focus') === 'notes' && !editingNotes) {
+      setNoteDraft(ug.notes ?? '');
+      setEditingNotes(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ug?.id]);
 
   useEffect(() => {
     if (!statusOpen) return;
@@ -112,6 +125,15 @@ export function GameDetailDesktop() {
   return (
     <>
       <TopBar crumbs={['hoard', 'library', g.game.title.toLowerCase()]} />
+
+      {/* PR A — A9e: explicit back affordance for desktop. Mobile already
+          has navigate(-1) via MobileHeader's back caret; the breadcrumb's
+          "library" link covers the slow-path but a chip is more discoverable. */}
+      <div style={{ padding: '12px 36px 0', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Btn sm onClick={() => navigate(-1)}>
+          <Icon name="back" size={10} /> back
+        </Btn>
+      </div>
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', display: 'grid', gridTemplateColumns: '1fr 480px' }}>
 
@@ -234,15 +256,26 @@ export function GameDetailDesktop() {
                       ))}
                     </div>
                     <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '8px 10px 8px 14px', border: '1px solid var(--rule)', borderTop: 'none', background: 'var(--ink-2)' }}>
-                      <span className="t-mono" style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        fontSize: "var(--text-2xs)", letterSpacing: '0.04em',
-                        color: 'var(--paper-dim)',
-                        padding: '4px 8px', border: '1px solid var(--rule)', background: 'var(--ink)',
-                      }}>
+                      <a
+                        className="t-mono"
+                        href={
+                          g.game.hltbId
+                            ? `https://howlongtobeat.com/game/${g.game.hltbId}`
+                            : `https://howlongtobeat.com/?q=${encodeURIComponent(g.game.title)}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          fontSize: "var(--text-2xs)", letterSpacing: '0.04em',
+                          color: 'var(--paper-dim)',
+                          padding: '4px 8px', border: '1px solid var(--rule)', background: 'var(--ink)',
+                          textDecoration: 'none',
+                        }}
+                      >
                         <span>howlongtobeat.com</span>
                         <Icon name="ext" size={11} />
-                      </span>
+                      </a>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, fontSize: "var(--text-3xs)", color: 'var(--paper-dim)' }}>
                         <span><span className="t-mono t-tnum t-amber" style={{ fontSize: "var(--text-base)" }}>{pctOfMain}</span>&nbsp;of main</span>
                         <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--rule)' }} />

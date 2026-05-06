@@ -6,7 +6,6 @@ import { Toggle, Radio, PlatformDot } from '../settings';
 import type { PlatConnectStatus } from '../settings';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
-import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { api } from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
@@ -270,14 +269,8 @@ export function SettingsMobile() {
               </div>
             </div>
           </div>
-          <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// default library view</div>
-            <div style={{ marginTop: 8 }}>
-              <Radio on={prefs.libraryView === 'shelves'} label="shelves" sub="grouped by status"   onClick={() => void updatePref({ libraryView: 'shelves' })} />
-              <Radio on={prefs.libraryView === 'grid'}    label="grid"    sub="all covers, dense"   onClick={() => void updatePref({ libraryView: 'grid' })} />
-              <Radio on={prefs.libraryView === 'list'}    label="list"    sub="rows · power users"  onClick={() => void updatePref({ libraryView: 'list' })} />
-            </div>
-          </div>
+          {/* "default library view" row removed in PR A (D5): grid + list
+              layouts were never built. User.libraryView column kept as no-op. */}
           <div style={{ padding: '14px 0', borderBottom: '1px solid var(--rule)' }}>
             <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// show HLTB estimates</div>
             <div style={{ marginTop: 10 }}>
@@ -385,12 +378,24 @@ export function SettingsMobile() {
     );
   }
 
-  // Generic stub for other sections
+  // Coming-soon stub for sections deferred to v2 (PR A — A6).
+  const stubDescriptions: Record<string, string> = {
+    library: 'extra library defaults — cover density, default sort, HLTB display preferences. some controls already exist under Appearance.',
+    notifications: 'in-app + email alerts when wishlisted releases approach launch and when scheduled syncs fail. opt-in only.',
+    privacy: 'profile visibility, data sharing, anonymized usage telemetry. account deletion lives under danger zone today.',
+    export: 'one-click export of your library, wishlist, and notes as JSON or CSV. import lives here too.',
+  };
+  const stubTitle = section === 'export' ? 'data export' : section;
   return (
     <>
-      {backHeader(section, '// settings')}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Marker>// coming soon</Marker>
+      {backHeader(stubTitle, '// settings')}
+      <div style={{ padding: 16 }}>
+        <div className="panel" style={{ padding: 18 }}>
+          <div className="t-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--amber)', letterSpacing: '0.1em' }}>// coming soon — v2</div>
+          <p style={{ marginTop: 10, color: 'var(--paper-dim)', fontSize: 'var(--text-xs)', lineHeight: 1.55 }}>
+            {stubDescriptions[section] ?? 'this section is planned for a future release.'}
+          </p>
+        </div>
       </div>
     </>
   );

@@ -19,6 +19,8 @@ export interface UserGameRow {
     releaseYear: number | null;
     genres: string[];
     coverUrl: string | null;
+    hltbId: number | null;
+    gogAppId: number | null;
     hltbData: {
       id: string;
       gameId: string;
@@ -47,6 +49,8 @@ export function mapUserGame(ug: UserGameRow): UserGameDetail {
       releaseYear: ug.game.releaseYear,
       genres: ug.game.genres,
       coverUrl: ug.game.coverUrl,
+      hltbId: ug.game.hltbId,
+      gogAppId: ug.game.gogAppId,
     },
     status: fromPrismaStatus(ug.status),
     playtimeByPlatform: ug.playtimeByPlatform as UserGameDetail['playtimeByPlatform'],

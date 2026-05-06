@@ -150,19 +150,25 @@ function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
           </div>
         </SettingsRow>
 
-        <SettingsRow label="profile visibility" hint="who can see your library, stats, and notes.">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <SettingsRow
+          label={<>profile visibility <span style={{ marginLeft: 8, fontSize: 'var(--text-3xs)', color: 'var(--amber)', letterSpacing: '0.1em' }}>// v2</span></>}
+          hint="who can see your library, stats, and notes. visibility controls land in v2."
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, opacity: 0.5, pointerEvents: 'none' }}>
             <Radio on={false} label="public"   sub="anyone with the link" />
             <Radio on={true}  label="unlisted" sub="link required — not indexed" />
             <Radio on={false} label="private"  sub="only you, signed in" />
           </div>
         </SettingsRow>
 
-        <SettingsRow label="session" hint="active devices with hoard signed in.">
-          <pre className="ascii t-dim" style={{ fontSize: "var(--text-2xs)", lineHeight: 1.7, margin: 0 }}>
+        <SettingsRow
+          label={<>session <span style={{ marginLeft: 8, fontSize: 'var(--text-3xs)', color: 'var(--amber)', letterSpacing: '0.1em' }}>// v2</span></>}
+          hint="active devices with hoard signed in. revocation lands in v2."
+        >
+          <pre className="ascii t-dim" style={{ fontSize: "var(--text-2xs)", lineHeight: 1.7, margin: 0, opacity: 0.5 }}>
 {`▸ this browser     · active now
   Hoard PWA        · last seen 2h ago
-  Safari · macOS   · last seen 4d ago   [revoke]`}
+  Safari · macOS   · last seen 4d ago`}
           </pre>
         </SettingsRow>
 
@@ -355,13 +361,9 @@ function AppearanceSection() {
           </div>
         </SettingsRow>
 
-        <SettingsRow label="default library view" hint="what /library opens to by default.">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Radio on={prefs.libraryView === 'shelves'} label="shelves" sub="grouped by status" onClick={() => void updatePref({ libraryView: 'shelves' })} />
-            <Radio on={prefs.libraryView === 'grid'}    label="grid"    sub="all covers, dense"  onClick={() => void updatePref({ libraryView: 'grid' })} />
-            <Radio on={prefs.libraryView === 'list'}    label="list"    sub="rows · for power users" onClick={() => void updatePref({ libraryView: 'list' })} />
-          </div>
-        </SettingsRow>
+        {/* "default library view" row removed in PR A (D5): grid + list
+            layouts were never built. The User.libraryView column is kept in
+            the schema as a no-op default to avoid a migration. */}
 
         <SettingsRow label="show HLTB estimates" hint="how-long-to-beat times under backlog covers and on the dashboard.">
           <Toggle
@@ -579,17 +581,27 @@ function DeleteModal({ userName, confirmText, confirmed, deleting, onTextChange,
   );
 }
 
-/* ── Stub for sections not yet implemented ── */
+/* ── Stub for sections not yet implemented (PR A — A6) ── */
+
+const STUB_DESCRIPTIONS: Record<string, string> = {
+  library: 'extra library defaults — cover density, default sort, HLTB display preferences. some controls already exist under Appearance.',
+  notifications: 'in-app + email alerts when wishlisted releases approach launch and when scheduled syncs fail. opt-in only.',
+  privacy: 'profile visibility, data sharing, anonymized usage telemetry. account deletion lives under danger zone today.',
+  'data export': 'one-click export of your library, wishlist, and notes as JSON or CSV. import lives here too.',
+};
 
 function StubSection({ title }: { title: string }) {
   return (
     <>
-      <Marker>// {title}</Marker>
+      <Marker>// {title} <span style={{ marginLeft: 8, color: 'var(--amber)', letterSpacing: '0.1em' }}>v2</span></Marker>
       <div className="t-display" style={{ fontSize: "var(--text-xl)", marginTop: 8, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
         {title}
       </div>
-      <div className="t-mono t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 16 }}>
-        // coming soon
+      <div className="panel" style={{ marginTop: 18, padding: 24 }}>
+        <div className="t-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--amber)', letterSpacing: '0.1em' }}>// coming soon — v2</div>
+        <p style={{ marginTop: 12, color: 'var(--paper-dim)', fontSize: 'var(--text-sm)', lineHeight: 1.55 }}>
+          {STUB_DESCRIPTIONS[title] ?? 'this section is planned for a future release.'}
+        </p>
       </div>
     </>
   );
