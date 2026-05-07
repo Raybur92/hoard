@@ -7,11 +7,9 @@ import type { IgdbUpcomingRelease } from '@hoard/types';
 
 /**
  * IGDB platform name (e.g. "PlayStation 5") → Hoard's 2-letter code ("PS").
- * Same logic as the inline duplicates in UpcomingMobile / DashboardDesktop /
- * DashboardMobile — those will fold into this when their containing screens
- * get reworked (R5 replaces UpcomingMobile; the Dashboard copies are a
- * separate cleanup). Kept local here to avoid a cross-screen refactor while
- * R2–R6 are still in flight.
+ * Same logic still inlined in DashboardDesktop / DashboardMobile (the
+ * Releases page copies are gone after R5). Promote to `apps/web/src/lib/utils.ts`
+ * when the Dashboard copies are folded into a shared helper.
  */
 export function toPlatCode(name: string): string {
   const n = name.toLowerCase();

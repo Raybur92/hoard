@@ -21,9 +21,10 @@ const DashboardDesktop      = lazyNamed(() => import('./components/screens/Dashb
 const DashboardMobile       = lazyNamed(() => import('./components/screens/DashboardMobile'),       'DashboardMobile');
 const LibraryDesktop        = lazyNamed(() => import('./components/screens/LibraryDesktop'),        'LibraryDesktop');
 const LibraryMobile         = lazyNamed(() => import('./components/screens/LibraryMobile'),         'LibraryMobile');
-const UpcomingMobile        = lazyNamed(() => import('./components/screens/UpcomingMobile'),        'UpcomingMobile');
 const ReleasesDesktop       = lazyNamed(() => import('./components/screens/ReleasesDesktop'),       'ReleasesDesktop');
+const ReleasesMobile        = lazyNamed(() => import('./components/screens/ReleasesMobile'),        'ReleasesMobile');
 const ReleasesRecentDesktop = lazyNamed(() => import('./components/screens/ReleasesRecentDesktop'), 'ReleasesRecentDesktop');
+const ReleasesRecentMobile  = lazyNamed(() => import('./components/screens/ReleasesRecentMobile'),  'ReleasesRecentMobile');
 const GameDetailDesktop     = lazyNamed(() => import('./components/screens/GameDetailDesktop'),     'GameDetailDesktop');
 const GameDetailMobile      = lazyNamed(() => import('./components/screens/GameDetailMobile'),      'GameDetailMobile');
 const SettingsDesktop       = lazyNamed(() => import('./components/screens/SettingsDesktop'),       'SettingsDesktop');
@@ -55,12 +56,12 @@ export default function App() {
                 <Route path="/"                                 element={desktop ? <DashboardDesktop />      : <DashboardMobile />} />
                 <Route path="/library"                          element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
                 <Route path="/library/:status"                  element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
-                {/* Releases page rework (R3) — `/releases` is the canonical
-                    URL; `/upcoming` redirects below for compatibility with old
-                    shared links. Mobile still renders the legacy
-                    `UpcomingMobile` until R5 ships the new mobile shell. */}
-                <Route path="/releases"                         element={desktop ? <ReleasesDesktop />       : <UpcomingMobile />} />
-                <Route path="/releases/recent"                  element={desktop ? <ReleasesRecentDesktop /> : <UpcomingMobile />} />
+                {/* Releases page rework (R3 desktop, R5 mobile) — `/releases`
+                    is the canonical URL; `/upcoming` redirects below for
+                    compatibility with old shared links. Mobile uses the
+                    view-sheet IA (handoff §7) — see `ReleasesMobile`. */}
+                <Route path="/releases"                         element={desktop ? <ReleasesDesktop />       : <ReleasesMobile />} />
+                <Route path="/releases/recent"                  element={desktop ? <ReleasesRecentDesktop /> : <ReleasesRecentMobile />} />
                 <Route path="/upcoming"                         element={<Navigate to="/releases" replace />} />
                 <Route path="/game/:id"                         element={desktop ? <GameDetailDesktop />     : <GameDetailMobile />} />
                 <Route path="/settings"                         element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
