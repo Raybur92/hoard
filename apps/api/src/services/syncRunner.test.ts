@@ -34,6 +34,8 @@ const mockIgdbResult = {
   releaseYear: 2017,
   genres: ['Platform'],
   coverUrl: 'https://example.com/cover.jpg',
+  platforms: ['PC (Microsoft Windows)'],
+  totalRatingCount: 1000,
 };
 
 const mockGame = { id: 'game-1', ...mockIgdbResult };

@@ -254,6 +254,16 @@ export interface IgdbSearchResult {
   releaseYear: number | null;
   genres: string[];
   coverUrl: string | null;
+  // IGDB platform names (e.g. "PlayStation 5", "PC (Microsoft Windows)")
+  // used by `pickBestMatch` to prefer results that match the syncing
+  // platform. Empty when IGDB has no platform data — treated as "unknown,
+  // don't penalize" rather than "wrong platform."
+  platforms: string[];
+  // IGDB's `total_rating_count` — proxy for popularity. Used as a tiebreak
+  // by `pickBestMatch` so well-known games (Slay the Spire) outrank obscure
+  // sequels / clones (Slay the Spire 2 in early access). Null when IGDB
+  // didn't report it.
+  totalRatingCount: number | null;
 }
 
 // Lives at IGDB's /game_time_to_beats endpoint, keyed by game_id. Fetched

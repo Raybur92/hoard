@@ -1,6 +1,7 @@
 import { prisma } from '@hoard/db';
 import type { PlatformCode } from '@hoard/types';
 import { searchGames, getGameBySteamId, getTimeToBeat } from './igdb';
+import { pickBestMatch } from './igdbMatch';
 import { fetchHltbWithFallback } from './hltb';
 import type { SyncedGame } from './platforms/steam';
 
@@ -69,11 +70,17 @@ export async function runSync(
 
   for (const sg of syncedGames) {
     try {
-      // Look up IGDB via Steam App ID first (exact match), fall back to text search
+      // Look up IGDB via Steam App ID first (exact match), fall back to text
+      // search with a smart matcher. The matcher scores top-N candidates by
+      // title similarity + platform agreement + popularity so we don't pick
+      // an obscure name-collision (Korean MMO "Ragnarok: War of Gods" beating
+      // "God of War Ragnarök") or an early-access sequel (Slay the Spire 2
+      // beating Slay the Spire) just because IGDB's relevance search ranked
+      // them first. See apps/api/src/services/igdbMatch.ts for the algorithm.
       let igdbGame = sg.steamAppId ? await getGameBySteamId(sg.steamAppId) : null;
       if (!igdbGame) {
         const results = await searchGames(sg.igdbSearchTitle);
-        igdbGame = results[0] ?? null;
+        igdbGame = pickBestMatch(sg.igdbSearchTitle, results, sg.platformCode);
       }
       await delay(300); // ~3.3 req/s — under the 4/s IGDB limit
 

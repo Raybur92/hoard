@@ -139,6 +139,8 @@ function mapToSearchResult(raw: IgdbRawGame): IgdbSearchResult {
     releaseYear: getReleaseYear(raw.first_release_date),
     genres: raw.genres?.map((g) => g.name) ?? [],
     coverUrl: normalizeCover(raw.cover?.url),
+    platforms: raw.platforms?.map((p) => p.name) ?? [],
+    totalRatingCount: raw.total_rating_count ?? null,
   };
 }
 
@@ -152,7 +154,7 @@ export async function searchGames(query: string): Promise<IgdbSearchResult[]> {
   const results = await igdbPost(
     'games',
     `search "${query}";
-fields id, name, first_release_date, cover.url, genres.name, involved_companies.company.name, involved_companies.developer;
+fields id, name, first_release_date, cover.url, genres.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
 limit 10;`,
   );
 
