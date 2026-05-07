@@ -77,6 +77,27 @@ export function upcomingDateParts(iso: string | null): { full: string; month: st
   };
 }
 
+/**
+ * Pick the right label for the trophies/achievements receipt-block line on
+ * GameDetail (T5 in `docs/TROPHIES_PLAN.md`). PSN calls them "trophies",
+ * Steam calls them "achievements" — Hoard renders the label that matches
+ * the user's primary platform for the game.
+ *
+ * Inference rule: if the user has any PSN playtime on this game, use
+ * "trophies" (Sony's brand term). Otherwise default to "achievements" (the
+ * generic English term that fits Steam, Xbox, GOG). Single-platform users
+ * get the right label; dual-platform games default to "trophies" because
+ * Andrea is PSN-heavy and that's the more authentic read for trophy-hunter
+ * culture.
+ *
+ * Note: this doesn't track which platform actually wrote the aggregate
+ * data — Steam's background pass overwrites PSN's inline pass for
+ * dual-platform games. Per-platform achievement storage is v2.
+ */
+export function achievementLabel(playtimeByPlatform: Partial<Record<string, number>>): 'trophies' | 'achievements' {
+  return playtimeByPlatform.PS !== undefined ? 'trophies' : 'achievements';
+}
+
 export function countdownParts(iso: string | null, now: number = Date.now()): { d: string; h: string; m: string; s: string } | null {
   if (!iso) return null;
   const ms = new Date(iso).getTime() - now;

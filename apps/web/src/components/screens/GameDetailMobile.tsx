@@ -9,7 +9,7 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
-import { minutesToHours, formatRelative, generateReceipt } from '../../lib/utils';
+import { minutesToHours, formatRelative, generateReceipt, achievementLabel } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
 
@@ -253,6 +253,12 @@ HLTB extras ...... ${hltbExtras ? `${hltbExtras} h` : '—'}
 HLTB 100% ........ ${hltbComplete ? `${hltbComplete} h` : '—'}
 % of main ........ ${pctOfMain}
 last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
+{/* T5 — trophies / achievements row, hidden when not fetched / unsupported (T-D7).
+    Same dotted-row aesthetic as the HLTB rows above; label flips between
+    "trophies" (PSN) and "achievements" (Steam) via achievementLabel(). */}
+{g.achievementsTotal !== null && g.achievementsTotal > 0 && g.achievementsEarned !== null && g.achievementsPercent !== null
+  ? `\n${achievementLabel(g.playtimeByPlatform) === 'trophies' ? 'trophies ........' : 'achievements ....'} ${g.achievementsEarned}/${g.achievementsTotal} (${g.achievementsPercent}%)`
+  : ''}
           </pre>
 
           <div className="rule" style={{ margin: '12px 0' }} />

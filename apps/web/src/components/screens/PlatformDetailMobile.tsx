@@ -231,12 +231,25 @@ export function PlatformDetailMobile() {
                     ['trophies', 'achievement progress',       true],
                     ['friends',  'friend list',                false],
                   ] as [string, string, boolean][]).map(([k, d, on]) => (
-                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: "var(--text-xs)" }}>
-                      <span style={{ width: 14, height: 14, border: '1px solid var(--rule-bright)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} aria-hidden="true">
-                        {on && <Icon name="check" size={9} style={{ color: 'var(--green)' }} />}
-                      </span>
-                      <span style={{ color: on ? 'var(--paper)' : 'var(--paper-dim)' }}>{k}</span>
-                      <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {d}</span>
+                    <div key={k}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: "var(--text-xs)" }}>
+                        <span style={{ width: 14, height: 14, border: '1px solid var(--rule-bright)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} aria-hidden="true">
+                          {on && <Icon name="check" size={9} style={{ color: 'var(--green)' }} />}
+                        </span>
+                        <span style={{ color: on ? 'var(--paper)' : 'var(--paper-dim)' }}>{k}</span>
+                        <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {d}</span>
+                      </div>
+                      {/* T-D7 amendment: Steam-only public-profile note. The
+                          fetcher silently skips when Steam returns "Profile
+                          is not public", so without this note the failure
+                          mode is invisible. */}
+                      {k === 'trophies' && code.toLowerCase() === 'st' && (
+                        <div className="t-faint" style={{ marginLeft: 24, marginTop: 4, fontSize: "var(--text-3xs)", lineHeight: 1.5 }}>
+                          // note · steam profile must be public for achievement sync.
+                          <br />
+                          <span style={{ marginLeft: 8 }}>settings → privacy → game details on steam.</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
