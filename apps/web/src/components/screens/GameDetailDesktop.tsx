@@ -129,7 +129,7 @@ export function GameDetailDesktop() {
       {/* PR A — A9e: explicit back affordance for desktop. Mobile already
           has navigate(-1) via MobileHeader's back caret; the breadcrumb's
           "library" link covers the slow-path but a chip is more discoverable. */}
-      <div style={{ padding: '12px 36px 0', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ padding: '12px 36px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
         <Btn sm onClick={() => navigate(-1)}>
           <Icon name="back" size={10} /> back
         </Btn>

@@ -630,8 +630,11 @@ select:focus-visible {
   border-top: 1px solid var(--rule);
   background: var(--ink);
   flex-shrink: 0;
-  /* clear the iOS home-indicator gesture region */
-  padding-bottom: env(safe-area-inset-bottom);
+  /* Home-indicator clearance is handled at the outer `.app-mobile` container
+     (padding-bottom: env(safe-area-inset-bottom)) so the gesture zone shows
+     page bg, not tab-bar bg. This way the tab bar visually anchors flush to
+     the bottom of the content area instead of looking like it has empty
+     padding below its items. */
 }
 .m-tabbar .item {
   display: flex;
@@ -719,6 +722,12 @@ select:focus-visible {
   /* clear the notch / Dynamic Island; the OS already paints its own
      status bar via apple-mobile-web-app-status-bar-style=black-translucent */
   padding-top: env(safe-area-inset-top);
+  /* clear the iOS home-indicator gesture region BELOW the tab bar so the
+     bar visually anchors to the bottom of the content area (page bg fills
+     the gesture zone). Previous version painted tab-bar bg through the
+     gesture zone, which read as "the tab bar has empty space below its
+     items and isn't anchored to the bottom." */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .app-mobile-content {
   flex: 1;
