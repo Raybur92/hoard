@@ -281,6 +281,65 @@ Plus from D6:
 
 ---
 
+## 5b. Findings + considerations from R1 + R2
+
+> Captured as the workstream proceeds so context isn't lost.
+
+### Mock-vs-handoff drift is now guarded at the unit-test level
+
+R2's primitive tests include explicit `queryByText(...).toBeNull()` assertions for the four buttons that the rev07 mock contains but the handoff explicitly removes:
+
+- `[i got it]` (`ReleaseCard variant='recent' && wishlisted`)
+- `[mark all owned]` (`RecentBanner` green-prominent variant)
+- `[trailer]` (`HeroCountdown`)
+- `[remind me]` (`HeroCountdown`)
+
+If a future agent regenerates the mocks from a newer rev or auto-translates JSX from the bundler, these tests will fail with a clear pointer. The drift table in §2 above captures the same rule in human-readable form; the tests enforce it programmatically.
+
+### `toPlatCode` is now a 5-way duplicate (technical debt)
+
+The IGDB-platform-name → 2-letter-code helper currently lives inline in:
+- `apps/web/src/components/screens/UpcomingDesktop.tsx`
+- `apps/web/src/components/screens/UpcomingMobile.tsx`
+- `apps/web/src/components/screens/DashboardDesktop.tsx`
+- `apps/web/src/components/screens/DashboardMobile.tsx`
+- `apps/web/src/components/screens/releases/utils.ts` (added in R2)
+
+The R2 version is identical to the others. **Decision deferred:** consolidate when the existing screens get reworked or when a cleanup pass makes sense — R3 (which replaces `UpcomingDesktop`) will reduce this from 5 to 4 naturally. R5 (mobile shell, replaces `UpcomingMobile`) reduces it to 3. The remaining `Dashboard*` duplicates would still need a manual sweep.
+
+Recorded in `CLAUDE.md` known gaps so it doesn't drift out of sight.
+
+### Hype-bar thresholds are tunable
+
+`hypeToBars` in `releases/utils.ts` maps raw IGDB hypes to a 1–5 bucket. Current thresholds:
+
+```
+0           → 0 bars (don't render)
+1 – 10      → 1
+11 – 25     → 2
+26 – 60     → 3
+61 – 150    → 4
+151+        → 5
+```
+
+These are eyeball-fit against IGDB's distribution. If the buckets feel wrong after R3 lands and we see real data on production, retune in one place — the function has a single call site path through both `ReleaseCard` and `HeroCountdown`.
+
+### Releases primitives live in `screens/releases/`, not `primitives/`
+
+R2 components are in `apps/web/src/components/screens/releases/` rather than `apps/web/src/components/primitives/`. Rationale:
+
+- They're tightly coupled to one page's data shape (`IgdbUpcomingRelease`)
+- They consume Hoard's true primitives (`Cover`, `Plat`, `HypeBars`, `Btn`, `Icon`, `Marker`)
+- Promoting them to `/primitives/` would imply general-purpose use; they're not
+
+If a future workstream finds a second consumer (e.g. a Stats page that also shows release cards), promote then. Premature promotion buys nothing.
+
+### Empty-state navigation needs a "next non-empty bucket" helper
+
+R3 will need to compute "skip ahead to next non-empty bucket in current zoom" for the empty-state CTA (handoff §11). Belongs in `releases/utils.ts` or beside the bucket-counting logic; not built yet but flagged here so R3 doesn't reinvent it.
+
+---
+
 ## 6. Status tracking
 
 | ID | Status | PR | Date | Notes |
