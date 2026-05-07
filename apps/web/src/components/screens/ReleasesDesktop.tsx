@@ -13,6 +13,7 @@ import { HeroCountdown } from './releases/HeroCountdown';
 import { RecentBanner } from './releases/RecentBanner';
 import { TimeNav, type TimeNavZoom } from './releases/TimeNav';
 import { AgendaRail } from './releases/AgendaRail';
+import { WishlistEmptyRecommendation } from './releases/WishlistEmptyRecommendation';
 import {
   buildBuckets,
   defaultBucketKey,
@@ -292,15 +293,24 @@ function ReleasesContent({
 
   // Wishlist mode + zero starred globally → "nothing on the horizon" empty
   // state per handoff §11. Time strip still renders above (already done).
+  // Plus the "// hot this month · on your platforms" recommendation panel
+  // that handoff §11 calls for — gives users an actionable next step
+  // instead of a dead-end.
   if (mode === 'wishlist' && allFeedItems.length === 0) {
     return (
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '40px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 0' }}>
-          <div className="panel" style={{ padding: 32, maxWidth: 520, width: '100%', textAlign: 'center' }}>
-            <Marker>// nothing on the horizon</Marker>
-            <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: 'var(--text-sm)', lineHeight: 1.55 }}>
-              you haven&rsquo;t starred any upcoming releases yet. switch to <strong>all releases</strong> and tap + on something that catches your eye.
-            </p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 0', gap: 0 }}>
+          <div style={{ maxWidth: 520, width: '100%' }}>
+            <div className="panel" style={{ padding: 32, textAlign: 'center' }}>
+              <Marker>// nothing on the horizon</Marker>
+              <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: 'var(--text-sm)', lineHeight: 1.55 }}>
+                you haven&rsquo;t starred any upcoming releases yet. switch to <strong>all releases</strong> and tap + on something that catches your eye, or pick from the picks below.
+              </p>
+            </div>
+            <WishlistEmptyRecommendation
+              layout="desktop"
+              onToggleWishlist={onToggleWishlist}
+            />
           </div>
         </div>
       </div>

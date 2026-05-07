@@ -251,8 +251,26 @@ Three real scopes on `/api/igdb/upcoming`: `my-platforms` (IGDB feed, hype-filte
 **21. Wipe library scope (Post-8 PR C — D10)**
 `POST /api/auth/me/wipe-library` deletes the user's `UserGame` rows and disconnects every platform (deletes the `Platform` row). **Preserves `Game`, `HltbData`, `WishlistRelease`, account, preferences, login history.** Wipe is destructive but bounded — wishlist and account state survive. Two-step typed-confirmation modal (`WIPE` keyword) mirrors the delete-account flow (`HOARD` keyword); the modal component is generalised via a `variant` prop.
 
-**22. Releases page rename — surface only (active workstream, scoped 2026-05-07 — D1)**
-The Upcoming page is being reworked into the Releases page (`docs/RELEASES_PLAN.md`). The rename is **URL + UI labels only** — internal code keeps `useUpcoming`, `IgdbUpcomingRelease`, `WishlistRelease`, `/api/igdb/upcoming`, `/api/upcoming/:igdbId/wishlist`, and the database tables. The data model (a future release date — `WishlistRelease` — and a list of upcoming items — `IgdbUpcomingRelease`) is unchanged; only the page name shifts. Future agents who find themselves doing a search-and-replace of "upcoming" across the codebase should stop and re-read `docs/RELEASES_PLAN.md` §1 before proceeding. The `SOON` mobile tab label stays — it's already abstract and ties to the page concept, not its name.
+**22. Releases page rename — surface only (Releases rework, shipped 2026-05-07 — D1)**
+The Upcoming page was reworked into the Releases page (`docs/RELEASES_PLAN.md`). The rename is **URL + UI labels only** — internal code keeps `useUpcoming`, `IgdbUpcomingRelease`, `WishlistRelease`, `/api/igdb/upcoming`, `/api/upcoming/:igdbId/wishlist`, and the database tables. The data model (a future release date — `WishlistRelease` — and a list of upcoming items — `IgdbUpcomingRelease`) is unchanged; only the page name shifts. Future agents who find themselves doing a search-and-replace of "upcoming" across the codebase should stop and re-read `docs/RELEASES_PLAN.md` §1 before proceeding. The `SOON` mobile tab label stays — it's already abstract and ties to the page concept, not its name. Enforced by `scripts/check-rename-rule.ts` (run via `npm run check:rename-rule` locally; same script runs in CI).
+
+**23. RECENT page server-side library filter (Releases rework — D2)**
+`/releases/recent` filters the "starred" list against `UserGame.game.igdbId` server-side, not client-side. Single endpoint `GET /api/releases/recent` returns `{ starred, hyped }` rather than two separate routes. The client never joins library data with the recent feed — once a wishlist item appears in the user's library via platform sync, it disappears from RECENT automatically. Library sync is the source of truth for ownership; RECENT never mutates ownership state and intentionally has no manual "I got this" button.
+
+**24. Muted-banner threshold is constant (Releases rework — D3)**
+The muted-variant `RecentBanner` qualifier is `hype >= 80`, hard-coded in banner logic. It is **not** the user's `User.hypeThreshold` setting. The user's threshold filters the IGDB feed for All-Releases mode; the banner threshold is independent so the banner stays comparable across users. If we want to tune banner sensitivity later, the threshold lives in one place (`apps/api/src/routes/releases.ts`).
+
+**25. Quarters zoom rolls forward; past releases invisible (Releases rework — D4)**
+Quarters zoom shows 3 dated buckets (current quarter + next 2) plus a TBA catch-all. Past releases are invisible everywhere on the Releases page (the `/releases/recent` 14-day window is the explicit exception). Anything that doesn't land on one of the 3 dated quarter buckets — truly-dateless releases, far-future quarters, far-future year-only dates — falls into TBA. Months zoom shows current + next 5 with no TBA (dateless never lands in a dated month).
+
+**26. Hero countdown hide rule (Releases rework — D5)**
+The wishlist Hero countdown shows iff `wishlist.some(r => r.away >= 0)`. If the closest starred drop is in the past, the Hero hides; the conditional `RecentBanner` does the work of surfacing recent drops instead. The Hero is the page's "what am I most looking forward to" anchor, not a recency tracker — it's a global property of the wishlist (next-starred-globally), not per-bucket.
+
+**27. Hero buttons are wishlist toggle only (Releases rework — D6)**
+The `HeroCountdown` ships with only the `[on wishlist]` toggle. `[trailer]` and `[remind me]` (visible in earlier mocks) are deferred to v2 — there's no backing data to wire either to. Better to surface fewer, real buttons than a row of dead UI.
+
+**28. RECENT response uses unified `IgdbUpcomingRelease[]` shape (Releases rework — D7)**
+`GET /api/releases/recent` returns `{ starred: IgdbUpcomingRelease[], hyped: IgdbUpcomingRelease[] }` — same element shape across both lists. Server-side maps `WishlistRelease` rows into `IgdbUpcomingRelease` shape (`wishlisted: true`, drops the unused DB pk + userId). The client treats both lists with the same primitives (`ReleaseCard variant="recent"` / `MobileReleaseRow`), so two shapes would have forced casts and conditional rendering for no semantic gain.
 
 ---
 

@@ -21,6 +21,7 @@ import {
 } from './releases/MobileViewSheet';
 import { MobileBanner } from './releases/MobileBanner';
 import { MobileReleaseRow } from './releases/MobileReleaseRow';
+import { WishlistEmptyRecommendation } from './releases/WishlistEmptyRecommendation';
 import {
   buildBuckets,
   defaultBucketKey,
@@ -287,16 +288,22 @@ function ReleasesMobileContent({
   const bucketLabel = activeBucketKey.toLowerCase();
   const caption = zoom === 'quarters' ? quarterCaption(activeBucketKey) : null;
 
-  // Wishlist mode + zero starred globally — handoff §11 wishlist empty.
+  // Wishlist mode + zero starred globally — handoff §11 wishlist empty,
+  // including the "// hot this month · on your platforms" recommendation
+  // panel so the empty state isn't a dead-end.
   if (mode === 'wishlist' && allFeedItems.length === 0) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 16px' }}>
-        <div className="panel" style={{ padding: 18, width: '100%', textAlign: 'center' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '20px 16px' }}>
+        <div className="panel" style={{ padding: 18, textAlign: 'center' }}>
           <Marker>// nothing on the horizon</Marker>
           <p style={{ marginTop: 10, color: 'var(--paper-dim)', fontSize: 'var(--text-xs)', lineHeight: 1.5 }}>
-            no starred releases yet. open the view sheet and switch to <strong>all</strong> to find something to track.
+            no starred releases yet. open the view sheet and switch to <strong>all</strong> to find something to track, or pick from below.
           </p>
         </div>
+        <WishlistEmptyRecommendation
+          layout="mobile"
+          onToggleWishlist={onToggleWishlist}
+        />
       </div>
     );
   }

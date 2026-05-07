@@ -61,26 +61,70 @@ test.describe('Library /library', () => {
   });
 });
 
-test.describe('Upcoming /upcoming', () => {
+test.describe('Releases /releases', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/upcoming');
+    await page.goto('/releases');
     await waitForRender(page);
   });
 
-  test('shows featured countdown', async ({ page }) => {
-    await expect(page.getByText(/^T-\d+$/).first()).toBeVisible();
+  // Wishlist mode is the default. The hero only renders when there's a
+  // future starred release globally (D5). The page header is stable
+  // regardless of feed contents.
+  test('renders the page chrome', async ({ page, viewport }) => {
+    if (!viewport || viewport.width >= 1024) {
+      // Desktop: mode toggle + breadcrumb.
+      await expect(page.getByRole('tab', { name: /^WISHLIST$/i })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /^ALL RELEASES$/i })).toBeVisible();
+    } else {
+      // Mobile: tappable view label opens the sheet (caret glyph present).
+      await expect(page.locator('.m-view-header')).toBeVisible();
+    }
   });
 
-  test('shows agenda list', async ({ page }) => {
-    await expect(page.getByText('Pragmata').first()).toBeVisible();
-    await expect(page.getByText('Death Stranding 2').first()).toBeVisible();
+  // Don't pin to specific live IGDB titles — those drift weekly. Assert
+  // structural shape: either a card / row exists, or the empty-state CTA
+  // is rendered. Either is a healthy outcome for the current feed.
+  test('renders either content or an empty-state CTA', async ({ page }) => {
+    // Wait briefly for client fetch to settle — useUpcoming + useQuery hydrate.
+    await page.waitForTimeout(800);
+    const hasContent = await page.locator('[role="status"], [role="note"]').count() > 0
+      || await page.getByText(/T-\d+|TBA|dropped \d+d ago/).count() > 0;
+    const hasEmptyState = await page.getByText(/nothing on the horizon|0 starred|0 releases/i).count() > 0;
+    if (!hasContent && !hasEmptyState) {
+      throw new Error('Releases page rendered neither content nor an empty-state CTA');
+    }
   });
 
   test('visual snapshot', async ({ page }) => {
-    await expect(page).toHaveScreenshot('upcoming.png', {
+    await expect(page).toHaveScreenshot('releases.png', {
       fullPage: true,
       maxDiffPixelRatio: 0.02,
     });
+  });
+});
+
+test.describe('Releases recent /releases/recent', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/releases/recent');
+    await waitForRender(page);
+  });
+
+  test('renders the page chrome', async ({ page }) => {
+    await expect(page.getByText(/RECENT|last 14 day/i).first()).toBeVisible();
+    // back-to-releases CTA should always be reachable.
+    await expect(page.getByRole('button', { name: /back to releases/i }).first()).toBeVisible();
+  });
+
+  test('drift-guard: no [mark all owned] anywhere on the page', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /mark all owned/i })).toHaveCount(0);
+  });
+});
+
+test.describe('Legacy redirects', () => {
+  test('/upcoming redirects to /releases', async ({ page }) => {
+    await page.goto('/upcoming');
+    await waitForRender(page);
+    await expect(page).toHaveURL(/\/releases(\?.*)?$/);
   });
 });
 

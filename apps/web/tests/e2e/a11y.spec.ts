@@ -30,8 +30,14 @@ test.describe('Accessibility (axe)', () => {
     await expectNoA11yViolations(page);
   });
 
-  test('Upcoming /upcoming', async ({ page }) => {
-    await page.goto('/upcoming');
+  test('Releases /releases', async ({ page }) => {
+    await page.goto('/releases');
+    await settle(page);
+    await expectNoA11yViolations(page);
+  });
+
+  test('Releases recent /releases/recent', async ({ page }) => {
+    await page.goto('/releases/recent');
     await settle(page);
     await expectNoA11yViolations(page);
   });
