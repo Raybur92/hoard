@@ -82,35 +82,50 @@ model Platform {
 }
 
 model Game {
-  id          String   @id @default(cuid())
-  igdbId      Int      @unique
-  steamAppId  Int?     @unique
-  hltbId      Int?
-  gogAppId    Int?
-  title       String
-  developer   String?
-  releaseYear Int?
-  genres      String[]
-  coverUrl    String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  igdbId               Int      @unique
+  steamAppId           Int?     @unique
+  hltbId               Int?
+  gogAppId             Int?
+  // PSN's stable per-title identifier. Captured during trophy sync (T2 in
+  // docs/TROPHIES_PLAN.md). Lets future PSN syncs rebind by stable PSN
+  // identity instead of fuzzy title-matching — partially closes the
+  // "store platform-side IDs" gap from sync-quality decision #33.
+  psnNpCommunicationId String?  @unique
+  title                String
+  developer            String?
+  releaseYear          Int?
+  genres               String[]
+  coverUrl             String?
+  metadata             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   userGames UserGame[]
   hltbData  HltbData?
 }
 
 model UserGame {
-  id                 String     @id @default(cuid())
-  userId             String
-  gameId             String
-  status             GameStatus @default(Backlog)
-  playtimeByPlatform Json       @default("{}")
-  lastPlayedAt       DateTime?
-  notes              String?
-  rating             Int?
-  addedAt            DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                    String     @id @default(cuid())
+  userId                String
+  gameId                String
+  status                GameStatus @default(Backlog)
+  playtimeByPlatform    Json       @default("{}")
+  lastPlayedAt          DateTime?
+  notes                 String?
+  rating                Int?
+  // Aggregate achievement / trophy progress. All four are populated by the
+  // sync flow (T2 PSN trophy fetcher + T3 Steam achievement fetcher in
+  // docs/TROPHIES_PLAN.md). All nullable: `null` means "no data fetched
+  // yet" (pre-T2/T3 rows) OR "the game doesn't support achievements"
+  // (Steam returns success=false). The receipt-block UI hides the
+  // trophies / achievements line when `achievementsTotal === null`.
+  achievementsEarned    Int?
+  achievementsTotal     Int?
+  achievementsPercent   Int?
+  achievementsUpdatedAt DateTime?
+  addedAt               DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   game Game @relation(fields: [gameId], references: [id])

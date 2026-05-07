@@ -50,6 +50,11 @@ export interface Game {
   // Used to build the HLTB deep-link on GameDetail and as a future GOG sync key.
   hltbId: number | null;
   gogAppId: number | null;
+  // PSN's stable per-title identifier ("NPWR12345_00"). Captured during
+  // the trophy sync (T2 in docs/TROPHIES_PLAN.md). Universal per title —
+  // every PSN player of a given game shares the same id, so it lives on
+  // Game alongside steamAppId, not on UserGame.
+  psnNpCommunicationId: string | null;
 }
 
 export type PlaytimeByPlatform = Partial<Record<PlatformCode, number>>;
@@ -64,6 +69,17 @@ export interface UserGame {
   lastPlayedAt: string | null;
   notes: string | null;
   rating: number | null;
+  // Aggregate trophy / achievement progress for this user's copy of the
+  // game. Populated by T2 (PSN) and T3 (Steam) in
+  // docs/TROPHIES_PLAN.md. All four are nullable — `null` means either
+  // "not yet fetched" (pre-trophy-sync rows) or "the game doesn't
+  // support achievements" (Steam returns success=false). The
+  // GameDetail receipt-block UI hides the trophies / achievements line
+  // when `achievementsTotal === null`.
+  achievementsEarned: number | null;
+  achievementsTotal: number | null;
+  achievementsPercent: number | null;
+  achievementsUpdatedAt: string | null;
   addedAt: string;
   updatedAt: string;
 }

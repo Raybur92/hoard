@@ -9,6 +9,10 @@ export interface UserGameRow {
   lastPlayedAt: Date | null;
   notes: string | null;
   rating: number | null;
+  achievementsEarned: number | null;
+  achievementsTotal: number | null;
+  achievementsPercent: number | null;
+  achievementsUpdatedAt: Date | null;
   addedAt: Date;
   updatedAt: Date;
   game: {
@@ -21,6 +25,7 @@ export interface UserGameRow {
     coverUrl: string | null;
     hltbId: number | null;
     gogAppId: number | null;
+    psnNpCommunicationId: string | null;
     hltbData: {
       id: string;
       gameId: string;
@@ -51,12 +56,17 @@ export function mapUserGame(ug: UserGameRow): UserGameDetail {
       coverUrl: ug.game.coverUrl,
       hltbId: ug.game.hltbId,
       gogAppId: ug.game.gogAppId,
+      psnNpCommunicationId: ug.game.psnNpCommunicationId,
     },
     status: fromPrismaStatus(ug.status),
     playtimeByPlatform: ug.playtimeByPlatform as UserGameDetail['playtimeByPlatform'],
     lastPlayedAt: ug.lastPlayedAt?.toISOString() ?? null,
     notes: ug.notes,
     rating: ug.rating,
+    achievementsEarned: ug.achievementsEarned,
+    achievementsTotal: ug.achievementsTotal,
+    achievementsPercent: ug.achievementsPercent,
+    achievementsUpdatedAt: ug.achievementsUpdatedAt?.toISOString() ?? null,
     addedAt: ug.addedAt.toISOString(),
     updatedAt: ug.updatedAt.toISOString(),
     hltb: ug.game.hltbData

@@ -295,7 +295,7 @@ Six PRs, shippable independently. T6 is optional / deferrable.
 
 | PR | Status | Notes |
 |---|---|---|
-| T1 — Schema + types | Not started | Hand-written migration via documented db-execute recipe. |
+| T1 — Schema + types | Done (2026-05-08) | Migration `20260508120000_trophy_aggregates` applied to Supabase via db-execute + migrate-resolve. `Game.psnNpCommunicationId String? @unique` + four `UserGame` columns added. `@hoard/types` extended; `mapUserGame()` updated; existing test fixtures backfilled with the new nullable fields. 162 API + 193 web tests pass; lint + typecheck + rename-rule clean. No behavior change — fields stay null until T2/T3 populate them. |
 | T2 — PSN trophy fetcher | Not started | Single inline call to `getUserTitles`. |
 | T3 — Steam achievement fetcher | Not started | Per-game on background queue, throttled. |
 | T4 — Shared auto-complete helper | Not started | Refactor extract from T2/T3. |
