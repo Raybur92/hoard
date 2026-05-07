@@ -371,9 +371,25 @@ R3 will need to compute "skip ahead to next non-empty bucket in current zoom" fo
 
 **D7 — `/api/releases/recent` response shape.** Unified `IgdbUpcomingRelease[]` for both `starred` and `hyped`. Server maps `WishlistRelease` → `IgdbUpcomingRelease` shape on the way out, dropping the unused `id` / `userId` fields. Single client render path; consistent with the existing wishlist-scope behaviour in PR B.
 
+**D8 — Wishlist sync'd between two tables (post-rework, 2026-05-07).** `WishlistRelease` keeps upcoming-tracking metadata (date, hype, category); `UserGame.status='Wishlist'` keeps the library-citizen role (search, shelves, detail page). Toggle endpoint creates/deletes both atomically; the un-star branch deletes the `UserGame` only when its status is still `Wishlist` (manual moves are preserved). Mirrored as #29 in `AGENT.md`. RECENT-page library filter rule was tweaked alongside (drop only when `status !== 'Wishlist'`) so the auto-creation doesn't make every starred drop disappear.
+
 ---
 
-## 8. Cross-references
+## 9. Post-rework iterations (post-2026-05-07 closeout)
+
+R1–R6 closed clean, but Andrea immediately surfaced gaps the workstream hadn't addressed. These follow-up commits all shipped same day (2026-05-07):
+
+- **`b95ce35` — five-bug audit fix.** Triggered by Andrea spotting the wishlist-mode hero showing a non-wishlisted game with a hollow star. Root cause: `api.igdbUpcoming('wishlist')` only forwarded the scope param when scope was `'all'` — the wishlist scope silently routed to the my-platforms feed. Audit found 4 more issues: mobile All Releases hid the star toggle on rows (inverted conditional), `api.updateMe({hypeThreshold})` didn't invalidate the upcoming cache, desktop `ReleaseCard` body wasn't clickable, `toggleWishlist` didn't invalidate `releases:recent`. Bug 6 (mobile sheet drag-down dismiss) deferred to v2.
+
+- **`50093c3` — IGDB query: limit 50→500, dropped 365-day cap.** The hype filter is the qualitative gate; the date window and 50-row truncation were artificial caps that hid late-year + far-future announcements. Spec doc `docs/igdb_filtering.md` updated accordingly.
+
+- **`56d6e8c` + `9f70457` — wishlist games are first-class library citizens.** Andrea's three connected gaps (search invisible / Library shelf invisible / detail page 404) addressed by syncing `WishlistRelease` ⟷ `UserGame(status=Wishlist)` at the toggle boundary. New `IgdbUpcomingRelease.userGameId` field; cards navigate via that, render non-interactive when null. Production backfill via `scripts/backfill-wishlist-usergames.ts` ran cleanly: 15 scanned, 11 new Game rows, 11 new UserGame(Wishlist) rows, 4 already-ok, 0 errors. Decision D8 captures the rationale.
+
+**Final tallies after post-rework:** 138 API + 177 web tests pass; lint + typecheck + rename-rule clean.
+
+---
+
+## 10. Cross-references
 
 - Handoff: `docs/Hoard_releases_handoff.md`
 - Design conversation: `docs/Upcoming/Hoard_design_feedback_rev03.md` … `rev07.md`
