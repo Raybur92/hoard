@@ -73,6 +73,13 @@ These are non-negotiable. Do not deviate without explicit instruction.
    - Record any design decisions made during the phase — what was decided, why, and any trade-offs — directly in the relevant phase section under a `**Decisions:**` block
    - If a decision affects the overall architecture or is permanent for v1, mirror it in `AGENT.md` under Key Decisions
    - Update the `## Current Phase` section in this file (`CLAUDE.md`) to name the next active phase explicitly — never leave it as a bare pointer to PLAN.md
+10. **Stop-and-confirm cadence on multi-phase workstreams.** When a workstream is structured as a sequence of phases (R1–R6 on the Releases rework, PRs A–D on Interaction Debt, F1–F14 on Performance, the original Phases 1–8, etc.), do **not** chain into the next phase automatically after finishing one. Instead, after every completed phase:
+    1. Land all changes (commit + push if applicable).
+    2. Update every relevant doc (`docs/RELEASES_PLAN.md` / `docs/INTERACTION_DEBT_PLAN.md` / `docs/PERFORMANCE_PLAN.md` / etc. status table; `docs/PLAN.md` Phase Status row; `CLAUDE.md` Current Phase + Recent Fixes; `AGENT.md` if any architectural decision landed; any other file the phase touched).
+    3. Confirm completion to the user in **one** brief message — what shipped, what's the next phase, and a one-line note on doc currency.
+    4. Stop and wait for the user's explicit go-ahead before starting the next phase.
+    
+    The user runs the workstream's pacing; the agent runs the phase's execution. This protects context, keeps the user in the loop on architectural surface, and prevents the agent from steamrolling into the next phase before findings or scope adjustments can land.
 
 ---
 
