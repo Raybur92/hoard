@@ -11,6 +11,7 @@ import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
 import { minutesToHours, formatRelative, generateReceipt } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
+import { RemapGameModal } from './RemapGameModal';
 
 const STATUS_COLOR: Record<string, string> = {
   Playing: 'var(--green)',
@@ -34,6 +35,7 @@ export function GameDetailMobile() {
   const [editingNotes, setEditingNotes] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
+  const [remapOpen, setRemapOpen] = useState(false);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const sheetTrapRef = useFocusTrap<HTMLDivElement>(statusSheetOpen);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -160,8 +162,28 @@ export function GameDetailMobile() {
           <Icon name="back" size={14} /> back
         </button>
         <span className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// game record</span>
-        <span style={{ width: 14 }} aria-hidden="true" />
+        {/* Sync-quality batch (2026-05-08, decision #33): when the matcher
+            grabbed the wrong game, this opens a search dialog. Notes /
+            status / playtime are preserved across the remap. */}
+        <button
+          type="button"
+          onClick={() => setRemapOpen(true)}
+          aria-label="This is the wrong game — open the remap dialog"
+          style={{ color: 'var(--paper-dim)', fontSize: "var(--text-2xs)", cursor: 'pointer', background: 'transparent', border: 'none', padding: 8, margin: -8, fontFamily: 'inherit' }}
+        >
+          wrong game?
+        </button>
       </div>
+
+      {remapOpen && (
+        <RemapGameModal
+          userGameId={g.id}
+          currentTitle={g.game.title}
+          currentIgdbId={g.game.igdbId}
+          onClose={() => setRemapOpen(false)}
+          onRemapped={() => { setRemapOpen(false); refetch(); }}
+        />
+      )}
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 18px 24px', background: 'var(--void)' }}>
         {/* status */}

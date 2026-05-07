@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { requireUser } from '../middleware/user';
 import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
 import { fetchHltbWithFallback } from '../services/hltb';
-import { getTimeToBeat } from '../services/igdb';
+import { getGame, getTimeToBeat } from '../services/igdb';
 import { mapUserGame } from '../lib/mappers';
 
 function triggerHltbBackground(gameId: string, title: string, steamAppId: number | null | undefined, igdbId: number): void {
@@ -231,6 +231,111 @@ router.patch('/games/:id', requireUser, async (req: Request, res: Response): Pro
     (updateData.status === 'Playing' || updateData.status === 'Backlog') &&
     !updated.game.hltbData
   ) {
+    triggerHltbBackground(updated.game.id, updated.game.title, updated.game.steamAppId, updated.game.igdbId);
+  }
+
+  res.json(mapUserGame(updated));
+});
+
+// POST /api/games/:id/remap — repoint an existing UserGame at a different
+// IGDB game. Used to fix sync mismatches the smart matcher couldn't catch
+// (e.g. "Slay the Spire 2" picked instead of "Slay the Spire" — same
+// platform, just a wrong sequel) and to absorb future drift. Preserves all
+// user-data fields on the UserGame: notes / rating / status / playtime /
+// addedAt / lastPlayedAt. Only `gameId` is rewritten.
+const remapSchema = z.object({
+  igdbId: z.number().int().positive(),
+});
+
+router.post('/games/:id/remap', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const userId = req.userId;
+
+  const parsed = remapSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+    return;
+  }
+
+  const existing = await prisma.userGame.findFirst({
+    where: { id, userId },
+    include: { game: true },
+  });
+  if (!existing) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  // No-op: client picked the same game that's already there.
+  if (existing.game.igdbId === parsed.data.igdbId) {
+    const refetched = await prisma.userGame.findFirst({
+      where: { id, userId },
+      include: { game: { include: { hltbData: true } } },
+    });
+    if (!refetched) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    res.json(mapUserGame(refetched));
+    return;
+  }
+
+  // Pull the new IGDB record. If IGDB doesn't know the id, refuse — better
+  // a 422 than rewriting the UserGame to point at a Game row we can't
+  // populate metadata for.
+  const igdb = await getGame(parsed.data.igdbId).catch(() => null);
+  if (!igdb) {
+    res.status(422).json({ error: 'IGDB lookup failed for that id' });
+    return;
+  }
+
+  // Upsert Game by igdbId. Two possibilities:
+  //   1. Another UserGame already references this igdbId — we reuse that
+  //      Game row.
+  //   2. Nobody references it yet — we create it from the IGDB payload.
+  // Both lead to the same gameId we'll point the UserGame at.
+  const newGame = await prisma.game.upsert({
+    where: { igdbId: igdb.igdbId },
+    update: {
+      // Refresh metadata in case IGDB has updated since the row was created.
+      title: igdb.title,
+      developer: igdb.developer,
+      releaseYear: igdb.releaseYear,
+      genres: igdb.genres,
+      coverUrl: igdb.coverUrl,
+    },
+    create: {
+      igdbId: igdb.igdbId,
+      title: igdb.title,
+      developer: igdb.developer,
+      releaseYear: igdb.releaseYear,
+      genres: igdb.genres,
+      coverUrl: igdb.coverUrl,
+    },
+  });
+
+  // Block accidental collisions: if the user already owns the target game
+  // under a DIFFERENT UserGame row, we'd be creating a duplicate. The
+  // unique constraint @@unique([userId, gameId]) on UserGame would throw,
+  // but a 409 with a clear message is friendlier.
+  const collision = await prisma.userGame.findFirst({
+    where: { userId, gameId: newGame.id, NOT: { id } },
+  });
+  if (collision) {
+    res.status(409).json({ error: 'You already have this game in your library under another row.' });
+    return;
+  }
+
+  const updated = await prisma.userGame.update({
+    where: { id },
+    data: { gameId: newGame.id },
+    include: { game: { include: { hltbData: true } } },
+  });
+
+  // Trigger background HLTB fetch for the (possibly new) Game row if it
+  // doesn't already have HLTB data. Same pattern used by the manual-add
+  // and runSync flows.
+  if (!updated.game.hltbData) {
     triggerHltbBackground(updated.game.id, updated.game.title, updated.game.steamAppId, updated.game.igdbId);
   }
 

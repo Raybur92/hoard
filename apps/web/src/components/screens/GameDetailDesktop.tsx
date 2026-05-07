@@ -13,6 +13,7 @@ import { useGame } from '../../hooks/useGame';
 import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, shortYear, generateReceipt } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
+import { RemapGameModal } from './RemapGameModal';
 
 const STATUS_COLOR: Record<string, string> = {
   Playing: 'var(--green)',
@@ -34,6 +35,7 @@ export function GameDetailDesktop() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
+  const [remapOpen, setRemapOpen] = useState(false);
   const statusRef = useRef<HTMLDivElement>(null);
 
   // PR A — A9b: Dashboard "+ note" button navigates here with ?focus=notes
@@ -133,7 +135,23 @@ export function GameDetailDesktop() {
         <Btn sm onClick={() => navigate(-1)}>
           <Icon name="back" size={10} /> back
         </Btn>
+        {/* Sync-quality batch (2026-05-08, decision #33): when the matcher
+            grabbed the wrong game, this opens a search dialog. Notes /
+            status / playtime are preserved across the remap. */}
+        <Btn sm onClick={() => setRemapOpen(true)} ariaLabel="This is the wrong game — open the remap dialog">
+          wrong game?
+        </Btn>
       </div>
+
+      {remapOpen && (
+        <RemapGameModal
+          userGameId={g.id}
+          currentTitle={g.game.title}
+          currentIgdbId={g.game.igdbId}
+          onClose={() => setRemapOpen(false)}
+          onRemapped={() => { setRemapOpen(false); refetch(); }}
+        />
+      )}
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', display: 'grid', gridTemplateColumns: '1fr 480px' }}>
 

@@ -238,6 +238,20 @@ export const api = {
     return r;
   },
 
+  // Repoint an existing UserGame at a different IGDB game. Used to fix
+  // sync mismatches the matcher couldn't catch (Slay-the-Spire-2 class) +
+  // any future IGDB drift. Server preserves notes/status/playtime — only
+  // gameId is rewritten.
+  remapGame: async (userGameId: string, igdbId: number) => {
+    const r = await post<UserGameDetail>(`/api/games/${userGameId}/remap`, { igdbId });
+    // Drop everything that referenced the old gameId — the cached UserGame
+    // detail, the library lists, the per-shelf counts, the dashboard pick
+    // (which might have been the suspicious entry).
+    cache.invalidate(`game:${userGameId}`);
+    invalidateLibrary();
+    return r;
+  },
+
   // IGDB
   igdbSearch: (q: string) =>
     get<IgdbSearchResult[]>(`/api/igdb/search?q=${encodeURIComponent(q)}`),

@@ -10,6 +10,9 @@ jest.mock('@hoard/db', () => ({
       groupBy: jest.fn(),
       update: jest.fn(),
     },
+    game: {
+      upsert: jest.fn(),
+    },
     hltbData: {
       upsert: jest.fn(),
     },
@@ -27,6 +30,7 @@ jest.mock('../services/hltb', () => ({
 
 jest.mock('../services/igdb', () => ({
   getTimeToBeat: jest.fn().mockResolvedValue(null),
+  getGame: jest.fn(),
 }));
 
 import { app } from '../index';
@@ -351,5 +355,97 @@ describe('PATCH /api/games/:id', () => {
     const res = await request(app).patch('/api/games/ug-1').send({ rating: 99 });
 
     expect(res.status).toBe(400);
+  });
+});
+
+/* ── POST /api/games/:id/remap ── */
+
+import { getGame } from '../services/igdb';
+
+describe('POST /api/games/:id/remap', () => {
+  const mockNewIgdb = {
+    igdbId: 5000,
+    title: 'Slay the Spire',
+    developer: 'Mega Crit',
+    releaseYear: 2019,
+    genres: ['Card Game'],
+    coverUrl: 'https://example.com/cover.jpg',
+    platforms: ['PC (Microsoft Windows)', 'PlayStation 4'],
+    totalRatingCount: 1500,
+  };
+
+  it('returns 400 for a non-positive igdbId', async () => {
+    const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 0 });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the UserGame does not belong to the user', async () => {
+    (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).post('/api/games/missing/remap').send({ igdbId: 5000 });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 422 when IGDB lookup fails for the new id', async () => {
+    (prisma.userGame.findFirst as jest.Mock).mockResolvedValueOnce(makeUserGame({ igdbId: 9999 }));
+    (getGame as jest.Mock).mockResolvedValueOnce(null);
+    const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
+    expect(res.status).toBe(422);
+  });
+
+  it('no-ops when the target igdbId already matches the current Game', async () => {
+    // Pre-existing UserGame already references igdbId=5000.
+    (prisma.userGame.findFirst as jest.Mock)
+      .mockResolvedValueOnce(makeUserGame({ igdbId: 5000 }))   // ownership check
+      .mockResolvedValueOnce(makeUserGame({ igdbId: 5000 }));  // refetch with hltbData
+    const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
+    expect(res.status).toBe(200);
+    expect(prisma.userGame.update).not.toHaveBeenCalled();
+    expect(prisma.game.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rewrites UserGame.gameId to the new Game and preserves notes / status / playtime', async () => {
+    const original = { ...makeUserGame({ igdbId: 9999, status: 'Playing' }), notes: 'best run yet' as string | null };
+    (prisma.userGame.findFirst as jest.Mock)
+      .mockResolvedValueOnce(original)   // ownership check
+      .mockResolvedValueOnce(null);      // collision check (no other UserGame for new gameId)
+    (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-new', igdbId: 5000, title: 'Slay the Spire', steamAppId: null, hltbData: null });
+    (prisma.userGame.update as jest.Mock).mockResolvedValue({
+      ...original,
+      gameId: 'game-new',
+      game: { id: 'game-new', igdbId: 5000, title: 'Slay the Spire', developer: 'Mega Crit', releaseYear: 2019, genres: ['Card Game'], coverUrl: 'https://example.com/cover.jpg', steamAppId: null, hltbData: null },
+    });
+
+    const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.game.title).toBe('Slay the Spire');
+    expect(res.body.notes).toBe('best run yet');     // notes preserved
+    expect(res.body.status).toBe('Playing');         // status preserved
+
+    // userGame.update only touches gameId — nothing else
+    const updateData = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(updateData).toEqual({ gameId: 'game-new' });
+
+    expect(prisma.game.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { igdbId: 5000 },
+        create: expect.objectContaining({ igdbId: 5000, title: 'Slay the Spire' }),
+      }),
+    );
+  });
+
+  it('returns 409 when the user already has a different UserGame pointing at the target Game', async () => {
+    const original = makeUserGame({ igdbId: 9999 });
+    (prisma.userGame.findFirst as jest.Mock)
+      .mockResolvedValueOnce(original)                          // ownership check
+      .mockResolvedValueOnce(makeUserGame({ id: 'ug-other' })); // collision: another UG already has it
+    (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-new', igdbId: 5000 });
+
+    const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
+
+    expect(res.status).toBe(409);
+    expect(prisma.userGame.update).not.toHaveBeenCalled();
   });
 });
