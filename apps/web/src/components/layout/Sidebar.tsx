@@ -14,7 +14,7 @@ export interface SidebarProps {
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dotO',   path: '/' },
   { label: 'Library',   icon: 'menu',   path: '/library' },
-  { label: 'Upcoming',  icon: 'star',   path: '/upcoming' },
+  { label: 'Releases',  icon: 'star',   path: '/releases' },
   { label: 'Settings',  icon: 'cog',    path: '/settings' },
 ] as const;
 

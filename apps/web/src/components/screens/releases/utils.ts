@@ -7,10 +7,11 @@ import type { IgdbUpcomingRelease } from '@hoard/types';
 
 /**
  * IGDB platform name (e.g. "PlayStation 5") → Hoard's 2-letter code ("PS").
- * Same logic as the inline duplicates in UpcomingDesktop / UpcomingMobile /
- * DashboardDesktop / DashboardMobile — those will fold into this when their
- * containing screens get reworked. Kept here for now to avoid a cross-screen
- * refactor while R2–R6 are still in flight.
+ * Same logic as the inline duplicates in UpcomingMobile / DashboardDesktop /
+ * DashboardMobile — those will fold into this when their containing screens
+ * get reworked (R5 replaces UpcomingMobile; the Dashboard copies are a
+ * separate cleanup). Kept local here to avoid a cross-screen refactor while
+ * R2–R6 are still in flight.
  */
 export function toPlatCode(name: string): string {
   const n = name.toLowerCase();

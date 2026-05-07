@@ -105,8 +105,8 @@ describe('PR 1 — persistent shell across navigation', () => {
     fireEvent.click(getByText('Library'));
     await waitFor(() => expect(window.location.pathname === '/library' || container.querySelector('.topbar')).toBeTruthy());
 
-    // Navigate to Upcoming.
-    fireEvent.click(getByText('Upcoming'));
+    // Navigate to Releases (formerly "Upcoming" — see RELEASES_PLAN.md §1).
+    fireEvent.click(getByText('Releases'));
     await waitFor(() => expect(container.querySelector('.topbar')).toBeTruthy());
 
     const sidebarAfter = container.querySelector('aside.sidebar');
@@ -132,7 +132,7 @@ describe('PR 1 — persistent shell across navigation', () => {
     fireEvent.click(getByText('Library'));
     await waitFor(() => expect(container.querySelector('.topbar')).toBeTruthy());
 
-    fireEvent.click(getByText('Upcoming'));
+    fireEvent.click(getByText('Releases'));
     await waitFor(() => expect(container.querySelector('.topbar')).toBeTruthy());
 
     fireEvent.click(getByText('Settings'));

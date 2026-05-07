@@ -6,7 +6,7 @@ import type { IconName } from '../primitives/Icon';
 const TABS: { label: string; icon: IconName; path: string }[] = [
   { label: 'Dash',    icon: 'home',  path: '/' },
   { label: 'Library', icon: 'rows',  path: '/library' },
-  { label: 'Soon',    icon: 'clock', path: '/upcoming' },
+  { label: 'Soon',    icon: 'clock', path: '/releases' },
   { label: 'Me',      icon: 'user',  path: '/settings' },
 ];
 
