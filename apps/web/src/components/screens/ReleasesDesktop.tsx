@@ -349,6 +349,7 @@ function ReleasesContent({
           release={r}
           variant={mode === 'wishlist' ? 'wishlist' : 'all'}
           onToggleWishlist={onToggleWishlist}
+          onClick={onItemClick}
         />
       ))}
     </div>
@@ -365,6 +366,7 @@ function ReleasesContent({
               release={r}
               variant="all"
               onToggleWishlist={onToggleWishlist}
+              onClick={onItemClick}
             />
           ))}
         </div>

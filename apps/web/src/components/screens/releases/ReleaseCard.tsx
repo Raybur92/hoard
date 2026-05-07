@@ -11,7 +11,14 @@ export type ReleaseCardVariant = 'wishlist' | 'all' | 'recent';
 export interface ReleaseCardProps {
   release: IgdbUpcomingRelease;
   variant?: ReleaseCardVariant;
-  onToggleWishlist?: (igdbId: number) => void;
+  onToggleWishlist?: ((igdbId: number) => void) | undefined;
+  /**
+   * Card body click → game detail. Star button still toggles wishlist
+   * independently (its onClick stops propagation). When omitted, the card
+   * renders as a plain div — used by the wishlist-empty recommendation
+   * panel where the cards already have their own row layout.
+   */
+  onClick?: ((igdbId: number) => void) | undefined;
 }
 
 /**
@@ -31,7 +38,7 @@ export interface ReleaseCardProps {
  * the rev07 mock. Mobile uses a different 40/36/1fr/auto layout — that lives
  * elsewhere; don't reuse this component on mobile.
  */
-export function ReleaseCard({ release, variant = 'all', onToggleWishlist }: ReleaseCardProps) {
+export function ReleaseCard({ release, variant = 'all', onToggleWishlist, onClick }: ReleaseCardProps) {
   const date = releaseDateColumn(release);
   const away = daysUntil(release.releaseDate);
   const isPast = release.releaseDate !== null && away < 0;
@@ -40,12 +47,36 @@ export function ReleaseCard({ release, variant = 'all', onToggleWishlist }: Rele
   const showHype = variant === 'all';
   const platforms = release.platforms.slice(0, 3);
 
+  // Card body click → onClick(igdbId). Implemented with role="button" +
+  // tabIndex + keyboard handler (NOT a real <button>) because the star
+  // toggle is a real <button> that lives inside the card, and nested
+  // buttons are invalid HTML. The star's onClick stops propagation so a
+  // star tap doesn't double-fire the card click.
+  const interactive = Boolean(onClick);
+  const handleCardActivate = () => onClick?.(release.igdbId);
+
   return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '60px 76px 1fr', gap: 14,
-      padding: 14, border: '1px solid var(--rule)', background: 'var(--ink)',
-      position: 'relative',
-    }}>
+    <div
+      {...(interactive
+        ? {
+            role: 'button' as const,
+            tabIndex: 0,
+            onClick: handleCardActivate,
+            onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleCardActivate();
+              }
+            },
+            'aria-label': `Open ${release.title}`,
+          }
+        : {})}
+      style={{
+        display: 'grid', gridTemplateColumns: '60px 76px 1fr', gap: 14,
+        padding: 14, border: '1px solid var(--rule)', background: 'var(--ink)',
+        position: 'relative',
+        ...(interactive ? { cursor: 'pointer' } : {}),
+      }}>
       <div style={{ textAlign: 'center', borderRight: '1px dashed var(--rule-bright)', paddingRight: 8 }}>
         <div className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)' }}>{date.month}</div>
         <div className="t-display" style={{
@@ -72,7 +103,11 @@ export function ReleaseCard({ release, variant = 'all', onToggleWishlist }: Rele
           {onToggleWishlist ? (
             <button
               type="button"
-              onClick={() => onToggleWishlist(release.igdbId)}
+              onClick={(e) => {
+                // Don't bubble up to the card-body navigation handler.
+                e.stopPropagation();
+                onToggleWishlist(release.igdbId);
+              }}
               aria-label={isWishlisted ? `Stop tracking ${release.title}` : `Add ${release.title} to wishlist`}
               aria-pressed={isWishlisted}
               style={{

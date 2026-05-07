@@ -130,6 +130,11 @@ export const api = {
     const r = await post<{ tracked: boolean }>(`/api/upcoming/${igdbId}/wishlist`);
     cache.invalidate('upcoming:');
     cache.invalidate('dashboard'); // wishlist countdown lives there
+    // The RECENT page joins wishlist with the IGDB recent feed server-side:
+    // un-starring a recent drop should remove it from `// just out · starred`,
+    // and starring a high-hype recent drop should move it from `hyped` →
+    // `starred`. Without this, both views are stale until SWR's 30s window.
+    cache.invalidate('releases:recent');
     return r;
   },
 
@@ -153,8 +158,20 @@ export const api = {
   me: () =>
     get<AuthResponse>('/api/auth/me').then((r) => r.user),
 
-  updateMe: (body: PatchMeBody) =>
-    patch<AuthResponse>('/api/auth/me', body).then((r) => r.user),
+  updateMe: async (body: PatchMeBody) => {
+    const updated = await patch<AuthResponse>('/api/auth/me', body).then((r) => r.user);
+    // hypeThreshold is a server-side IGDB filter for the upcoming feed.
+    // When it changes, the my-platforms / all caches must be dropped or the
+    // Releases page keeps serving the old filtered list until SWR's stale
+    // window expires. The wishlist scope reads from the DB and ignores the
+    // threshold, but `cache.invalidate('upcoming:')` is a prefix match —
+    // the wishlist key is cheap to refetch and a stale `wishlisted` flag
+    // would also be wrong.
+    if (body.hypeThreshold !== undefined) {
+      cache.invalidate('upcoming:');
+    }
+    return updated;
+  },
 
   deleteAccount: async () => {
     const r = await del<{ ok: boolean }>('/api/auth/me');
@@ -214,7 +231,16 @@ export const api = {
     get<IgdbSearchResult[]>(`/api/igdb/search?q=${encodeURIComponent(q)}`),
 
   igdbUpcoming: (scope: 'my-platforms' | 'all' | 'wishlist' = 'my-platforms') =>
-    get<IgdbUpcomingRelease[]>(`/api/igdb/upcoming${scope === 'all' ? '?scope=all' : ''}`),
+    // Server treats missing `scope` as `my-platforms`; we only need to
+    // forward the param when the caller wants something else. Both `all`
+    // and `wishlist` MUST be passed through — earlier code only forwarded
+    // `all`, which silently routed `useUpcoming('wishlist')` to the
+    // my-platforms feed and broke the hero countdown.
+    get<IgdbUpcomingRelease[]>(
+      scope === 'my-platforms'
+        ? '/api/igdb/upcoming'
+        : `/api/igdb/upcoming?scope=${scope}`,
+    ),
 
   // Releases page — RECENT surface + banner qualification (R1 in
   // docs/RELEASES_PLAN.md). Returns the 14-day window split into

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import type { IgdbUpcomingRelease } from '@hoard/types';
 
@@ -124,6 +124,33 @@ describe('ReleaseCard', () => {
     render(<ReleaseCard release={r} variant="recent" />);
     expect(screen.queryByText(/i got it/i)).toBeNull();
     expect(screen.queryByText(/mark all owned/i)).toBeNull();
+  });
+
+  it('card body click invokes onClick (game-detail navigation)', () => {
+    const onClick = vi.fn();
+    render(<ReleaseCard release={makeRelease({ igdbId: 42, title: 'Click Test' })} onClick={onClick} />);
+    fireEvent.click(screen.getByRole('button', { name: /Open Click Test/i }));
+    expect(onClick).toHaveBeenCalledWith(42);
+  });
+
+  it('card body NOT clickable when onClick is omitted (no role=button)', () => {
+    render(<ReleaseCard release={makeRelease({ title: 'Plain Card' })} />);
+    expect(screen.queryByRole('button', { name: /Open Plain Card/i })).toBeNull();
+  });
+
+  it('star button stops propagation — toggle wishlist does NOT fire card click', () => {
+    const onClick = vi.fn();
+    const onToggle = vi.fn();
+    render(
+      <ReleaseCard
+        release={makeRelease({ igdbId: 42, title: 'Star Stop', wishlisted: false })}
+        onToggleWishlist={onToggle}
+        onClick={onClick}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Add Star Stop to wishlist/i }));
+    expect(onToggle).toHaveBeenCalledWith(42);
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('renders DLC pill when category=2', () => {

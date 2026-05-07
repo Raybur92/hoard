@@ -192,22 +192,12 @@ function RecentSection({
         }}
       >
         {items.map((r) => (
-          <button
+          <ReleaseCard
             key={r.igdbId}
-            type="button"
-            onClick={() => onItemClick(r.igdbId)}
-            aria-label={`Open ${r.title}`}
-            style={{
-              display: 'block',
-              textAlign: 'left',
-              padding: 0,
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <ReleaseCard release={r} variant={variant} />
-          </button>
+            release={r}
+            variant={variant}
+            onClick={onItemClick}
+          />
         ))}
       </div>
     </section>

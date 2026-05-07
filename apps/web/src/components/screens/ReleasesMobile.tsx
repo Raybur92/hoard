@@ -349,7 +349,11 @@ function ReleasesMobileContent({
             <MobileReleaseRow
               key={r.igdbId}
               release={r}
-              onToggleWishlist={mode === 'wishlist' ? onToggleWishlist : undefined}
+              // Toggle is meaningful in BOTH modes — wishlist mode tap = un-star,
+              // all mode tap = star. Earlier conditional was inverted and hid
+              // the star button on the only surface where you'd actually want
+              // to add things to your wishlist on mobile.
+              onToggleWishlist={onToggleWishlist}
               onTap={onItemTap}
             />
           ))}
