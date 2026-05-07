@@ -74,7 +74,7 @@ export function ReleasesRecentDesktop() {
                 marker={`// just out · starred · ${starred.length}`}
                 items={starred}
                 variant="recent"
-                onItemClick={(id) => navigate(`/game/${id}`)}
+                onItemOpen={(userGameId) => navigate(`/game/${userGameId}`)}
               />
             )}
 
@@ -83,7 +83,7 @@ export function ReleasesRecentDesktop() {
                 marker={`// also released · not on your wishlist · ${hyped.length}`}
                 items={hyped}
                 variant="recent"
-                onItemClick={(id) => navigate(`/game/${id}`)}
+                onItemOpen={(userGameId) => navigate(`/game/${userGameId}`)}
                 topGap={starred.length > 0 ? 28 : 0}
               />
             )}
@@ -171,13 +171,13 @@ function RecentSection({
   marker,
   items,
   variant,
-  onItemClick,
+  onItemOpen,
   topGap = 24,
 }: {
   marker: string;
   items: IgdbUpcomingRelease[];
   variant: 'recent';
-  onItemClick: (igdbId: number) => void;
+  onItemOpen: (userGameId: string) => void;
   topGap?: number;
 }) {
   return (
@@ -196,7 +196,7 @@ function RecentSection({
             key={r.igdbId}
             release={r}
             variant={variant}
-            onClick={onItemClick}
+            onOpen={onItemOpen}
           />
         ))}
       </div>

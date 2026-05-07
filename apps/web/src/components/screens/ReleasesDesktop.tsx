@@ -198,7 +198,7 @@ export function ReleasesDesktop() {
           showRail={showRail}
           onSkipAhead={(key) => setState({ bucket: key })}
           onToggleWishlist={(id) => void handleToggleWishlist(id)}
-          onItemClick={(id) => navigate(`/game/${id}`)}
+          onItemOpen={(userGameId) => navigate(`/game/${userGameId}`)}
         />
       )}
     </>
@@ -274,7 +274,7 @@ function ReleasesHeader({
 }
 
 function ReleasesContent({
-  mode, zoom, activeBucketKey, buckets, visibleReleases, allFeedItems, hero, showRail, onSkipAhead, onToggleWishlist, onItemClick,
+  mode, zoom, activeBucketKey, buckets, visibleReleases, allFeedItems, hero, showRail, onSkipAhead, onToggleWishlist, onItemOpen,
 }: {
   mode: Mode;
   zoom: TimeNavZoom;
@@ -286,7 +286,7 @@ function ReleasesContent({
   showRail: boolean;
   onSkipAhead: (bucket: string) => void;
   onToggleWishlist: (igdbId: number) => void;
-  onItemClick: (igdbId: number) => void;
+  onItemOpen: (userGameId: string) => void;
 }) {
   const bucketLabel = activeBucketKey.toLowerCase();
   const caption = zoom === 'quarters' ? quarterCaption(activeBucketKey) : null;
@@ -349,7 +349,7 @@ function ReleasesContent({
           release={r}
           variant={mode === 'wishlist' ? 'wishlist' : 'all'}
           onToggleWishlist={onToggleWishlist}
-          onClick={onItemClick}
+          onOpen={onItemOpen}
         />
       ))}
     </div>
@@ -366,12 +366,12 @@ function ReleasesContent({
               release={r}
               variant="all"
               onToggleWishlist={onToggleWishlist}
-              onClick={onItemClick}
+              onOpen={onItemOpen}
             />
           ))}
         </div>
       </div>
-      <AgendaRail items={allFeedItems} mode="all" onItemClick={onItemClick} />
+      <AgendaRail items={allFeedItems} mode="all" onItemOpen={onItemOpen} />
     </div>
   );
 

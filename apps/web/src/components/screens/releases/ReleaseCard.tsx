@@ -13,12 +13,15 @@ export interface ReleaseCardProps {
   variant?: ReleaseCardVariant;
   onToggleWishlist?: ((igdbId: number) => void) | undefined;
   /**
-   * Card body click → game detail. Star button still toggles wishlist
-   * independently (its onClick stops propagation). When omitted, the card
-   * renders as a plain div — used by the wishlist-empty recommendation
-   * panel where the cards already have their own row layout.
+   * Card body click → game detail. The card invokes `onOpen` only when
+   * `release.userGameId` is non-null (so the parent can naively call
+   * `navigate(/game/${id})` without a null check). Releases without a
+   * UserGame (typical of un-wishlisted ALL-mode rows) render non-interactive
+   * — clicking does nothing rather than 404'ing on /game/${igdbId}.
+   * Star button still toggles wishlist independently (its onClick stops
+   * propagation).
    */
-  onClick?: ((igdbId: number) => void) | undefined;
+  onOpen?: ((userGameId: string) => void) | undefined;
 }
 
 /**
@@ -38,7 +41,7 @@ export interface ReleaseCardProps {
  * the rev07 mock. Mobile uses a different 40/36/1fr/auto layout — that lives
  * elsewhere; don't reuse this component on mobile.
  */
-export function ReleaseCard({ release, variant = 'all', onToggleWishlist, onClick }: ReleaseCardProps) {
+export function ReleaseCard({ release, variant = 'all', onToggleWishlist, onOpen }: ReleaseCardProps) {
   const date = releaseDateColumn(release);
   const away = daysUntil(release.releaseDate);
   const isPast = release.releaseDate !== null && away < 0;
@@ -47,13 +50,20 @@ export function ReleaseCard({ release, variant = 'all', onToggleWishlist, onClic
   const showHype = variant === 'all';
   const platforms = release.platforms.slice(0, 3);
 
-  // Card body click → onClick(igdbId). Implemented with role="button" +
+  // Card body click → onOpen(release). Implemented with role="button" +
   // tabIndex + keyboard handler (NOT a real <button>) because the star
   // toggle is a real <button> that lives inside the card, and nested
   // buttons are invalid HTML. The star's onClick stops propagation so a
   // star tap doesn't double-fire the card click.
-  const interactive = Boolean(onClick);
-  const handleCardActivate = () => onClick?.(release.igdbId);
+  //
+  // Card is interactive only when onOpen is provided AND the release has a
+  // userGameId — i.e., a UserGame row exists in the user's library so
+  // /game/${userGameId} will resolve. ALL-mode unwishlisted rows have
+  // userGameId === null and render non-interactive (no 404 trap).
+  const interactive = Boolean(onOpen && release.userGameId);
+  const handleCardActivate = () => {
+    if (onOpen && release.userGameId) onOpen(release.userGameId);
+  };
 
   return (
     <div

@@ -43,13 +43,20 @@ describe('api mutation invalidation', () => {
     expect(cache.get<{ notes: string }>('game:abc')?.data.notes).toBe('fresh');
   });
 
-  it('toggleWishlist drops upcoming:, dashboard, and releases:recent', async () => {
+  it('toggleWishlist drops upcoming:, dashboard, releases:recent, AND library caches', async () => {
     const api = await loadApi();
     cache.set('upcoming:my-platforms', [{ id: 'old' }]);
     cache.set('upcoming:all', [{ id: 'old' }]);
     cache.set('upcoming:wishlist', [{ id: 'old' }]);
     cache.set('dashboard', 'old');
     cache.set('releases:recent', { starred: ['old'], hyped: ['old'] });
+    // After the wishlist-as-library work the toggle also creates/deletes a
+    // UserGame with status=Wishlist. The Library Wishlist shelf, search
+    // overlay, and per-shelf counts all read UserGame data — they must
+    // invalidate so the change shows up immediately.
+    cache.set('games:{}', [{ id: 'old' }]);
+    cache.set('shelves:default', { Wishlist: ['old'] });
+    cache.set('gameCounts', { Wishlist: 1 });
 
     await api.toggleWishlist(123);
 
@@ -57,10 +64,10 @@ describe('api mutation invalidation', () => {
     expect(cache.get('upcoming:all')).toBeUndefined();
     expect(cache.get('upcoming:wishlist')).toBeUndefined();
     expect(cache.get('dashboard')).toBeUndefined();
-    // releases:recent reads from the wishlist join — must invalidate too,
-    // otherwise un-starring a recent drop leaves it in `// just out · starred`
-    // until SWR's 30s window.
     expect(cache.get('releases:recent')).toBeUndefined();
+    expect(cache.get('games:{}')).toBeUndefined();
+    expect(cache.get('shelves:default')).toBeUndefined();
+    expect(cache.get('gameCounts')).toBeUndefined();
   });
 
   it('updateMe({ hypeThreshold }) drops the upcoming: caches', async () => {

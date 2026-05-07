@@ -25,6 +25,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     wishlisted: false,
     category: 0,
     hype: 50,
+    userGameId: null,
     ...overrides,
   };
 }
@@ -126,31 +127,47 @@ describe('ReleaseCard', () => {
     expect(screen.queryByText(/mark all owned/i)).toBeNull();
   });
 
-  it('card body click invokes onClick (game-detail navigation)', () => {
-    const onClick = vi.fn();
-    render(<ReleaseCard release={makeRelease({ igdbId: 42, title: 'Click Test' })} onClick={onClick} />);
+  it('card body click invokes onOpen with userGameId (game-detail navigation)', () => {
+    const onOpen = vi.fn();
+    render(
+      <ReleaseCard
+        release={makeRelease({ igdbId: 42, title: 'Click Test', userGameId: 'ug-42' })}
+        onOpen={onOpen}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: /Open Click Test/i }));
-    expect(onClick).toHaveBeenCalledWith(42);
+    expect(onOpen).toHaveBeenCalledWith('ug-42');
   });
 
-  it('card body NOT clickable when onClick is omitted (no role=button)', () => {
-    render(<ReleaseCard release={makeRelease({ title: 'Plain Card' })} />);
+  it('card body NOT clickable when onOpen is omitted (no role=button)', () => {
+    render(<ReleaseCard release={makeRelease({ title: 'Plain Card', userGameId: 'ug-1' })} />);
     expect(screen.queryByRole('button', { name: /Open Plain Card/i })).toBeNull();
   });
 
+  it('card body NOT clickable when release has no userGameId (no library row → would 404)', () => {
+    const onOpen = vi.fn();
+    render(
+      <ReleaseCard
+        release={makeRelease({ title: 'No UG', userGameId: null })}
+        onOpen={onOpen}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /Open No UG/i })).toBeNull();
+  });
+
   it('star button stops propagation — toggle wishlist does NOT fire card click', () => {
-    const onClick = vi.fn();
+    const onOpen = vi.fn();
     const onToggle = vi.fn();
     render(
       <ReleaseCard
-        release={makeRelease({ igdbId: 42, title: 'Star Stop', wishlisted: false })}
+        release={makeRelease({ igdbId: 42, title: 'Star Stop', wishlisted: false, userGameId: 'ug-42' })}
         onToggleWishlist={onToggle}
-        onClick={onClick}
+        onOpen={onOpen}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Add Star Stop to wishlist/i }));
     expect(onToggle).toHaveBeenCalledWith(42);
-    expect(onClick).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it('renders DLC pill when category=2', () => {
@@ -375,13 +392,24 @@ describe('AgendaRail', () => {
     expect(all.getByText(/all tracked/)).toBeTruthy();
   });
 
-  it('rows are buttons when onItemClick is provided; divs otherwise', () => {
-    const items = [makeRelease({ igdbId: 99 })];
-    const onItemClick = vi.fn();
-    const interactive = render(<AgendaRail items={items} mode="all" onItemClick={onItemClick} />);
+  it('rows are buttons when the release has a userGameId AND onItemOpen is provided; divs otherwise', () => {
+    const items = [makeRelease({ igdbId: 99, userGameId: 'ug-99' })];
+    const onItemOpen = vi.fn();
+    const interactive = render(<AgendaRail items={items} mode="all" onItemOpen={onItemOpen} />);
     const btn = interactive.getByLabelText(/Open Test Game/);
     btn.click();
-    expect(onItemClick).toHaveBeenCalledWith(99);
+    expect(onItemOpen).toHaveBeenCalledWith('ug-99');
+    interactive.unmount();
+
+    // Without userGameId the row is non-interactive even if onItemOpen is supplied.
+    const noUg = render(
+      <AgendaRail
+        items={[makeRelease({ igdbId: 99, userGameId: null })]}
+        mode="all"
+        onItemOpen={onItemOpen}
+      />,
+    );
+    expect(noUg.queryByLabelText(/Open Test Game/)).toBeNull();
   });
 
   it('shows TBA label for releases without a date', () => {

@@ -135,6 +135,10 @@ export const api = {
     // and starring a high-hype recent drop should move it from `hyped` →
     // `starred`. Without this, both views are stale until SWR's 30s window.
     cache.invalidate('releases:recent');
+    // Toggle now also writes a UserGame(Wishlist) (or deletes one) at the
+    // server: drop the library caches so the Wishlist shelf, the search
+    // overlay, and per-shelf counts reflect the change immediately.
+    invalidateLibrary();
     return r;
   },
 

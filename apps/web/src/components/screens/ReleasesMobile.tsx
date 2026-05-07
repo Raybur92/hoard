@@ -238,7 +238,7 @@ export function ReleasesMobile() {
           visibleReleases={visibleReleases}
           hero={hero}
           onToggleWishlist={(id) => void handleToggleWishlist(id)}
-          onItemTap={(id) => navigate(`/game/${id}`)}
+          onItemTap={(userGameId) => navigate(`/game/${userGameId}`)}
           refetch={refetch}
         />
       )}
@@ -282,7 +282,7 @@ function ReleasesMobileContent({
   visibleReleases: IgdbUpcomingRelease[];
   hero: IgdbUpcomingRelease | null;
   onToggleWishlist: (id: number) => void;
-  onItemTap: (id: number) => void;
+  onItemTap: (userGameId: string) => void;
   refetch: () => void;
 }) {
   const bucketLabel = activeBucketKey.toLowerCase();

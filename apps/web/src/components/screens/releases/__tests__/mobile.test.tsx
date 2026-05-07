@@ -36,6 +36,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     wishlisted: false,
     category: 0,
     hype: 50,
+    userGameId: null,
     ...overrides,
   };
 }

@@ -8,8 +8,14 @@ export interface MobileReleaseRowProps {
   release: IgdbUpcomingRelease;
   /** Optional star toggle. Omit for the RECENT page where wishlisting is moot. */
   onToggleWishlist?: ((igdbId: number) => void) | undefined;
-  /** Optional row tap — navigates to the game detail page. */
-  onTap?: ((igdbId: number) => void) | undefined;
+  /**
+   * Optional row tap → navigates to the game detail page. Receives the
+   * release's `userGameId` (string, never null). Only invoked when the
+   * release has a UserGame row in the user's library — releases without
+   * one render non-tappable, so the parent's `(id) => navigate(/game/${id})`
+   * never fires with a phantom igdbId.
+   */
+  onTap?: ((userGameId: string) => void) | undefined;
 }
 
 /**
@@ -35,7 +41,12 @@ export function MobileReleaseRow({ release, onToggleWishlist, onTap }: MobileRel
   const cat = categoryLabel(release.category);
   const platStr = release.platforms.slice(0, 4).map(toPlatCode).join('·');
 
-  const tapTitle = onTap ? () => onTap(release.igdbId) : undefined;
+  // Tap is meaningful only when we have a UserGame to navigate to. Otherwise
+  // the title button renders disabled — clicking does nothing rather than
+  // routing to /game/${igdbId} (which would 404).
+  const tapTitle = onTap && release.userGameId
+    ? () => onTap(release.userGameId!)
+    : undefined;
 
   return (
     <div

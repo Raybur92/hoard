@@ -261,6 +261,10 @@ limit ${limit};`;
       wishlisted: false,
       category: raw.category ?? 0,
       hype: raw.hypes ?? null,
+      // Per-user fields (`wishlisted`, `userGameId`) are placeholders here —
+      // the route layer enriches them by joining against the caller's
+      // WishlistRelease + UserGame rows.
+      userGameId: null,
     }));
 
   upcomingCache.set(cacheKey, mapped);
@@ -313,6 +317,7 @@ limit ${limit};`;
     wishlisted: false,  // caller fills this in (always false for the hyped list)
     category: raw.category ?? 0,
     hype: raw.hypes ?? null,
+    userGameId: null,   // route layer enriches by joining against the caller's UserGames
   }));
 
   upcomingCache.set(cacheKey, mapped);
@@ -381,6 +386,7 @@ limit 1;`,
     wishlisted: false,  // caller fills this in
     category: raw.category ?? 0,
     hype: raw.hypes ?? null,
+    userGameId: null,   // caller fills this in
   };
   releaseDetailsCache.set(key, mapped);
   return mapped;

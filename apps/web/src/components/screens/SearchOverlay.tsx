@@ -98,7 +98,7 @@ export function SearchOverlay({ onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="search your library…"
+            placeholder="search your library + wishlist…"
             aria-controls="search-overlay-results"
             aria-activedescendant={hasResults ? `search-result-${active}` : undefined}
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--mono)', fontSize: "var(--text-sm)", color: 'var(--paper)', caretColor: 'var(--green)' }}

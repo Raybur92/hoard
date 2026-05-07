@@ -59,56 +59,117 @@ router.get('/upcoming', requireUser, async (req: Request, res: Response): Promis
 });
 
 // POST /api/upcoming/:igdbId/wishlist — toggle tracking
-// When adding: fetches metadata from IGDB to persist a WishlistRelease record.
-// When removing: deletes the existing record.
+//
+// Creates BOTH a `WishlistRelease` row (release-tracking metadata: date, hype,
+// category, etc.) AND a `UserGame` with status='Wishlist' (so the game shows
+// up in search, the Library Wishlist shelf, and has a working detail page).
+// The two tables stay separate but are kept in sync at this boundary.
+//
+// Idempotency rules:
+//  - If the user already has a UserGame for this game with a non-Wishlist
+//    status (e.g. they own it and starred it for DLC tracking), we leave the
+//    UserGame alone. The WishlistRelease is the only authoritative record of
+//    the star.
+//  - On un-star, we delete the UserGame ONLY if its status is still 'Wishlist'.
+//    If the user manually moved it to Backlog/Playing/etc, the un-star removes
+//    the release-tracking record but the library entry survives.
 router.post('/upcoming/:igdbId/wishlist', requireUser, async (req: Request, res: Response): Promise<void> => {
   const igdbId = parseInt(String(req.params['igdbId'] ?? ''), 10);
   if (isNaN(igdbId)) {
     res.status(400).json({ error: 'Invalid igdbId' });
     return;
   }
+  const userId = req.userId;
 
   const existing = await prisma.wishlistRelease.findFirst({
-    where: { userId: req.userId, igdbId },
+    where: { userId, igdbId },
   });
 
   if (existing) {
+    // Un-star: drop the WishlistRelease, and the auto-created UserGame iff
+    // its status is still 'Wishlist'. `deleteMany` is a no-op when no row
+    // matches the where clause — safe whether the UserGame was deleted
+    // already, never created, or manually moved off the Wishlist shelf.
+    const game = await prisma.game.findUnique({ where: { igdbId }, select: { id: true } });
+    if (game) {
+      await prisma.userGame.deleteMany({
+        where: { userId, gameId: game.id, status: 'Wishlist' },
+      });
+    }
     await prisma.wishlistRelease.delete({ where: { id: existing.id } });
     res.json({ tracked: false });
     return;
   }
 
-  // Fetch the rich upcoming-release shape from IGDB so the persisted record
-  // keeps releaseDate / platforms / synopsis / hype / category / releaseDateCategory
-  // (PR B — Path-B persistence fix). Previous code path used getGame() which
-  // returns the slimmer IgdbSearchResult and silently dropped half the fields.
+  // Star: fetch the rich upcoming-release shape from IGDB. Without it we
+  // can't populate the catalog Game row, so 404 if IGDB doesn't recognise
+  // the id.
   let igdbRelease;
   try {
     igdbRelease = await getReleaseDetails(igdbId);
   } catch {
     igdbRelease = null;
   }
-
   if (!igdbRelease) {
     res.status(404).json({ error: 'Game not found in IGDB' });
     return;
   }
 
-  const release = await prisma.wishlistRelease.create({
-    data: {
-      userId: req.userId,
-      igdbId,
-      title: igdbRelease.title,
-      developer: igdbRelease.developer,
-      releaseDate: igdbRelease.releaseDate ? new Date(igdbRelease.releaseDate) : null,
-      releaseDateCategory: igdbRelease.releaseDateCategory,
-      platforms: igdbRelease.platforms,
-      genres: igdbRelease.genres,
-      coverUrl: igdbRelease.coverUrl,
-      synopsis: igdbRelease.synopsis,
-      hype: igdbRelease.hype,
-      category: igdbRelease.category,
-    },
+  const releaseYear = igdbRelease.releaseDate
+    ? new Date(igdbRelease.releaseDate).getFullYear()
+    : null;
+
+  // Three writes wrapped in a transaction so the client never observes a
+  // half-applied state where the Game exists but the UserGame doesn't (or
+  // vice versa). Callback form is needed because the UserGame upsert needs
+  // the gameId returned by the Game upsert.
+  const release = await prisma.$transaction(async (tx) => {
+    const game = await tx.game.upsert({
+      where: { igdbId },
+      // Refresh metadata in case IGDB has updated since the last sync.
+      update: {
+        title: igdbRelease.title,
+        developer: igdbRelease.developer,
+        releaseYear,
+        genres: igdbRelease.genres,
+        coverUrl: igdbRelease.coverUrl,
+      },
+      create: {
+        igdbId,
+        title: igdbRelease.title,
+        developer: igdbRelease.developer,
+        releaseYear,
+        genres: igdbRelease.genres,
+        coverUrl: igdbRelease.coverUrl,
+      },
+    });
+
+    // Empty `update` is intentional — if a UserGame already exists for this
+    // user (e.g. status='Backlog' because the game is already owned), we
+    // don't override the user's library decision. The WishlistRelease row
+    // captures the star independently.
+    await tx.userGame.upsert({
+      where: { userId_gameId: { userId, gameId: game.id } },
+      update: {},
+      create: { userId, gameId: game.id, status: 'Wishlist' },
+    });
+
+    return tx.wishlistRelease.create({
+      data: {
+        userId,
+        igdbId,
+        title: igdbRelease.title,
+        developer: igdbRelease.developer,
+        releaseDate: igdbRelease.releaseDate ? new Date(igdbRelease.releaseDate) : null,
+        releaseDateCategory: igdbRelease.releaseDateCategory,
+        platforms: igdbRelease.platforms,
+        genres: igdbRelease.genres,
+        coverUrl: igdbRelease.coverUrl,
+        synopsis: igdbRelease.synopsis,
+        hype: igdbRelease.hype,
+        category: igdbRelease.category,
+      },
+    });
   });
 
   res.json({ tracked: true, release: mapRelease(release) });

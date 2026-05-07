@@ -39,6 +39,9 @@ async function fetchUpcoming(scope: UpcomingScope): Promise<IgdbUpcomingRelease[
       wishlisted: true,
       category: w.category,
       hype: w.hype,
+      // Fallback path doesn't have access to the UserGame join — links will
+      // not navigate. The primary path (api.igdbUpcoming) does populate this.
+      userGameId: null,
     }));
   }
 }

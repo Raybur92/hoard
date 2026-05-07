@@ -84,15 +84,19 @@ describe('GET /api/releases/recent', () => {
     expect(res.body.starred[0]).not.toHaveProperty('userId'); // userId dropped per D7
   });
 
-  it('filters wishlist rows that already exist in the user\'s library', async () => {
-    // 3 wishlisted rows in window; the user owns igdbId=2, so it should be filtered out.
+  it("filters wishlist rows whose library status is anything other than 'Wishlist' (i.e., really owned)", async () => {
+    // 3 wishlisted rows in window. UserGames mock:
+    //   igdbId=1 → status=Wishlist (auto-created by toggle, still on shelf) → KEEP
+    //   igdbId=2 → status=Backlog (sync imported it OR user manually moved) → DROP
+    //   igdbId=3 → no UserGame at all (legacy data, pre-backfill)            → KEEP
     (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([
-      wishlistRow({ igdbId: 1, title: 'Not Owned' }),
-      wishlistRow({ igdbId: 2, title: 'Owned' }),
-      wishlistRow({ igdbId: 3, title: 'Also Not Owned' }),
+      wishlistRow({ igdbId: 1, title: 'Auto-Wishlist UserGame' }),
+      wishlistRow({ igdbId: 2, title: 'Owned (Backlog)' }),
+      wishlistRow({ igdbId: 3, title: 'No UserGame' }),
     ]);
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
-      { game: { igdbId: 2 } },
+      { id: 'ug-1', status: 'Wishlist', game: { igdbId: 1 } },
+      { id: 'ug-2', status: 'Backlog',  game: { igdbId: 2 } },
     ]);
     mockGetRecentlyReleased.mockResolvedValue([]);
 
@@ -102,6 +106,14 @@ describe('GET /api/releases/recent', () => {
     expect(res.body.starred).toHaveLength(2);
     const ids = res.body.starred.map((r: { igdbId: number }) => r.igdbId);
     expect(ids).toEqual([1, 3]);
+
+    // The kept Wishlist row carries its userGameId so the client can route
+    // to /game/${userGameId} on tap. The legacy row (no UserGame) is null.
+    const idsToUg = Object.fromEntries(
+      res.body.starred.map((r: { igdbId: number; userGameId: string | null }) => [r.igdbId, r.userGameId]),
+    );
+    expect(idsToUg[1]).toBe('ug-1');
+    expect(idsToUg[3]).toBeNull();
 
     // userGame query is scoped to the user AND only the wishlisted igdbIds
     const ugCall = (prisma.userGame.findMany as jest.Mock).mock.calls[0][0];

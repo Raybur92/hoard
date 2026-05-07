@@ -10,7 +10,13 @@ export type AgendaRailMode = 'wishlist' | 'all';
 export interface AgendaRailProps {
   items: IgdbUpcomingRelease[];
   mode: AgendaRailMode;
-  onItemClick?: (igdbId: number) => void;
+  /**
+   * Open a release in game detail. Only invoked for releases whose
+   * `userGameId` is non-null (i.e., the user has a UserGame row in their
+   * library); rows without a UserGame render non-interactive instead of
+   * navigating into a 404. Caller is `(userGameId) => navigate(/game/${id})`.
+   */
+  onItemOpen?: (userGameId: string) => void;
 }
 
 /**
@@ -23,7 +29,7 @@ export interface AgendaRailProps {
  * otherwise. The row layout (52px / 32px / 1fr / auto) matches the rev07
  * mock at line 2515.
  */
-export function AgendaRail({ items, mode, onItemClick }: AgendaRailProps) {
+export function AgendaRail({ items, mode, onItemOpen }: AgendaRailProps) {
   return (
     <aside className="thin-scroll" style={{ overflow: 'auto', height: '100%', borderLeft: '1px solid var(--rule)' }}>
       <div style={{
@@ -46,15 +52,18 @@ export function AgendaRail({ items, mode, onItemClick }: AgendaRailProps) {
           background: isStarred ? 'rgba(212,160,23,0.04)' : 'transparent',
         } as const;
 
-        const Row = onItemClick ? 'button' : 'div';
-        const interactive = onItemClick !== undefined;
+        // Row is interactive only when onItemOpen is provided AND the
+        // release has a userGameId. Otherwise render as a plain div so the
+        // user can't tab into a dead element / get a 404 from clicking.
+        const interactive = Boolean(onItemOpen && release.userGameId);
+        const Row = interactive ? 'button' : 'div';
 
         return (
           <Row
             key={release.igdbId}
             {...(interactive ? {
               type: 'button' as const,
-              onClick: () => onItemClick(release.igdbId),
+              onClick: () => onItemOpen!(release.userGameId!),
               'aria-label': `Open ${release.title}`,
             } : {})}
             style={{

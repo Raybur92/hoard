@@ -23,19 +23,22 @@ const HYPE_THRESHOLD = 80;
  * the Releases page consumes. Drops the unused DB pk + userId fields per
  * RELEASES_PLAN.md D7 (unified response shape).
  */
-function wishlistRowToUpcoming(w: {
-  igdbId: number;
-  title: string;
-  developer: string | null;
-  releaseDate: Date | null;
-  releaseDateCategory: string;
-  platforms: string[];
-  genres: string[];
-  coverUrl: string | null;
-  synopsis: string | null;
-  hype: number | null;
-  category: number;
-}): IgdbUpcomingRelease {
+function wishlistRowToUpcoming(
+  w: {
+    igdbId: number;
+    title: string;
+    developer: string | null;
+    releaseDate: Date | null;
+    releaseDateCategory: string;
+    platforms: string[];
+    genres: string[];
+    coverUrl: string | null;
+    synopsis: string | null;
+    hype: number | null;
+    category: number;
+  },
+  userGameId: string | null,
+): IgdbUpcomingRelease {
   return {
     igdbId: w.igdbId,
     title: w.title,
@@ -49,6 +52,7 @@ function wishlistRowToUpcoming(w: {
     wishlisted: true,  // every row in `starred` is by definition wishlisted
     category: w.category,
     hype: w.hype,
+    userGameId,
   };
 }
 
@@ -88,28 +92,52 @@ router.get('/releases/recent', requireUser, async (req: Request, res: Response):
     orderBy: { releaseDate: 'desc' },
   });
 
-  // Library-membership filter: drop wishlist rows whose igdbId already exists
-  // as a UserGame for this user (library sync picked it up).
+  // Library-membership filter: drop wishlist rows whose game is in the user's
+  // library AS SOMETHING OTHER THAN Wishlist (i.e., a real library state —
+  // Backlog, Playing, etc.). Wishlist UserGames are now auto-created by the
+  // toggle endpoint, so requiring "no UserGame at all" would drop everything.
+  // The handoff §10 intent is "not yet owned" — Wishlist shelf is "wanted but
+  // not owned", so it qualifies for RECENT.
   const wishlistIgdbIds = wishlistRows.map((w) => w.igdbId);
   let starredRows = wishlistRows;
+  let userGameByIgdbId = new Map<number, string>();  // for the userGameId tag
   if (wishlistIgdbIds.length > 0) {
-    const ownedGames = await prisma.userGame.findMany({
+    const userGames = await prisma.userGame.findMany({
       where: { userId, game: { igdbId: { in: wishlistIgdbIds } } },
-      select: { game: { select: { igdbId: true } } },
+      select: { id: true, status: true, game: { select: { igdbId: true } } },
     });
-    const ownedIgdbIds = new Set(ownedGames.map((ug) => ug.game.igdbId));
-    starredRows = wishlistRows.filter((w) => !ownedIgdbIds.has(w.igdbId));
+    const ownedNonWishlistIds = new Set(
+      userGames.filter((ug) => ug.status !== 'Wishlist').map((ug) => ug.game.igdbId),
+    );
+    starredRows = wishlistRows.filter((w) => !ownedNonWishlistIds.has(w.igdbId));
+    userGameByIgdbId = new Map(userGames.map((ug) => [ug.game.igdbId, ug.id]));
   }
-  const starred: IgdbUpcomingRelease[] = starredRows.map(wishlistRowToUpcoming);
+  const starred: IgdbUpcomingRelease[] = starredRows.map((w) =>
+    wishlistRowToUpcoming(w, userGameByIgdbId.get(w.igdbId) ?? null),
+  );
 
-  // Hyped feed — pull the IGDB recent feed, dedupe against starred.
+  // Hyped feed — pull the IGDB recent feed, dedupe against starred. Tag each
+  // row with userGameId iff the user happens to have it in library (rare for
+  // hyped — these are by definition non-wishlisted — but possible if e.g.
+  // platform sync just imported a game that hadn't been wishlisted).
   let hyped: IgdbUpcomingRelease[] = [];
   try {
     const fromTs = Math.floor(fromDate.getTime() / 1000);
     const toTs = Math.floor(now.getTime() / 1000);
     const feed = await getRecentlyReleased({ fromTs, toTs, minHype: HYPE_THRESHOLD });
     const starredIds = new Set(starred.map((s) => s.igdbId));
-    hyped = feed.filter((r) => !starredIds.has(r.igdbId));
+    const candidates = feed.filter((r) => !starredIds.has(r.igdbId));
+
+    if (candidates.length > 0) {
+      const hypedUserGames = await prisma.userGame.findMany({
+        where: { userId, game: { igdbId: { in: candidates.map((c) => c.igdbId) } } },
+        select: { id: true, game: { select: { igdbId: true } } },
+      });
+      const hypedUgMap = new Map(hypedUserGames.map((ug) => [ug.game.igdbId, ug.id]));
+      hyped = candidates.map((r) => ({ ...r, userGameId: hypedUgMap.get(r.igdbId) ?? null }));
+    } else {
+      hyped = candidates;
+    }
   } catch (err) {
     // IGDB unavailable — degrade gracefully. The starred list is the user's
     // own data and is independent of IGDB; we serve what we have.

@@ -6,6 +6,10 @@ jest.mock('@hoard/db', () => ({
     user: { findUnique: jest.fn() },
     platform: { findMany: jest.fn() },
     wishlistRelease: { findMany: jest.fn() },
+    // userGame.findMany is used by the route's userGameMap helper to tag
+    // each release with userGameId. Default returns [] (no UserGames) — fine
+    // for tests that don't assert on userGameId.
+    userGame: { findMany: jest.fn() },
   },
 }));
 
@@ -28,6 +32,10 @@ import { prisma } from '@hoard/db';
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // Default to "no UserGames" so the route's userGameMap helper returns
+  // an empty map. Per-test setups can override this when asserting on
+  // userGameId tagging.
+  (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
 });
 
 /* ── GET /api/igdb/search ── */

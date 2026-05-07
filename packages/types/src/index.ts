@@ -280,4 +280,13 @@ export interface IgdbUpcomingRelease {
   wishlisted: boolean;
   category: number;
   hype: number | null;
+  /**
+   * UserGame.id when the user has a library entry for this release (any
+   * status). Populated by the wishlist scope and any other scope where the
+   * release has a matching UserGame row. Used for client-side navigation:
+   * cards link to `/game/${userGameId}` when present, so wishlisted releases
+   * route to a real detail page instead of 404'ing on an igdbId-as-cuid.
+   * Null for non-wishlisted, non-owned releases (typical in All mode).
+   */
+  userGameId: string | null;
 }

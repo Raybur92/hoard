@@ -93,7 +93,7 @@ export function ReleasesRecentMobile() {
                     <StarredPanelCard
                       key={r.igdbId}
                       release={r}
-                      onTap={() => navigate(`/game/${r.igdbId}`)}
+                      onTap={r.userGameId ? () => navigate(`/game/${r.userGameId}`) : undefined}
                     />
                   ))}
                 </div>
@@ -108,7 +108,7 @@ export function ReleasesRecentMobile() {
                     <MobileReleaseRow
                       key={r.igdbId}
                       release={r}
-                      onTap={() => navigate(`/game/${r.igdbId}`)}
+                      onTap={(userGameId) => navigate(`/game/${userGameId}`)}
                     />
                   ))}
                 </div>
@@ -161,8 +161,18 @@ function StarredPanelCard({
   onTap,
 }: {
   release: IgdbUpcomingRelease;
-  onTap: () => void;
+  onTap?: (() => void) | undefined;
 }) {
+  // Card is tappable only when the parent supplies onTap (i.e., the release
+  // has a userGameId resolvable to a real /game/:id route). Without it,
+  // render a plain panel — clicking does nothing rather than 404'ing.
+  if (!onTap) {
+    return (
+      <div className="panel" style={{ padding: 12 }}>
+        <MobileReleaseRow release={release} />
+      </div>
+    );
+  }
   return (
     <button
       type="button"
