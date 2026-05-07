@@ -243,9 +243,27 @@ router.patch('/games/:id', requireUser, async (req: Request, res: Response): Pro
 // platform, just a wrong sequel) and to absorb future drift. Preserves all
 // user-data fields on the UserGame: notes / rating / status / playtime /
 // addedAt / lastPlayedAt. Only `gameId` is rewritten.
+//
+// Collision case: if the user already has a DIFFERENT UserGame for the
+// target Game, plain remap returns 409 with the conflict info so the
+// client can offer a merge UI. With `merge: true`, the source UserGame is
+// merged INTO the existing target one (max-per-platform playtime,
+// max(lastPlayedAt), min(addedAt), source's status/notes/rating wins if
+// non-default) and then deleted. Whole merge is one transaction.
 const remapSchema = z.object({
   igdbId: z.number().int().positive(),
+  merge: z.boolean().optional(),
 });
+
+function maxDate(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.getTime() >= b.getTime() ? a : b;
+}
+
+function minDate(a: Date, b: Date): Date {
+  return a.getTime() <= b.getTime() ? a : b;
+}
 
 router.post('/games/:id/remap', requireUser, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
@@ -317,12 +335,61 @@ router.post('/games/:id/remap', requireUser, async (req: Request, res: Response)
   // Block accidental collisions: if the user already owns the target game
   // under a DIFFERENT UserGame row, we'd be creating a duplicate. The
   // unique constraint @@unique([userId, gameId]) on UserGame would throw,
-  // but a 409 with a clear message is friendlier.
+  // but a 409 + merge flow is friendlier. Includes the game so we can
+  // return the conflicting title to the client for a useful prompt.
   const collision = await prisma.userGame.findFirst({
     where: { userId, gameId: newGame.id, NOT: { id } },
+    include: { game: true },
   });
+
   if (collision) {
-    res.status(409).json({ error: 'You already have this game in your library under another row.' });
+    if (parsed.data.merge) {
+      // Merge source (`existing` / id) INTO target (`collision` / collision.id).
+      // The kept UserGame is the target — its `id` survives, the source row
+      // is deleted. We prefer the SOURCE's user-data fields when they're
+      // non-default since a remap usually reflects the user's recent
+      // interaction with the wrong-titled entry; the target may have been
+      // an untouched auto-sync entry from another platform.
+      const sourcePt = (existing.playtimeByPlatform ?? {}) as Record<string, number>;
+      const targetPt = (collision.playtimeByPlatform ?? {}) as Record<string, number>;
+      const mergedPlaytime: Record<string, number> = { ...targetPt };
+      for (const [k, v] of Object.entries(sourcePt)) {
+        mergedPlaytime[k] = Math.max(mergedPlaytime[k] ?? 0, v);
+      }
+
+      const sourceStatus = existing.status;
+      const targetStatus = collision.status;
+      const sourceNotes  = existing.notes;
+      const targetNotes  = collision.notes;
+      const sourceRating = existing.rating;
+      const targetRating = collision.rating;
+
+      const merged = await prisma.$transaction(async (tx) => {
+        const updated = await tx.userGame.update({
+          where: { id: collision.id },
+          data: {
+            playtimeByPlatform: mergedPlaytime,
+            lastPlayedAt: maxDate(existing.lastPlayedAt, collision.lastPlayedAt),
+            addedAt: minDate(existing.addedAt, collision.addedAt),
+            status: sourceStatus !== 'Backlog' ? sourceStatus : targetStatus,
+            notes: sourceNotes ?? targetNotes,
+            rating: sourceRating ?? targetRating,
+          },
+          include: { game: { include: { hltbData: true } } },
+        });
+        await tx.userGame.delete({ where: { id } });
+        return updated;
+      });
+
+      res.json(mapUserGame(merged));
+      return;
+    }
+
+    res.status(409).json({
+      error: 'You already have this game in your library under another row.',
+      conflictUserGameId: collision.id,
+      conflictTitle: collision.game.title,
+    });
     return;
   }
 

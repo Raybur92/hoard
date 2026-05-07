@@ -3,14 +3,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { IgdbSearchResult, UserGameDetail } from '@hoard/types';
 import { RemapGameModal } from '../RemapGameModal';
 
-vi.mock('../../../lib/api', () => ({
-  api: {
-    igdbSearch: vi.fn(),
-    remapGame: vi.fn(),
-  },
-}));
+// Re-export the real `RemapConflictError` class so the modal's `instanceof`
+// check still matches what the mock throws.
+vi.mock('../../../lib/api', async () => {
+  const actual = await vi.importActual('../../../lib/api') as Record<string, unknown>;
+  return {
+    ...actual,
+    api: {
+      igdbSearch: vi.fn(),
+      remapGame: vi.fn(),
+    },
+  };
+});
 
-import { api } from '../../../lib/api';
+import { api, RemapConflictError } from '../../../lib/api';
 
 function makeResult(overrides: Partial<IgdbSearchResult> = {}): IgdbSearchResult {
   return {
@@ -133,9 +139,50 @@ describe('RemapGameModal', () => {
       fireEvent.click(screen.getByRole('button', { name: /^remap$/i }));
     });
 
-    expect(api.remapGame).toHaveBeenCalledWith('ug-1', 5000);
+    expect(api.remapGame).toHaveBeenCalledWith('ug-1', 5000, false);
     expect(onRemapped).toHaveBeenCalledWith(updated);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('surfaces a merge confirm when the server returns 409 (RemapConflictError) and retries with merge=true on confirm', async () => {
+    (api.igdbSearch as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeResult({ igdbId: 5000, title: 'Slay the Spire' }),
+    ]);
+    const merged = makeUpdated(5000, 'Slay the Spire');
+    (api.remapGame as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new RemapConflictError('ug-target', 'Slay the Spire'))
+      .mockResolvedValueOnce(merged);
+
+    const onRemapped = vi.fn();
+    render(
+      <RemapGameModal
+        userGameId="ug-source"
+        currentTitle="Slay the Spire 2"
+        currentIgdbId={9999}
+        onClose={vi.fn()}
+        onRemapped={onRemapped}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Slay the Spire')).toBeTruthy(), { timeout: 1000 });
+    fireEvent.click(screen.getByLabelText('Select Slay the Spire'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^remap$/i }));
+    });
+
+    // The merge prompt replaces the footer
+    await waitFor(() => expect(screen.getByRole('alertdialog')).toBeTruthy());
+    expect(screen.getByRole('alertdialog').textContent).toContain('already have');
+    // First remap call was with merge=false
+    expect((api.remapGame as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual(['ug-source', 5000, false]);
+
+    // Confirm merge
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /merge into existing/i }));
+    });
+
+    expect((api.remapGame as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual(['ug-source', 5000, true]);
+    expect(onRemapped).toHaveBeenCalledWith(merged);
   });
 
   it('surfaces a server error in the footer alert', async () => {

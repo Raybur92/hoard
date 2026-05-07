@@ -9,6 +9,7 @@ jest.mock('@hoard/db', () => ({
       count: jest.fn(),
       groupBy: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
     },
     game: {
       upsert: jest.fn(),
@@ -16,6 +17,7 @@ jest.mock('@hoard/db', () => ({
     hltbData: {
       upsert: jest.fn(),
     },
+    $transaction: jest.fn(),
   },
 }));
 
@@ -435,17 +437,121 @@ describe('POST /api/games/:id/remap', () => {
     );
   });
 
-  it('returns 409 when the user already has a different UserGame pointing at the target Game', async () => {
+  it('returns 409 with conflictUserGameId + conflictTitle when the user already has a different UserGame for the target Game', async () => {
     const original = makeUserGame({ igdbId: 9999 });
+    const conflict = { ...makeUserGame({ id: 'ug-other' }), game: { ...makeUserGame().game, igdbId: 5000, title: 'Slay the Spire' } };
     (prisma.userGame.findFirst as jest.Mock)
-      .mockResolvedValueOnce(original)                          // ownership check
-      .mockResolvedValueOnce(makeUserGame({ id: 'ug-other' })); // collision: another UG already has it
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(conflict);
     (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
     (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-new', igdbId: 5000 });
 
     const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
 
     expect(res.status).toBe(409);
+    expect(res.body.conflictUserGameId).toBe('ug-other');
+    expect(res.body.conflictTitle).toBe('Slay the Spire');
     expect(prisma.userGame.update).not.toHaveBeenCalled();
+  });
+
+  it('with merge=true: combines playtime (max-per-platform), keeps source status when non-default, deletes source UserGame', async () => {
+    // Source: wrong-matched UserGame the user has been actively playing.
+    const source = {
+      ...makeUserGame({ id: 'ug-source', igdbId: 9999, status: 'Playing' }),
+      playtimeByPlatform: { PS: 800 } as Record<string, number>,
+      lastPlayedAt: new Date('2026-05-08T10:00:00Z'),
+      addedAt: new Date('2026-05-01T00:00:00Z'),
+      notes: 'rolling great runs',
+      rating: 9,
+    };
+    // Target: untouched auto-sync entry the user already had under the right Game.
+    const target = {
+      ...makeUserGame({ id: 'ug-target', igdbId: 5000 }),
+      playtimeByPlatform: { ST: 200 } as Record<string, number>,
+      lastPlayedAt: new Date('2026-04-01T00:00:00Z'),
+      addedAt: new Date('2026-03-15T00:00:00Z'),
+      notes: null,
+      rating: null,
+      game: { ...makeUserGame().game, igdbId: 5000, title: 'Slay the Spire' },
+    };
+
+    (prisma.userGame.findFirst as jest.Mock)
+      .mockResolvedValueOnce(source)   // ownership check
+      .mockResolvedValueOnce(target);  // collision check
+    (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-target', igdbId: 5000 });
+
+    const txMock = {
+      userGame: {
+        update: jest.fn().mockResolvedValue({
+          ...target,
+          playtimeByPlatform: { ST: 200, PS: 800 },
+          lastPlayedAt: source.lastPlayedAt,
+          addedAt: target.addedAt, // earlier
+          status: 'Playing',
+          notes: 'rolling great runs',
+          rating: 9,
+          game: { ...target.game, hltbData: null },
+        }),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+    };
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => cb(txMock));
+
+    const res = await request(app)
+      .post('/api/games/ug-source/remap')
+      .send({ igdbId: 5000, merge: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe('ug-target');                     // target survived
+    expect(res.body.status).toBe('Playing');                   // source's non-default status wins
+    expect(res.body.notes).toBe('rolling great runs');         // source's notes win
+    expect(res.body.rating).toBe(9);                            // source's rating wins
+    expect(res.body.playtimeByPlatform).toEqual({ ST: 200, PS: 800 }); // merged
+
+    // Transaction: target updated, source deleted
+    expect(txMock.userGame.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'ug-target' },
+      data: expect.objectContaining({
+        playtimeByPlatform: { ST: 200, PS: 800 },
+        status: 'Playing',
+        notes: 'rolling great runs',
+        rating: 9,
+      }),
+    }));
+    expect(txMock.userGame.delete).toHaveBeenCalledWith({ where: { id: 'ug-source' } });
+  });
+
+  it('with merge=true: max-per-platform handles overlap (target had higher PS playtime, source had higher ST)', async () => {
+    const source = { ...makeUserGame({ id: 'ug-source', igdbId: 9999 }), playtimeByPlatform: { ST: 400, PS: 100 } as Record<string, number>, status: 'Backlog', notes: null, rating: null };
+    const target = { ...makeUserGame({ id: 'ug-target', igdbId: 5000 }), playtimeByPlatform: { ST: 100, PS: 600 } as Record<string, number>, status: 'OnHold',  notes: 'kept', rating: 7, game: { ...makeUserGame().game, igdbId: 5000, title: 'X' } };
+
+    (prisma.userGame.findFirst as jest.Mock).mockResolvedValueOnce(source).mockResolvedValueOnce(target);
+    (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-target', igdbId: 5000 });
+
+    const txUpdate = jest.fn().mockImplementation(async (args: { data: { playtimeByPlatform: Record<string, number>; status: string; notes: string | null; rating: number | null } }) => ({
+      ...target,
+      ...args.data,
+      game: { ...target.game, hltbData: null },
+    }));
+    const txMock = {
+      userGame: {
+        update: txUpdate,
+        delete: jest.fn().mockResolvedValue({}),
+      },
+    };
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => cb(txMock));
+
+    await request(app).post('/api/games/ug-source/remap').send({ igdbId: 5000, merge: true });
+
+    const data = txUpdate.mock.calls[0][0].data;
+    // Merged playtime is max-per-platform: ST=400 (source), PS=600 (target)
+    expect(data.playtimeByPlatform).toEqual({ ST: 400, PS: 600 });
+    // Source status was Backlog (default), so target's OnHold wins
+    expect(data.status).toBe('OnHold');
+    // Source notes/rating were null, so target's values are preserved
+    expect(data.notes).toBe('kept');
+    expect(data.rating).toBe(7);
   });
 });

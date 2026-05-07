@@ -31,6 +31,20 @@ function url(path: string): string {
   return `${API_BASE}${path}`;
 }
 
+// Thrown by `api.remapGame` when the user already has a different UserGame
+// for the target Game. The modal catches this to offer a merge option;
+// see CLAUDE.md "Recent fixes" — sync-quality remap collision flow.
+export class RemapConflictError extends Error {
+  conflictUserGameId: string;
+  conflictTitle: string;
+  constructor(conflictUserGameId: string, conflictTitle: string) {
+    super(`You already have "${conflictTitle}" in your library.`);
+    this.name = 'RemapConflictError';
+    this.conflictUserGameId = conflictUserGameId;
+    this.conflictTitle = conflictTitle;
+  }
+}
+
 async function fetchWithRetry(input: string, init: RequestInit, retries = 1): Promise<Response> {
   const res = await fetch(input, init);
   if (!res.ok && res.status >= 500 && retries > 0) {
@@ -242,14 +256,38 @@ export const api = {
   // sync mismatches the matcher couldn't catch (Slay-the-Spire-2 class) +
   // any future IGDB drift. Server preserves notes/status/playtime — only
   // gameId is rewritten.
-  remapGame: async (userGameId: string, igdbId: number) => {
-    const r = await post<UserGameDetail>(`/api/games/${userGameId}/remap`, { igdbId });
-    // Drop everything that referenced the old gameId — the cached UserGame
-    // detail, the library lists, the per-shelf counts, the dashboard pick
-    // (which might have been the suspicious entry).
+  //
+  // Collision handling: when the user already has a different UserGame for
+  // the target Game, the server returns 409 with `{ conflictUserGameId,
+  // conflictTitle }`. We surface that as a typed `RemapConflictError` so the
+  // modal can offer a merge option. Re-call with `merge: true` to combine
+  // playtime / status / notes / rating from the source UserGame INTO the
+  // existing target one and delete the source. Cache invalidation drops
+  // BOTH userGames + the library prefixes — after a merge, both rows
+  // changed identity (one was deleted, one was rewritten).
+  remapGame: async (userGameId: string, igdbId: number, merge = false) => {
+    const res = await fetch(url(`/api/games/${userGameId}/remap`), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ igdbId, merge }),
+    });
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({})) as { conflictUserGameId?: string; conflictTitle?: string };
+      throw new RemapConflictError(
+        body.conflictUserGameId ?? '',
+        body.conflictTitle ?? '',
+      );
+    }
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json() as UserGameDetail;
+    // Drop everything that referenced the old gameId. After a merge the
+    // source userGameId no longer exists; invalidating it just removes a
+    // stale cache entry, which is correct.
     cache.invalidate(`game:${userGameId}`);
+    cache.invalidate(`game:${data.id}`);
     invalidateLibrary();
-    return r;
+    return data;
   },
 
   // IGDB

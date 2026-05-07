@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api } from '../../lib/api';
+import { api, RemapConflictError } from '../../lib/api';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Cover } from '../primitives/Cover';
@@ -34,6 +34,10 @@ export function RemapGameModal({ userGameId, currentTitle, currentIgdbId, onClos
   const [selected, setSelected] = useState<IgdbSearchResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Set when the server returns 409 — the user already has the target Game
+  // under another UserGame. The modal swaps the footer for a merge prompt;
+  // confirming re-calls remapGame with merge=true.
+  const [conflict, setConflict] = useState<{ userGameId: string; title: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trapRef = useFocusTrap<HTMLDivElement>(true);
@@ -65,16 +69,21 @@ export function RemapGameModal({ userGameId, currentTitle, currentIgdbId, onClos
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  async function handleConfirm() {
+  async function handleConfirm(merge = false) {
     if (!selected) return;
     setSubmitting(true);
     setError('');
+    if (!merge) setConflict(null);
     try {
-      const updated = await api.remapGame(userGameId, selected.igdbId);
+      const updated = await api.remapGame(userGameId, selected.igdbId, merge);
       onRemapped(updated);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remap');
+      if (e instanceof RemapConflictError) {
+        setConflict({ userGameId: e.conflictUserGameId, title: e.conflictTitle });
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to remap');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -207,18 +216,39 @@ export function RemapGameModal({ userGameId, currentTitle, currentIgdbId, onClos
           </div>
         )}
 
-        {/* footer */}
-        <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {error
-            ? <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--red)' }} role="alert">{error}</span>
-            : <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>your notes / status / playtime are preserved.</span>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn sm onClick={onClose}>cancel</Btn>
-            <Btn sm variant="amber" onClick={() => void handleConfirm()} disabled={!selected || submitting || selected.igdbId === currentIgdbId}>
-              {submitting ? 'remapping…' : 'remap'}
-            </Btn>
+        {/* footer — swaps to a merge prompt when the server reports a 409 */}
+        {conflict ? (
+          <div
+            role="alertdialog"
+            aria-label="Merge into existing entry?"
+            style={{ padding: '12px 18px', borderTop: '1px solid var(--rule-bright)', background: 'var(--ink-2)' }}
+          >
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--paper)', marginBottom: 4 }}>
+              you already have <span style={{ color: 'var(--amber)' }}>{conflict.title}</span> in your library.
+            </div>
+            <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', marginBottom: 10, lineHeight: 1.5 }}>
+              merge will combine playtime (max per platform) and lift this entry's notes / status / rating onto the existing one. this entry will be removed afterward.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Btn sm onClick={() => setConflict(null)}>cancel</Btn>
+              <Btn sm variant="amber" onClick={() => void handleConfirm(true)} disabled={submitting}>
+                {submitting ? 'merging…' : 'merge into existing'}
+              </Btn>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {error
+              ? <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--red)' }} role="alert">{error}</span>
+              : <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>your notes / status / playtime are preserved.</span>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn sm onClick={onClose}>cancel</Btn>
+              <Btn sm variant="amber" onClick={() => void handleConfirm()} disabled={!selected || submitting || selected.igdbId === currentIgdbId}>
+                {submitting ? 'remapping…' : 'remap'}
+              </Btn>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
