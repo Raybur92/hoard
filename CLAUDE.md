@@ -36,7 +36,8 @@ npx prisma db seed            # seed with mock data
 | What | Where |
 |---|---|
 | Execution plan + phase status | `docs/PLAN.md` |
-| Releases page rework (active workstream) | `docs/RELEASES_PLAN.md` + handoff `docs/Hoard_releases_handoff.md` + mocks `project/Hoard_releases_mocks.html` |
+| Trophies & achievements (active workstream — scoping) | `docs/TROPHIES_PLAN.md` (T1–T6 PR sequence, decisions T-D1…T-D10 awaiting Andrea's confirmation) |
+| Releases page rework (complete 2026-05-07) | `docs/RELEASES_PLAN.md` + handoff `docs/Hoard_releases_handoff.md` + mocks `project/Hoard_releases_mocks.html` |
 | Interaction debt + audits + PR plan (complete 2026-05-06) | `docs/INTERACTION_DEBT_PLAN.md` |
 | Performance & UX workstream (complete 2026-05-04) | `docs/PERFORMANCE_PLAN.md` |
 | Environment variables reference | `docs/ENV.md` |
@@ -166,7 +167,9 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**No active workstream.** Releases page rework (R1–R6) shipped 2026-05-07. The next workstream is whatever Andrea picks up next; if you're an agent landing here cold, there is no in-flight phase to continue — confirm with the user before starting one.
+**Active workstream — Trophies & achievements (scoping, 2026-05-08).** Plan drafted in `docs/TROPHIES_PLAN.md` covering T1 (schema) → T6 (Dashboard rollup, optional). Decisions T-D1 … T-D10 are surfaced in §1 and **await Andrea's confirmation** before any code lands. The headline call: pull PSN trophies + Steam achievements, store aggregate `(earned, total, percent)` per `UserGame`, auto-flip status to `Completed` when `percent === 100` for rows in `{Backlog, OnHold, Playing}` (preserve `Dropped` / `Wishlist` as explicit user decisions). The plan also bundles `Game.psnNpCommunicationId` to partially close the "store platform-side IDs" gap from sync-quality decision #33.
+
+If you're an agent landing here cold and Andrea hasn't confirmed yet: do **not** start coding. Read `docs/TROPHIES_PLAN.md` §1 and ask which decisions are still open.
 
 **Sticky enforcement (always applies, no expiry):**
 
