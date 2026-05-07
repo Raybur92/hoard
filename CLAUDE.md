@@ -167,9 +167,9 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active workstream — Trophies & achievements (scoping, 2026-05-08).** Plan drafted in `docs/TROPHIES_PLAN.md` covering T1 (schema) → T6 (Dashboard rollup, optional). Decisions T-D1 … T-D10 are surfaced in §1 and **await Andrea's confirmation** before any code lands. The headline call: pull PSN trophies + Steam achievements, store aggregate `(earned, total, percent)` per `UserGame`, auto-flip status to `Completed` when `percent === 100` for rows in `{Backlog, OnHold, Playing}` (preserve `Dropped` / `Wishlist` as explicit user decisions). The plan also bundles `Game.psnNpCommunicationId` to partially close the "store platform-side IDs" gap from sync-quality decision #33.
+**Active workstream — Trophies & achievements (decisions locked 2026-05-08).** Plan in `docs/TROPHIES_PLAN.md`. Six PRs T1–T6 (T6 optional). Decisions T-D1 … T-D10 confirmed by Andrea in one pass; T-D7 amended to add a Steam-only public-profile note in PlatformDetail's scope tab. Headline behavior: pull PSN trophies + Steam achievements, store aggregate `(earned, total, percent)` per `UserGame`, auto-flip status to `Completed` when `percent === 100` for rows in `{Backlog, OnHold, Playing}` (preserve `Dropped` / `Wishlist` as explicit user decisions). The plan also bundles `Game.psnNpCommunicationId` to partially close the "store platform-side IDs" gap from sync-quality decision #33.
 
-If you're an agent landing here cold and Andrea hasn't confirmed yet: do **not** start coding. Read `docs/TROPHIES_PLAN.md` §1 and ask which decisions are still open.
+**Next phase: T1 — schema migration + types.** Per hard rule 10 (stop-and-confirm cadence), each PR T1 → T6 is its own phase. After T1 lands the agent stops and waits for Andrea's go-ahead before T2.
 
 **Sticky enforcement (always applies, no expiry):**
 

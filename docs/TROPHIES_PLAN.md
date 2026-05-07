@@ -1,7 +1,7 @@
 # Hoard — Trophies & Achievements
 
 > **Workstream:** pull PSN trophy + Steam achievement data into Hoard, surface aggregate completion on GameDetail, auto-flip games to `Completed` when 100% earned.
-> **Status:** Scoped 2026-05-08, awaiting Andrea's confirmation on the locked decisions in §1 before any code lands.
+> **Status:** Decisions T-D1 … T-D10 locked by Andrea 2026-05-08. T1 (schema) ready to start; subsequent PRs follow the order in §3.
 >
 > **Why this matters:** today `UserGame.status` is purely user-asserted (or inferred from playtime > 0 → `OnHold`). With trophy/achievement data we can drive a real "completion rate" signal — and at 100% we can promote the row to `Completed` automatically, which is the obvious move.
 >
@@ -58,19 +58,17 @@ Two endpoints, both per-game:
 
 ---
 
-## 1. Open decisions (Andrea, awaiting confirmation)
+## 1. Locked decisions (Andrea, 2026-05-08)
 
-These are the calls that shape the implementation. Confirm in order; I'll lock them into this section as `T-D*` once you say go.
+All ten confirmed in one pass. Each addresses a specific implementation question; together they pin down the v1 surface so T1–T6 can land without re-litigation.
 
 ### T-D1 — Aggregates only for v1, no individual trophies/achievements stored.
 
 Schema additions are four columns on `UserGame`: `achievementsEarned`, `achievementsTotal`, `achievementsPercent`, `achievementsUpdatedAt`. **No** `Trophy` table, **no** per-trophy rows.
 
-**Rationale:** the aggregate is what drives the auto-complete rule and the receipt-block UI. Storing thousands of individual trophy rows for unimplemented features is YAGNI. If you ever want a "trophies earned this week" feed (v2), we add a `Trophy` table then — the schema migration is straightforward and the fetcher already pulls per-trophy data we'd just need to start persisting.
+**Rationale:** the aggregate is what drives the auto-complete rule and the receipt-block UI. Storing thousands of individual trophy rows for unimplemented features is YAGNI. A "trophies earned this week" feed (v2) would add a `Trophy` table then — the schema migration is straightforward, and the fetcher already pulls per-trophy data we'd just need to start persisting.
 
-**Tradeoff:** we'd lose the ability to show individual trophy detail on GameDetail without going back to PSN/Steam at render time. For v1 this is a non-issue — the receipt block's "// trophies · 12/35 · 34%" line is the whole UI surface.
-
-> **Confirm:** is aggregates-only acceptable for v1, with individual-trophy detail explicitly punted to v2?
+**Tradeoff accepted:** no per-trophy detail on GameDetail without going back to PSN/Steam at render time. For v1 the receipt block's "// trophies · 12/35 · 34%" line is the whole UI surface, so this is moot.
 
 ---
 
@@ -89,104 +87,87 @@ When sync brings `achievementsPercent === 100`:
 
 **Rationale:** `Dropped` and `Wishlist` are explicit user decisions — "I gave up" or "I haven't bought it." Overriding those with auto-complete would be the agent disrespecting the user's library state. The other statuses are either defaults (Backlog from sync) or "in-progress" labels (OnHold/Playing) where 100% definitively means done.
 
-**Edge case:** what if a user manually flipped `Completed → Backlog` (rare, "I want to replay")? Their next sync would auto-flip it back to Completed. I think that's correct — they 100%'d the game, status reflects reality. If we want to suppress that we'd need a "manually overridden" flag, which is over-engineering for a personal tool.
-
-> **Confirm:** is the table above the right rule? Any status transition you want to add or remove?
+**Edge case:** if a user manually flips `Completed → Backlog` (rare, "I want to replay") their next sync auto-flips it back. Acceptable — they 100%'d the game, status reflects reality. A "manually overridden" suppression flag is over-engineering for a personal tool.
 
 ---
 
-### T-D3 — First-sync auto-complete is the same code path.
+### T-D3 — First-sync auto-complete uses the same code path.
 
-We don't gate auto-complete on "previously seen this UserGame." Every sync runs the rule on every `(UserGame, achievementsPercent)` it sees. For a fresh sync where you've already 100%'d 50 games, those go directly from Backlog → Completed in one pass. No "seen-before" tracking needed.
-
-> **Confirm:** OK to skip the seen-before guard?
+No "previously seen this UserGame" gate. Every sync runs the rule on every `(UserGame, achievementsPercent)` pair it sees. For a fresh sync where you've already 100%'d 50 games, those go directly from Backlog → Completed in one pass.
 
 ---
 
 ### T-D4 — PSN inline, Steam background-queued.
 
-PSN's trophy fetch is **one call** for all titles. We do it inline in `runSync` right after the library import. Total request budget: +1 IGDB/playtime call, no measurable latency impact.
+PSN's trophy fetch is **one call** for all titles via `getUserTitles`. Done inline in `runSync` after the library import — adds ~1 API round-trip of latency, negligible.
 
-Steam's achievement fetch is **N calls** (one per game). We do it on the existing background-queue pattern — `runSync` returns immediately, achievements trickle into the database over the next ~few minutes. Same flow as HLTB. Throttle to ~3 req/s under Steam's effective rate (their 100k/day cap is per-key, so this is generous).
+Steam's achievement fetch is **N calls** (one per game). Done on the existing background-queue pattern — `runSync` returns immediately, achievements trickle into the database over the next few minutes. Same flow as HLTB. Throttled at ~3 req/s; Steam's per-key cap is 100k/day so this is generous.
 
-**Implication:** after a Steam sync, a user might briefly see games without achievement data. Acceptable — the GameDetail receipt block hides the trophy line when `achievementsTotal === null`, so it's invisible until the data arrives.
-
-> **Confirm:** OK to deviate Steam onto the background queue?
+**Implication:** after a Steam sync, games briefly have `achievements*` = null. The GameDetail receipt block hides the line in that state, so it's invisible until data arrives.
 
 ---
 
-### T-D5 — PSN trophy ↔ played-game match: by `npCommunicationId` (preferred) or normalized title (fallback).
+### T-D5 — PSN match by `npCommunicationId` (preferred) or normalized title (fallback).
 
-`getUserPlayedGames` (the library sync we already have) returns a `titleId` per game — but that's NOT the same as `npCommunicationId`. Annoying. So:
+`getUserPlayedGames` returns a `titleId` per game which is NOT the same as `npCommunicationId`. The two PSN endpoints don't share IDs, so:
 
 - **First sync after T1 ships:** match by `cleanPsnTitle(name).toLowerCase()` against existing `UserGame.game.title`. Persist `Game.psnNpCommunicationId` from the trophy response.
 - **Every subsequent sync:** match by `Game.psnNpCommunicationId` directly. Stable identity, no title-collision risk.
 
-**Bonus opportunity:** `Game.psnNpCommunicationId` partially closes the "store platform-side IDs" gap from the sync-quality batch (decision #33 in `AGENT.md`). Future re-syncs can rebind UserGames by stable PSN identity, not just IGDB identity. We don't get the same for Steam (we already have `Game.steamAppId` and `Game.psnNpCommunicationId` rounds out the major sync sources).
+**Bonus:** `Game.psnNpCommunicationId` partially closes the "store platform-side IDs" gap from sync-quality decision #33 in `AGENT.md`. Future re-syncs can rebind UserGames by stable PSN identity, not just IGDB identity.
 
-**Edge case:** PSN trophy title name doesn't always match the played-game name (regional variants, subtitle differences). For first-sync mismatches we fall back to title-normalize but accept ~5% will not match — those games get no trophy data until the next sync, when manual `[wrong game?]` remap or a re-fetch can fix it.
-
-> **Confirm:** is this matching strategy acceptable, including the "5% may miss on first sync" caveat?
+**Accepted miss rate:** PSN trophy title name doesn't always match the played-game name (regional variants, subtitle differences). First-sync title-fallback may miss ~5%. Those games get no trophy data until either (a) the next sync after a manual rename, or (b) the user uses the `[wrong game?]` chip on GameDetail to remap.
 
 ---
 
 ### T-D6 — PSN scope stays PS4+PS5.
 
-The library sync filters to `ps4_game,ps5_native_game` (the categories PSN's API actually returns reliably). Trophy data follows the same scope — we don't fetch trophies for games that aren't in the library.
-
-PS3 / PSP / Vita are excluded. They have known PSN data quality gaps and you don't have them connected. If you ever add them, we revisit; not relevant for v1.
-
-> **Confirm:** OK to keep PS4+PS5 only?
+Library sync filters to `ps4_game,ps5_native_game`; trophy fetch follows the same scope. PS3 / PSP / Vita excluded due to known PSN data quality gaps.
 
 ---
 
-### T-D7 — Steam private-profile / unsupported-game handling.
+### T-D7 — Steam private-profile / unsupported-game handling + scope-tab notice.
 
-`GetPlayerAchievements` returns `{ playerstats: { error: "Profile is not public" } }` (or similar) when the profile's privacy is set to friends-only / private. Our fetcher catches this, returns `null`, and we store nothing.
+`GetPlayerAchievements` returns `{ error: "Profile is not public" }` when the profile's privacy is friends-only / private. Our fetcher catches this, returns `null`, stores nothing. Same when the game has no achievements (older indies, DLC, F2P with no achievement support) — Steam returns `success: false`, fetcher returns `null`. The receipt block hides the line when `achievementsTotal === null`.
 
-Same when the game has no achievements (older indies, DLC, etc.) — Steam returns `success: false`, fetcher returns `null`, no row updated. The receipt block's trophy line is hidden when `achievementsTotal === null`.
-
-> **Confirm:** silent skip when private/unsupported is the right behavior?
+**Amendment (Andrea 2026-05-08):** because the silent-skip behavior is invisible by design, `PlatformDetailDesktop` and `PlatformDetailMobile` need a Steam-specific note in the **scope & permissions** tab next to the existing `trophies` row. Copy: something like "// note · steam profile must be public for achievement sync. settings → privacy → game details on steam." Conditional on `code === 'st'` only — PSN's NPSSO token bypasses the public/private distinction, and Xbox/GOG don't have achievement sync yet.
 
 ---
 
-### T-D8 — Auto-complete is silent (no notification surface in v1).
+### T-D8 — Auto-complete is silent in v1.
 
-When the rule flips a row to Completed, we just write the status. No banner, no email, no dashboard notification. The user sees it on their next visit to Library/Dashboard.
-
-A "you 100%'d X this week" feed is a v2 feature once we have the individual-trophy data and a notion of timestamps for "earned-this-period."
-
-> **Confirm:** silent for v1, surface in v2?
+When the rule flips a row to Completed, we write the status and stop. No banner, no email, no dashboard notification. The user sees it on their next visit to Library/Dashboard. A "you 100%'d X this week" feed is a v2 feature once we have individual-trophy timestamps.
 
 ---
 
 ### T-D9 — GameDetail UI is a receipt-block line, no progress bar in v1.
 
-The receipt aesthetic on GameDetail already has lines like "// playtime · 18h 22m" and "// hltb main · 22h." We add:
+Add a single line to the existing receipt block:
 
 ```
-// trophies · 12/35 · 34%
+// trophies · 12/35 · 34%       (PSN games)
+// achievements · 12/35 · 34%   (Steam games)
 ```
-…on PSN games, or:
 
-```
-// achievements · 12/35 · 34%
-```
-…on Steam games. Hidden when `achievementsTotal === null`.
-
-A progress bar / visual element is a v2 polish. The receipt aesthetic is data-dense by design — adding visual cruft fights the design language.
-
-> **Confirm:** receipt-block line only, no progress bar in v1?
+Hidden when `achievementsTotal === null`. No progress bar — the receipt aesthetic is data-dense by design and visual cruft fights the design language.
 
 ---
 
-### T-D10 — Where does `psnNpCommunicationId` live: `Game` or `UserGame`?
+### T-D10 — `psnNpCommunicationId` lives on `Game`. Achievement aggregates live on `UserGame`.
 
-On `Game`, marked `@unique`. The npCommunicationId is universal per title — every PSN player of that game shares the same id. Storing it on `Game` matches `steamAppId`'s placement.
+This decision has two parts that are easier to follow when laid out side-by-side with what we already do for Steam:
 
-The user's earned counts (`achievementsEarned`, etc.) live on `UserGame` because they're per-user. Total available trophies (`achievementsTotal`) ALSO lives on `UserGame` despite being universal — single source of truth for the receipt-block render, avoids a JOIN, the redundancy cost is trivial.
+|                              | Steam                         | PSN                                |
+|---                            |---                            |---                                  |
+| Stable platform-side game id  | `Game.steamAppId @unique`     | `Game.psnNpCommunicationId @unique` |
+| User's earned-trophy count    | `UserGame.achievementsEarned` | `UserGame.achievementsEarned`       |
+| Total trophies for the game   | `UserGame.achievementsTotal`  | `UserGame.achievementsTotal`        |
 
-> **Confirm?**
+**Why on Game (not UserGame):** the `npCommunicationId` is **universal per title** — every PSN player of "Slay the Spire" sees the same `NPWR21873_00`. The Game record is the universal-per-title row in our schema; Steam's `steamAppId` already lives there for the same reason. Putting `npCommunicationId` next to it keeps the "stable platform-side identifier" idea consistent.
+
+**Why total trophies on UserGame (despite being universal):** logically `total` could live on Game (it's the same for every player). We put it on UserGame anyway because the receipt-block render is `{userGame.achievementsEarned}/{userGame.achievementsTotal} · {userGame.achievementsPercent}%` — putting all three on the same row lets us load them in one query without a JOIN to Game. Cost of the redundancy: a few extra integer columns per UserGame row. Trivial. Single-source-of-truth at the UserGame level for read-path simplicity.
+
+**Why this matters for sync correctness:** once `Game.psnNpCommunicationId` is populated (T2), every subsequent PSN sync resolves trophy data by stable PSN identity — not by title fuzzy-matching. That makes PSN syncs immune to the wrong-sequel / wrong-region drift we saw in the sync-quality batch (Slay-the-Spire-2 class).
 
 ---
 
@@ -267,7 +248,7 @@ Six PRs, shippable independently. T6 is optional / deferrable.
 - T2 and T3 both call it. Single canonical place to assert the T-D2 rule.
 - Tests: every status × percent matrix, edge cases (percent === null, percent < 100, percent === 100).
 
-### T5 — GameDetail receipt-block UI
+### T5 — GameDetail receipt-block UI + PlatformDetail scope note
 
 - `apps/web/src/components/screens/GameDetailDesktop.tsx` and `GameDetailMobile.tsx`: add a receipt-block line:
   - PSN-platformed game → `// trophies · {earned}/{total} · {percent}%`
@@ -275,7 +256,8 @@ Six PRs, shippable independently. T6 is optional / deferrable.
   - Multi-platform → use the source the highest percent comes from (or just label "// completion" generically, TBD when we render).
   - Hide entirely when `achievementsTotal === null`.
 - Style: same `t-mono` / `t-faint` treatment as adjacent receipt rows. Color the percent green when ≥ 80, amber otherwise (or skip color, keep monochrome — minor decision).
-- Tests: snapshot-style render assertions.
+- **Scope-tab amendment (T-D7):** in `PlatformDetailDesktop.tsx` and `PlatformDetailMobile.tsx` scope tab, when `code === 'st'` only, add a small note line under the existing `trophies` checkbox: "// note · steam profile must be public for achievement sync. settings → privacy → game details." Renders nowhere on PSN/Xbox/GOG/etc.
+- Tests: snapshot-style render assertions for the receipt line; conditional render for the Steam note.
 
 ### T6 — Dashboard rollup (deferrable)
 
@@ -328,4 +310,5 @@ Update this table as PRs land; mirror to `docs/PLAN.md` Phase Status row when th
 
 This section captures the order in which decisions were considered and why each landed where it did. Update as decisions evolve.
 
-- **2026-05-08:** initial draft. T-D1 through T-D10 surfaced for Andrea's review. Every decision is currently *proposed*, not *locked* — code lands only after Andrea confirms.
+- **2026-05-08 (initial scoping):** T-D1 through T-D10 drafted as proposals. Every decision was open pending Andrea's review.
+- **2026-05-08 (decisions locked, same day):** Andrea confirmed T-D1 through T-D10 in a single pass. T-D7 amended to add a Steam-only "profile must be public" note in the PlatformDetail scope & permissions tab — handled in T5 alongside the GameDetail receipt-block line. T-D10 confirmed with the user noting they trust the call; rationale expanded inline with a Steam/PSN side-by-side table for future agents.
