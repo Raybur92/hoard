@@ -200,8 +200,21 @@ export interface UpcomingOptions {
   limit?: number;
 }
 
+/**
+ * Upcoming releases feed. Trust the hype filter to keep the result
+ * relevant — don't impose an arbitrary date ceiling.
+ *
+ * Earlier versions hard-capped the query at `first_release_date <= now + 365d`
+ * AND `limit 50`, which truncated visible games at the back end of the year
+ * and made anything announced ~1 year+ out invisible everywhere. With
+ * `hypes > {threshold}` doing the qualitative gate, neither cap is needed.
+ *
+ * `limit 500` is IGDB's hard ceiling per query. With the hype default (5)
+ * the actual return is ~100-200 rows; with hypeThreshold=0 (rare) it can
+ * approach the cap, which is fine — the client buckets/zooms it.
+ */
 export async function getUpcomingReleases(opts: UpcomingOptions): Promise<IgdbUpcomingRelease[]> {
-  const { platformIds, allPlatforms, hypeThreshold, fromDate = new Date(), limit = 50 } = opts;
+  const { platformIds, allPlatforms, hypeThreshold, fromDate = new Date(), limit = 500 } = opts;
 
   const sortedIds = [...platformIds].sort((a, b) => a - b);
   const cacheKey = `upcoming_${Math.floor(fromDate.getTime() / ONE_DAY)}_h${hypeThreshold}_${allPlatforms ? 'all' : sortedIds.join(',')}`;
@@ -209,7 +222,6 @@ export async function getUpcomingReleases(opts: UpcomingOptions): Promise<IgdbUp
   if (cached) return cached;
 
   const fromTs = Math.floor(fromDate.getTime() / 1000);
-  const toTs = fromTs + 365 * 24 * 60 * 60;
 
   const platformClause = !allPlatforms && platformIds.length > 0
     ? `& platforms = (${sortedIds.join(',')})`
@@ -221,7 +233,6 @@ where (category = (2, 8) | category = null)
   ${hypeClause}
   & version_parent = null
   & first_release_date >= ${fromTs}
-  & first_release_date <= ${toTs}
   ${platformClause};
 sort first_release_date asc;
 limit ${limit};`;

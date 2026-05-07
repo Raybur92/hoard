@@ -80,8 +80,12 @@ where (category = (2, 8) | category = null)
   & first_release_date > {now}
   & platforms = ({user_platform_ids});
 sort first_release_date asc;
-limit 50;
+limit 500;
 ```
+
+> **Note on date window:** there is no upper bound on `first_release_date`. The hype filter is the qualitative gate, so a long-tail "announced for late 2027" entry is welcome — it'll naturally fall into the Quarters zoom's TBA bucket on the client.
+
+> **Note on `limit`:** 500 is IGDB's hard ceiling per query. With the default `hypes > 5` the actual return is usually 100-200 rows; with `hypeThreshold = 0` (rare) it can approach the cap, which the client handles via bucketing/zoom.
 
 > **Note:** IGDB omits the `category` field entirely for main games (category 0 is the implicit default). Using `category = (0, 2, 8)` returns zero results because the equality match only fires when the field is present. The correct pattern is `(category = (2, 8) | category = null)` — DLCs/remakes have an explicit value; main games have no field.
 
