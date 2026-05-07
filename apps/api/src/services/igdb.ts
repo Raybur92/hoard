@@ -256,6 +256,58 @@ limit ${limit};`;
   return mapped;
 }
 
+export interface RecentReleasesOptions {
+  /** UNIX seconds, inclusive lower bound. Typically `Date.now() / 1000 - 14 * 86400`. */
+  fromTs: number;
+  /** UNIX seconds, inclusive upper bound. Typically `Date.now() / 1000`. */
+  toTs: number;
+  /** Minimum hype value to include. Spec uses 80 for the muted-banner threshold. */
+  minHype: number;
+  limit?: number;
+}
+
+/**
+ * Backward-looking IGDB query: recently-released titles with hype above
+ * `minHype`. Powers the muted-banner / RECENT high-hype list. Mirrors the
+ * shape of `getUpcomingReleases` so callers can consume both feeds the same
+ * way; differs only in the date-window direction and the hype lower bound.
+ */
+export async function getRecentlyReleased(opts: RecentReleasesOptions): Promise<IgdbUpcomingRelease[]> {
+  const { fromTs, toTs, minHype, limit = 50 } = opts;
+  const cacheKey = `recent_${Math.floor(fromTs / 86400)}_${Math.floor(toTs / 86400)}_h${minHype}`;
+  const cached = upcomingCache.get(cacheKey);
+  if (cached) return cached;
+
+  const query = `fields id, name, first_release_date, cover.url, genres.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
+where (category = (0, 2, 8) | category = null)
+  & hypes >= ${minHype}
+  & version_parent = null
+  & first_release_date >= ${fromTs}
+  & first_release_date <= ${toTs};
+sort first_release_date desc;
+limit ${limit};`;
+
+  const results = await igdbPost('games', query);
+
+  const mapped: IgdbUpcomingRelease[] = results.map((raw) => ({
+    igdbId: raw.id,
+    title: raw.name,
+    developer: getDeveloper(raw.involved_companies),
+    releaseDate: raw.first_release_date ? new Date(raw.first_release_date * 1000).toISOString() : null,
+    releaseDateCategory: categoriseRelease(raw.first_release_date),
+    platforms: raw.platforms?.map((p) => p.name) ?? [],
+    genres: raw.genres?.map((g) => g.name) ?? [],
+    coverUrl: normalizeCover(raw.cover?.url),
+    synopsis: raw.summary ?? null,
+    wishlisted: false,  // caller fills this in (always false for the hyped list)
+    category: raw.category ?? 0,
+    hype: raw.hypes ?? null,
+  }));
+
+  upcomingCache.set(cacheKey, mapped);
+  return mapped;
+}
+
 export async function getGameBySteamId(steamAppId: number): Promise<IgdbSearchResult | null> {
   const key = `steam_${steamAppId}`;
   const cached = steamCache.get(key);

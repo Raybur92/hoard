@@ -254,6 +254,14 @@ export interface IgdbTimeToBeat {
   completely: number | null;
 }
 
+// Response shape for GET /api/releases/recent (R1 in docs/RELEASES_PLAN.md).
+// Both lists share `IgdbUpcomingRelease`; `wishlisted` distinguishes them
+// (true for `starred`, false for `hyped`). See decision D7.
+export interface RecentReleasesResponse {
+  starred: IgdbUpcomingRelease[];
+  hyped: IgdbUpcomingRelease[];
+}
+
 // DO NOT RENAME — see docs/RELEASES_PLAN.md §1 (decision D1). The page is being
 // reworked from "Upcoming" to "Releases" but the underlying type stays. The
 // Releases page consumes IgdbUpcomingRelease as-is; renaming this type would

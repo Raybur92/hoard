@@ -14,6 +14,7 @@ import type {
   ManualAddBody,
   IgdbSearchResult,
   IgdbUpcomingRelease,
+  RecentReleasesResponse,
   ShelvesResponse,
 } from '@hoard/types';
 import * as cache from './cache';
@@ -214,4 +215,10 @@ export const api = {
 
   igdbUpcoming: (scope: 'my-platforms' | 'all' | 'wishlist' = 'my-platforms') =>
     get<IgdbUpcomingRelease[]>(`/api/igdb/upcoming${scope === 'all' ? '?scope=all' : ''}`),
+
+  // Releases page — RECENT surface + banner qualification (R1 in
+  // docs/RELEASES_PLAN.md). Returns the 14-day window split into
+  // user-starred (filtered against library) + IGDB high-hype (deduped).
+  releasesRecent: () =>
+    get<RecentReleasesResponse>('/api/releases/recent'),
 };

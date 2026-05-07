@@ -285,7 +285,7 @@ Plus from D6:
 
 | ID | Status | PR | Date | Notes |
 |---|---|---|---|---|
-| R1 — Server endpoint | Pending | — | — | New `/api/releases/recent` + library-membership join + backward-looking IGDB. |
+| R1 — Server endpoint | Done | — | 2026-05-07 | New `GET /api/releases/recent` returns `{ starred, hyped }` both shaped as `IgdbUpcomingRelease[]` per D7. New `getRecentlyReleased()` helper in `services/igdb.ts` wraps a backward-looking IGDB query (`first_release_date ∈ [today−14d, today]`, `hypes >= 80`, descending). New route at `apps/api/src/routes/releases.ts` applies the library-membership filter (drops wishlist rows whose `igdbId` matches a `UserGame` for the user) and dedupes `hyped` against `starred` by `igdbId`. Graceful degradation when IGDB throws — `starred` still served. New `RecentReleasesResponse` type in `@hoard/types`. New `api.releasesRecent()` client method. 7 new integration tests covering shape (D7), library filter, dedupe, 14-day window on both DB + IGDB queries, IGDB-throw graceful path, empty case. **136 API + 69 web tests pass; lint + rename-rule guard green.** |
 | R2 — Desktop primitives | Pending | — | — | `ReleaseCard`, `HeroCountdown`, `RecentBanner`, `TimeNav`, `AgendaRail`. |
 | R3 — Desktop page | Pending | — | — | Replaces `UpcomingDesktop`. URL redirect from `/upcoming`. |
 | R4 — RECENT page | Pending | — | — | New `/releases/recent` route. |
