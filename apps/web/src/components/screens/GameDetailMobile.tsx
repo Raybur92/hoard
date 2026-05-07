@@ -181,7 +181,14 @@ export function GameDetailMobile() {
           currentTitle={g.game.title}
           currentIgdbId={g.game.igdbId}
           onClose={() => setRemapOpen(false)}
-          onRemapped={() => { setRemapOpen(false); refetch(); }}
+          onRemapped={(updated) => {
+            setRemapOpen(false);
+            // See GameDetailDesktop for the rationale: when the merge
+            // path runs, the source UserGame was deleted, so this URL is
+            // dead and refetch would 404. Bounce to /library.
+            if (updated.id !== g.id) navigate('/library');
+            else refetch();
+          }}
         />
       )}
 

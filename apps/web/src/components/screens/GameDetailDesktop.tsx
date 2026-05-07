@@ -149,7 +149,17 @@ export function GameDetailDesktop() {
           currentTitle={g.game.title}
           currentIgdbId={g.game.igdbId}
           onClose={() => setRemapOpen(false)}
-          onRemapped={() => { setRemapOpen(false); refetch(); }}
+          onRemapped={(updated) => {
+            setRemapOpen(false);
+            // Plain remap: UserGame.id stays the same, just refetch the
+            // page data to pick up the new Game.title/cover/etc.
+            // Merge case: the source UserGame (this page's URL) was just
+            // deleted server-side; staying here would 404 the next fetch.
+            // Bounce to the library so the user can see the merged result
+            // in context.
+            if (updated.id !== g.id) navigate('/library');
+            else refetch();
+          }}
         />
       )}
 
