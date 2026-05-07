@@ -7,6 +7,7 @@ import { requireUser } from '../middleware/user';
 import type { PlatformStatusResponse, PlatformDetail, ManualAddBody } from '@hoard/types';
 import { syncSteamLibrary } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
+import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
 
@@ -143,14 +144,16 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
   void (async () => {
     try {
       let syncedGames: Awaited<ReturnType<typeof syncSteamLibrary>> = [];
-      // Captured for the inline trophy fetch below — same npsso, no need
-      // to re-read credentials.
+      // Captured for the inline trophy fetch (PSN) and background
+      // achievement fetch (Steam) below — same creds, no need to re-read.
       let psnNpsso: string | null = null;
+      let steamId: string | null = null;
 
       if (code === 'ST') {
         const creds = platform.credentials as { steamId?: string } | null;
         if (!creds?.steamId) throw new Error('Steam credentials missing');
-        syncedGames = await syncSteamLibrary({ steamId: creds.steamId });
+        steamId = creds.steamId;
+        syncedGames = await syncSteamLibrary({ steamId });
       } else if (code === 'PS') {
         const creds = platform.credentials as { npsso?: string } | null;
         if (!creds?.npsso) throw new Error('PSN credentials missing');
@@ -183,6 +186,25 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
         where: { id: platform.id },
         data: { syncStatus: 'ok', lastSyncAt: new Date() },
       });
+
+      // T3 — background pass over every Steam-platformed UserGame to fetch
+      // achievement aggregates. Throttled at ~3 req/s, so a 1000-game
+      // library takes ~5 minutes. We mark the platform `ok` BEFORE this
+      // starts so the user's UI flips to "synced" immediately; achievement
+      // data trickles in over the next few minutes. Same pattern as HLTB.
+      // Fire-and-forget — failures are logged inside the orchestrator.
+      if (code === 'ST' && steamId) {
+        const sid = steamId;
+        const uid = platform.userId;
+        void (async () => {
+          try {
+            const r = await triggerSteamAchievementsBackground(uid, sid);
+            console.log(`[sync ST] achievements: candidates=${r.candidates} fetched=${r.fetched} skipped=${r.skipped} autoCompleted=${r.autoCompleted} errors=${r.errors}`);
+          } catch (err) {
+            console.error(`[sync ST] achievement background pass failed:`, err);
+          }
+        })();
+      }
     } catch (err) {
       console.error(`[sync] ${code} error:`, err);
       await prisma.platform.update({
