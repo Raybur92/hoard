@@ -2,6 +2,7 @@ import {
   exchangeNpssoForCode,
   exchangeCodeForAccessToken,
   getUserPlayedGames,
+  getUserTitles,
 } from 'psn-api';
 import type { PlatformCode } from '@hoard/types';
 import type { SyncedGame } from './steam';
@@ -63,6 +64,66 @@ export async function syncPsnLibrary(credentials: PsnCredentials): Promise<Synce
 
 export function validateNpssoFormat(token: string): boolean {
   return /^[A-Za-z0-9]{64}$/.test(token);
+}
+
+/**
+ * One row per game the authenticated PSN account has trophy progress on.
+ * `getUserTitles` is keyed by `npCommunicationId`, which is *different*
+ * from the `titleId` returned by the library sync — see T-D5 in
+ * `docs/TROPHIES_PLAN.md` for the matching strategy.
+ *
+ * `cleanedTitle` is the same `cleanPsnTitle()` form used by the library
+ * sync, so the title-fallback match in `applyPsnTrophyAggregates` can
+ * compare apples-to-apples against `Game.title`.
+ */
+export interface PsnTrophyTitle {
+  npCommunicationId: string;
+  cleanedTitle: string;
+  defined: { bronze: number; silver: number; gold: number; platinum: number };
+  earned:  { bronze: number; silver: number; gold: number; platinum: number };
+  /** PSN's own weighted progress (0–100). Used as a fallback only — we
+   *  compute display percent from earned/total counts to keep the
+   *  receipt-block math consistent. */
+  progress: number;
+  lastUpdatedAt: Date | null;
+}
+
+/**
+ * T2 of the trophies workstream (`docs/TROPHIES_PLAN.md`).
+ *
+ * Pulls every trophy title for the authenticated user with one paginated
+ * call to `getUserTitles`. Returns the cleaned + simplified shape we use
+ * in `applyPsnTrophyAggregates`.
+ *
+ * Decision T-D4: this is inline with the PSN sync flow (one API call for
+ * the whole library). Not background-queued like Steam (T3).
+ */
+export async function getPsnTrophyTitles(npssoToken: string): Promise<PsnTrophyTitle[]> {
+  const accessCode = await exchangeNpssoForCode(npssoToken);
+  const { accessToken } = await exchangeCodeForAccessToken(accessCode);
+  const auth = { accessToken };
+
+  const titles: PsnTrophyTitle[] = [];
+  const PAGE = 800; // psn-api hard cap — see getUserTitles JSDoc
+  let offset = 0;
+
+  while (true) {
+    const res = await getUserTitles(auth, 'me', { limit: PAGE, offset });
+    for (const t of res.trophyTitles) {
+      titles.push({
+        npCommunicationId: t.npCommunicationId,
+        cleanedTitle: cleanPsnTitle(t.trophyTitleName),
+        defined: t.definedTrophies,
+        earned: t.earnedTrophies,
+        progress: t.progress,
+        lastUpdatedAt: t.lastUpdatedDateTime ? new Date(t.lastUpdatedDateTime) : null,
+      });
+    }
+    if (!res.nextOffset || res.nextOffset <= offset || titles.length >= res.totalItemCount) break;
+    offset = res.nextOffset;
+  }
+
+  return titles;
 }
 
 export { SyncedGame };

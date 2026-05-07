@@ -6,8 +6,9 @@ import type { PlatformCode as PrismaCode, GameStatus as PrismaGameStatus } from 
 import { requireUser } from '../middleware/user';
 import type { PlatformStatusResponse, PlatformDetail, ManualAddBody } from '@hoard/types';
 import { syncSteamLibrary } from '../services/platforms/steam';
-import { syncPsnLibrary } from '../services/platforms/psn';
+import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { runSync } from '../services/syncRunner';
+import { applyPsnTrophyAggregates } from '../services/trophies';
 
 const router = Router();
 
@@ -142,6 +143,9 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
   void (async () => {
     try {
       let syncedGames: Awaited<ReturnType<typeof syncSteamLibrary>> = [];
+      // Captured for the inline trophy fetch below — same npsso, no need
+      // to re-read credentials.
+      let psnNpsso: string | null = null;
 
       if (code === 'ST') {
         const creds = platform.credentials as { steamId?: string } | null;
@@ -150,12 +154,29 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
       } else if (code === 'PS') {
         const creds = platform.credentials as { npsso?: string } | null;
         if (!creds?.npsso) throw new Error('PSN credentials missing');
-        syncedGames = await syncPsnLibrary({ npssoToken: creds.npsso });
+        psnNpsso = creds.npsso;
+        syncedGames = await syncPsnLibrary({ npssoToken: psnNpsso });
       }
       // XB, GG — stubs return [] until fully implemented
 
       if (syncedGames.length > 0) {
         await runSync(platform.userId, syncedGames);
+      }
+
+      // T2 — pull PSN trophy aggregates after the library import. T-D4:
+      // PSN's `getUserTitles` is one paginated call for the whole library
+      // (unlike Steam's per-game achievement fetch in T3, which goes on
+      // the background queue). Failure here doesn't fail the whole sync —
+      // the library import already succeeded; trophy data backfills on
+      // the next sync.
+      if (code === 'PS' && psnNpsso) {
+        try {
+          const trophyTitles = await getPsnTrophyTitles(psnNpsso);
+          const result = await applyPsnTrophyAggregates(platform.userId, trophyTitles);
+          console.log(`[sync PS] trophies: matched=${result.matched} autoCompleted=${result.autoCompleted} missed=${result.missed}`);
+        } catch (err) {
+          console.error(`[sync PS] trophy fetch failed (library import succeeded):`, err);
+        }
       }
 
       await prisma.platform.update({
