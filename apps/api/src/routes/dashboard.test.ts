@@ -7,6 +7,7 @@ jest.mock('@hoard/db', () => ({
       findMany: jest.fn(),
       groupBy: jest.fn(),
       count: jest.fn(),
+      aggregate: jest.fn(),
     },
     platform: { findMany: jest.fn() },
     wishlistRelease: { findMany: jest.fn() },
@@ -88,6 +89,7 @@ function setupDashboard({
   backlogTop = [] as ReturnType<typeof makeUserGame>[],
   wishlist = [] as unknown[],
   platforms = [] as unknown[],
+  achievementsAggregate = { _sum: { achievementsEarned: null, achievementsTotal: null } } as { _sum: { achievementsEarned: number | null; achievementsTotal: number | null } },
 }) {
   (prisma.userGame.groupBy as jest.Mock).mockResolvedValue(countGroups);
   (prisma.userGame.count as jest.Mock).mockResolvedValue(weeklyAdded);
@@ -101,6 +103,7 @@ function setupDashboard({
     .mockResolvedValueOnce(backlogTop);
   (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue(wishlist);
   (prisma.platform.findMany as jest.Mock).mockResolvedValue(platforms);
+  (prisma.userGame.aggregate as jest.Mock).mockResolvedValue(achievementsAggregate);
 }
 
 describe('GET /api/dashboard', () => {
@@ -227,5 +230,61 @@ describe('GET /api/dashboard', () => {
 
     // Full backlog data only loaded for top 30.
     expect(res.body.backlogItems.length).toBeLessThanOrEqual(30);
+  });
+});
+
+/* ── T6 — achievements rollup on /api/dashboard ── */
+
+describe('GET /api/dashboard — achievements rollup (T6)', () => {
+  it('returns null when no game in the library has achievement data yet', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Backlog', _count: { status: 5 } }],
+      // _sum returns null when no rows match the filter (achievementsTotal: not null)
+      achievementsAggregate: { _sum: { achievementsEarned: null, achievementsTotal: null } },
+    });
+
+    const res = await request(app).get('/api/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.body.stats.achievementsRollup).toBeNull();
+  });
+
+  it('returns the summed counts + percent rounded to one decimal', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Playing', _count: { status: 10 } }],
+      achievementsAggregate: { _sum: { achievementsEarned: 1242, achievementsTotal: 4580 } },
+    });
+
+    const res = await request(app).get('/api/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.body.stats.achievementsRollup).toEqual({
+      earned: 1242,
+      total: 4580,
+      percent: 27.1, // round(1242/4580*1000)/10
+    });
+  });
+
+  it('handles a 0/N case (user has games with achievement support but earned none)', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Backlog', _count: { status: 1 } }],
+      achievementsAggregate: { _sum: { achievementsEarned: 0, achievementsTotal: 100 } },
+    });
+
+    const res = await request(app).get('/api/dashboard');
+    expect(res.body.stats.achievementsRollup).toEqual({ earned: 0, total: 100, percent: 0 });
+  });
+
+  it('runs the aggregate query scoped to userId AND filtering achievementsTotal: not null', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Backlog', _count: { status: 1 } }],
+      achievementsAggregate: { _sum: { achievementsEarned: 50, achievementsTotal: 200 } },
+    });
+
+    await request(app).get('/api/dashboard');
+
+    // The mock was called with the correct filter shape.
+    const aggregateCall = (prisma.userGame.aggregate as jest.Mock).mock.calls[0][0];
+    expect(aggregateCall.where.userId).toBe('test-user-id');
+    expect(aggregateCall.where.achievementsTotal).toEqual({ not: null });
+    expect(aggregateCall._sum).toEqual({ achievementsEarned: true, achievementsTotal: true });
   });
 });

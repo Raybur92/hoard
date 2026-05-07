@@ -328,6 +328,26 @@ export function DashboardDesktop() {
                 <Gauge total={20} filled={Math.round((stats.completedCount / Math.max(stats.totalGames, 1)) * 20)} />
               </div>
 
+              {/* T6 — library-wide trophy/achievement rollup. Hidden when no
+                  achievement data exists yet (no PSN sync run, every Steam
+                  profile private, etc.). Same Gauge style as the completion
+                  ratio above for visual symmetry. */}
+              {stats.achievementsRollup && (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                    <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>achievements</span>
+                    <span className="t-tnum" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)' }}>
+                      {stats.achievementsRollup.earned.toLocaleString('en')} / {stats.achievementsRollup.total.toLocaleString('en')}
+                      {' · '}
+                      <span style={{ color: stats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper-dim)' }}>
+                        {stats.achievementsRollup.percent}%
+                      </span>
+                    </span>
+                  </div>
+                  <Gauge total={20} filled={Math.round((stats.achievementsRollup.percent / 100) * 20)} />
+                </div>
+              )}
+
               {/* genre breakdown */}
               {stats.genres.length > 0 && (
                 <div style={{ marginTop: 18 }}>

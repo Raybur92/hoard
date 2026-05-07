@@ -138,6 +138,14 @@ export interface DashboardStats {
   weeklyAdded: number;
   playtimeByPlatform: PlatformStat[];
   genres: { name: string; count: number }[];
+  // T6 of the trophies workstream (`docs/TROPHIES_PLAN.md`). Library-wide
+  // sum of trophy/achievement progress across every UserGame that has
+  // achievement data fetched. `null` when no game in the library has any
+  // achievement data yet (e.g. trophies pre-T2/T3 sync, or every
+  // achievementsTotal is null because every Steam profile is private and
+  // no PSN games have been synced). Percent is `earned / total * 100`,
+  // rounded to one decimal — same convention as `completionPct`.
+  achievementsRollup: { earned: number; total: number; percent: number } | null;
 }
 
 /** Activity heatmap cells, column-major (weeks × 7).

@@ -69,6 +69,7 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
     aggUserGames,
     wishlistReleases,
     platforms,
+    achievementsAggregate,
   ] = await Promise.all([
     prisma.userGame.groupBy({
       by: ['status'],
@@ -109,6 +110,14 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
       take: 5,
     }),
     prisma.platform.findMany({ where: { userId } }),
+    // T6 — library-wide achievement rollup. Single Postgres SUM scoped to
+    // the user; only counts UserGames where achievementsTotal is non-null
+    // (otherwise unsupported games / private profiles inflate the
+    // denominator with 0/0 noise).
+    prisma.userGame.aggregate({
+      where: { userId, achievementsTotal: { not: null } },
+      _sum: { achievementsEarned: true, achievementsTotal: true },
+    }),
   ]);
 
   // Shelf counts (and totalGames derived from sum)
@@ -158,6 +167,20 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
       ? Math.round((shelfCounts['Completed'] / totalGames) * 1000) / 10
       : 0;
 
+  // T6 rollup. _sum is `number | null` (null = no rows passed the filter).
+  // `null` rolls up to "no achievement data anywhere yet" so the UI can
+  // hide the line entirely instead of showing 0/0.
+  const achEarned = achievementsAggregate._sum.achievementsEarned ?? 0;
+  const achTotal = achievementsAggregate._sum.achievementsTotal ?? 0;
+  const achievementsRollup =
+    achTotal > 0
+      ? {
+          earned: achEarned,
+          total: achTotal,
+          percent: Math.round((achEarned / achTotal) * 1000) / 10,
+        }
+      : null;
+
   const stats: DashboardStats = {
     totalGames,
     playingCount: shelfCounts['Playing'],
@@ -171,6 +194,7 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
     weeklyAdded,
     playtimeByPlatform,
     genres,
+    achievementsRollup,
   };
 
   // Backlog pick: order all backlog by HLTB mainStory asc (HLTB-known first),

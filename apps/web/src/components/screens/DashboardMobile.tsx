@@ -211,6 +211,25 @@ export function DashboardMobile() {
           </div>
         </div>
 
+        {/* T6 — library-wide trophy/achievement rollup. Hidden when no
+            achievement data exists yet. Single dotted-row in the receipt
+            aesthetic; the desktop version uses a Gauge but mobile is
+            already vertically dense. */}
+        {stats.achievementsRollup && (
+          <div style={{ padding: '14px 16px 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 12px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
+              <span className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>achievements</span>
+              <span className="t-mono t-tnum" style={{ fontSize: "var(--text-xs)", color: 'var(--paper-dim)' }}>
+                {stats.achievementsRollup.earned.toLocaleString('en')} / {stats.achievementsRollup.total.toLocaleString('en')}
+                {' · '}
+                <span style={{ color: stats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper)' }}>
+                  {stats.achievementsRollup.percent}%
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* hours by platform */}
         {stats.playtimeByPlatform.length > 0 && (
           <div style={{ padding: '14px 16px 0' }}>
