@@ -251,6 +251,9 @@ Three real scopes on `/api/igdb/upcoming`: `my-platforms` (IGDB feed, hype-filte
 **21. Wipe library scope (Post-8 PR C — D10)**
 `POST /api/auth/me/wipe-library` deletes the user's `UserGame` rows and disconnects every platform (deletes the `Platform` row). **Preserves `Game`, `HltbData`, `WishlistRelease`, account, preferences, login history.** Wipe is destructive but bounded — wishlist and account state survive. Two-step typed-confirmation modal (`WIPE` keyword) mirrors the delete-account flow (`HOARD` keyword); the modal component is generalised via a `variant` prop.
 
+**22. Releases page rename — surface only (active workstream, scoped 2026-05-07 — D1)**
+The Upcoming page is being reworked into the Releases page (`docs/RELEASES_PLAN.md`). The rename is **URL + UI labels only** — internal code keeps `useUpcoming`, `IgdbUpcomingRelease`, `WishlistRelease`, `/api/igdb/upcoming`, `/api/upcoming/:igdbId/wishlist`, and the database tables. The data model (a future release date — `WishlistRelease` — and a list of upcoming items — `IgdbUpcomingRelease`) is unchanged; only the page name shifts. Future agents who find themselves doing a search-and-replace of "upcoming" across the codebase should stop and re-read `docs/RELEASES_PLAN.md` §1 before proceeding. The `SOON` mobile tab label stays — it's already abstract and ties to the page concept, not its name.
+
 ---
 
 ## v2 Backlog (Explicitly Deferred)

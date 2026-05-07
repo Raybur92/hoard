@@ -36,7 +36,8 @@ npx prisma db seed            # seed with mock data
 | What | Where |
 |---|---|
 | Execution plan + phase status | `docs/PLAN.md` |
-| Interaction debt + audits + PR plan (active workstream) | `docs/INTERACTION_DEBT_PLAN.md` |
+| Releases page rework (active workstream) | `docs/RELEASES_PLAN.md` + handoff `docs/Hoard_releases_handoff.md` + mocks `project/Hoard_releases_mocks.html` |
+| Interaction debt + audits + PR plan (complete 2026-05-06) | `docs/INTERACTION_DEBT_PLAN.md` |
 | Performance & UX workstream (complete 2026-05-04) | `docs/PERFORMANCE_PLAN.md` |
 | Environment variables reference | `docs/ENV.md` |
 | Design source of truth | `project/` — HTML/CSS/JS prototypes |
@@ -158,16 +159,30 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 ## Current Phase
 
-**Active: No active phase — Post-8 Interaction Debt & Audit workstream complete 2026-05-06.** Production is feature-aligned across desktop and mobile, has full HLTB-or-equivalent coverage where the data exists, honest Upcoming scope semantics, and proper destructive-action confirmation for both delete-account and wipe-library. Ready for the next feature workstream (Upcoming rework is pre-scoped in `docs/INTERACTION_DEBT_PLAN.md` §2 if you pick it up).
+**Active: Releases page rework (formerly "Upcoming") — scoped 2026-05-07.** See `docs/RELEASES_PLAN.md` for the locked decisions and PR sequence. Source materials: `docs/Hoard_releases_handoff.md` (canonical spec, standalone), `project/Hoard_releases_mocks.html` (visual mocks — packed bundler artifact, open in browser to render; see RELEASES_PLAN.md §0 for source-extraction recipe), `docs/Upcoming/Hoard_design_feedback_rev03.md` … `rev07.md` (design conversation).
 
-**Workstream sequence (all done 2026-05-06):**
-- **Hot fixes** from Luigi's first test (commit `6c624a0`) — PSN status logic + Steam connect 404 + Library single-shelf filter+sort.
-- **PR D — HLTB layered fallback** — coverage 34.2% → 63.1% via Steam-ID + IGDB `/game_time_to_beats` chain.
-- **PR A — Interaction debt** — 9 items: mobile back default + 44pt hit areas, mobile shell wiggle fix, library search input + `/` shortcut, Library shelves simplified, Settings stubs become ComingSoonPanel + Account V2 markers, HLTB extras+completionist on mobile, Dashboard/GameDetail/Upcoming cleanups.
-- **PR B — Real wishlist scope + Path-B persistence fix** — `?scope=wishlist` reads persisted rows directly, toggle endpoint captures all IGDB fields, 3 real scope chips on Upcoming with honest wishlist count.
-- **PR C — Sync-all + wipe-library** — sync-all kicks off every connected platform in parallel with 2s status polling and aria-live transitions; `POST /api/auth/me/wipe-library` preserves wishlist/account/preferences; typed-string confirmation modal generalised.
+**Page concept:** two modes (Wishlist / All), two zoom levels (Months / Quarters), separate `/releases/recent` 14-day-window surface reached via a conditional banner. Mobile uses a different IA than desktop — view-sheet pattern, see handoff §7.
 
-129 API + 69 web tests pass. Lint clean. 14 decisions captured in `docs/INTERACTION_DEBT_PLAN.md`. Phase 8 closed before this began.
+**Six PRs scoped (R1–R6):**
+- **R1** — Server: new `GET /api/releases/recent` with library-membership join + 14-day window + backward-looking IGDB query.
+- **R2** — Desktop primitives: `ReleaseCard`, `HeroCountdown`, `RecentBanner`, `TimeNav`, `AgendaRail`.
+- **R3** — Desktop page composing R2; URL state; right-rail conditional logic.
+- **R4** — RECENT page (no time-axis chrome).
+- **R5** — Mobile shell: `MobileViewHeader`, `MobileViewSheet`, `MobileBanner`.
+- **R6** — Polish, a11y, snapshots, doc closeouts.
+
+> ⚠️ **Critical for any agent touching this workstream — D1 (rename scope):** the page rename is **URL + UI labels ONLY**. `useUpcoming`, `IgdbUpcomingRelease`, `WishlistRelease`, `/api/igdb/upcoming`, `/api/upcoming/:igdbId/wishlist`, table names — **all stay**. Don't search-and-replace "upcoming" across the codebase. See `docs/RELEASES_PLAN.md` §1 + §7 for the full rename matrix and rationale.
+
+---
+
+**Previous workstream — Post-8 Interaction Debt complete 2026-05-06.** Production is feature-aligned across desktop and mobile, has full HLTB-or-equivalent coverage where the data exists, honest Upcoming scope semantics, and proper destructive-action confirmation. 129 API + 69 web tests pass. The four PRs:
+- **Hot fixes** (commit `6c624a0`) — PSN status logic + Steam connect 404 + Library single-shelf filter+sort.
+- **PR D** — HLTB layered fallback (coverage 34.2% → 63.1%).
+- **PR A** — 9 interaction-debt items.
+- **PR B** — Real wishlist scope + Path-B persistence fix.
+- **PR C** — Sync-all + wipe-library.
+
+See `docs/INTERACTION_DEBT_PLAN.md` for details.
 
 ---
 
