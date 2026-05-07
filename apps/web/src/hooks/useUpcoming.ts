@@ -1,3 +1,15 @@
+// ┌──────────────────────────────────────────────────────────────────────────┐
+// │ DO NOT RENAME — see docs/RELEASES_PLAN.md §1 (decision D1).              │
+// │                                                                          │
+// │ The Upcoming page is being reworked into the Releases page. The rename   │
+// │ is URL + UI labels ONLY. This hook stays `useUpcoming`. The type stays   │
+// │ `IgdbUpcomingRelease`. The backend routes stay `/api/igdb/upcoming` and  │
+// │ `/api/upcoming/:igdbId/wishlist`. The DB table stays `WishlistRelease`.  │
+// │                                                                          │
+// │ Renaming any of these is the kind of mistake the rename-rule CI check    │
+// │ (scripts/check-rename-rule.ts) is meant to catch. If you find yourself   │
+// │ doing it, stop and re-read RELEASES_PLAN.md §1.                          │
+// └──────────────────────────────────────────────────────────────────────────┘
 import { api } from '../lib/api';
 import * as cache from '../lib/cache';
 import { useQuery } from './useQuery';

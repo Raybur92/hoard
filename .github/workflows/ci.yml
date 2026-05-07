@@ -29,6 +29,9 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      - name: Rename-rule guard (D1 from RELEASES_PLAN.md)
+        run: npm run check:rename-rule
+
       - name: Typecheck
         run: npm run typecheck
 

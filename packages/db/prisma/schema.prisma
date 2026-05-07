@@ -124,6 +124,9 @@ model HltbData {
   game Game @relation(fields: [gameId], references: [id])
 }
 
+// DO NOT RENAME — see docs/RELEASES_PLAN.md §1 (decision D1). The Releases
+// page rename (Upcoming → Releases) is URL + UI labels only. Renaming this
+// table would force a migration for a UI change. Stays `WishlistRelease`.
 model WishlistRelease {
   id                  String   @id @default(cuid())
   igdbId              Int

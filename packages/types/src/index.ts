@@ -71,6 +71,9 @@ export interface HltbData {
   fetchedAt: string;
 }
 
+// DO NOT RENAME — see docs/RELEASES_PLAN.md §1 (decision D1). The DB table is
+// `WishlistRelease`; the type mirrors it. The Releases page rename is surface-
+// only; data model stays `WishlistRelease` everywhere.
 export interface WishlistRelease {
   id: string;
   igdbId: number;
@@ -251,6 +254,11 @@ export interface IgdbTimeToBeat {
   completely: number | null;
 }
 
+// DO NOT RENAME — see docs/RELEASES_PLAN.md §1 (decision D1). The page is being
+// reworked from "Upcoming" to "Releases" but the underlying type stays. The
+// Releases page consumes IgdbUpcomingRelease as-is; renaming this type would
+// touch dozens of files for zero functional gain. Confirm the rule still
+// holds by reading RELEASES_PLAN.md §1 before any rename attempt.
 export interface IgdbUpcomingRelease {
   igdbId: number;
   title: string;

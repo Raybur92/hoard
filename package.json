@@ -12,6 +12,7 @@
     "dev:api": "npm run dev --workspace=apps/api",
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint .",
+    "check:rename-rule": "tsx scripts/check-rename-rule.ts",
     "typecheck": "tsc -b apps/web apps/api packages/types packages/db",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

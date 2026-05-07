@@ -1,3 +1,9 @@
+// DO NOT RENAME — see docs/RELEASES_PLAN.md §1 (decision D1). The Upcoming →
+// Releases rename is URL + UI labels only. The backend routes here
+// (/api/upcoming, /api/upcoming/:igdbId/wishlist) stay. The new
+// /api/releases/recent endpoint (planned in R1) is added alongside, not as a
+// replacement. Renaming the existing routes here would break the frontend's
+// existing useUpcoming hook for zero gain.
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';

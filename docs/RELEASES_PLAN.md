@@ -62,6 +62,14 @@ These were settled in the planning conversation after reviewing the handoff. Eac
 
 **For future agents:** if you find yourself doing a search-and-replace of "upcoming" across the codebase, stop. The user-facing copy is the only place to change. Confirm this decision is still in force by checking this section before proceeding.
 
+**Belt-and-suspenders enforcement** (added 2026-05-07):
+
+- **Header comments** at the rename hotspots — `apps/web/src/hooks/useUpcoming.ts`, `packages/types/src/index.ts` (above `IgdbUpcomingRelease` and `WishlistRelease`), `packages/db/prisma/schema.prisma` (above `model WishlistRelease`), `apps/api/src/routes/upcoming.ts` — point to this section.
+- **CI guard** at `scripts/check-rename-rule.ts`, run by `npm run check:rename-rule` and wired into `.github/workflows/ci.yml`. Greps the codebase for forbidden symbol shapes (`useReleases`, `IgdbReleasesRelease`, `model UpcomingRelease`, `/api/releases/{anything-other-than-recent}`, etc.) and fails the build with a pointer to this section.
+- **Permitted exception:** docs and the check script itself can mention forbidden symbol names freely — they're documenting the rule, not violating it.
+
+If a future workstream legitimately needs to rename one of these (e.g., a v2 API redesign), update both this section and the guard script. Don't bypass the guard silently.
+
 ---
 
 ### D2 — In-library check: option **B**.
@@ -122,6 +130,14 @@ Hero hides otherwise. The "1 starred, just dropped" case (`away < 0`) correctly 
 
 ---
 
+### D7 — `/api/releases/recent` response shape: unified type.
+
+`{ starred: IgdbUpcomingRelease[], hyped: IgdbUpcomingRelease[] }`. Both lists share `IgdbUpcomingRelease` shape; `starred` carries `wishlisted: true`, `hyped` carries `wishlisted: false`.
+
+Server maps the user's `WishlistRelease` rows into `IgdbUpcomingRelease` shape on the way out — discards `WishlistRelease.id` (DB pk, unused on this surface) and `userId` (implicit in the auth-scoped route). The existing `useUpcoming('wishlist')` hook from PR B already does this map client-side; this decision moves the mapping to the server so the response is consistent with `/api/igdb/upcoming`'s feed shape.
+
+**Why not the asymmetric `WishlistRelease[] / IgdbUpcomingRelease[]` shape:** type-correct but pays a real cost — `ReleaseCard` would have to accept a union or normalise. The 3 fields that diverge (`id`, `userId`, `wishlisted`) are all either irrelevant to the RECENT surface or trivially derivable. Single render path wins.
+
 ### D6 — Hero countdown action buttons.
 
 The mock's `HeroCountdown` shows `[on wishlist]`, `[trailer]`, `[remind me]` buttons. **Only `[on wishlist]` ships in v1.**
@@ -157,9 +173,9 @@ Sized to land cleanly in the existing test/lint/CI cadence. Each PR is independe
 
 ### R1 — Server: library-membership join + 14-day window endpoint
 
-- **Endpoint:** new `GET /api/releases/recent`. Returns `{ starred: WishlistRelease[], hyped: IgdbUpcomingRelease[] }`.
-- **`starred`:** user's `WishlistRelease` rows where `releaseDate ∈ [today - 14d, today]` AND no `UserGame` exists for the same `igdbId` (library-membership check).
-- **`hyped`:** IGDB upcoming feed with `first_release_date ∈ [today - 14d, today]` AND `hypes >= 80`. Excludes anything already in `starred` (dedupe).
+- **Endpoint:** new `GET /api/releases/recent`. Returns `{ starred: IgdbUpcomingRelease[], hyped: IgdbUpcomingRelease[] }` — both lists share the same shape (`IgdbUpcomingRelease`); `starred` items have `wishlisted: true`, `hyped` have `wishlisted: false`. Locked as decision **D7** below.
+- **`starred`:** user's `WishlistRelease` rows where `releaseDate ∈ [today - 14d, today]` AND no `UserGame` exists for the same `igdbId` (library-membership check). Map to `IgdbUpcomingRelease` shape on the way out.
+- **`hyped`:** IGDB upcoming feed with `first_release_date ∈ [today - 14d, today]` AND `hypes >= 80`. Excludes anything already in `starred` (dedupe by `igdbId`).
 - **Helper:** extend `getUpcomingReleases` (or sibling) for backward-looking date ranges.
 - **Cache:** identical TTL to the existing `/api/igdb/upcoming` (24h LRU).
 - **Tests:** unit on the library-membership filter, integration on the dedupe, integration on the date window.
@@ -293,6 +309,8 @@ Plus from D6:
 **D5 — Hero hide rule.** Hero shows iff `wishlist.some(r => r.away >= 0)`. Recently-dropped starred → hero hides; banner does the work.
 
 **D6 — Hero action buttons.** Ship `[on wishlist]` only in v1. `[trailer]` and `[remind me]` parked for v2 (no backing data / no infrastructure).
+
+**D7 — `/api/releases/recent` response shape.** Unified `IgdbUpcomingRelease[]` for both `starred` and `hyped`. Server maps `WishlistRelease` → `IgdbUpcomingRelease` shape on the way out, dropping the unused `id` / `userId` fields. Single client render path; consistent with the existing wishlist-scope behaviour in PR B.
 
 ---
 
