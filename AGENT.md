@@ -148,6 +148,7 @@ Platform
   credentials: encrypted JSON (null for NINTENDO / EPIC)
   syncable: bool (false for NINTENDO and EPIC)
   lastSyncAt, syncStatus: ok | syncing | error | stale | manual
+  syncFrequency: FIVE_MIN | FIFTEEN_MIN | HOURLY | MANUAL  -- read by client useAutoSync hook
 
 Game
   id, igdbId (unique), title, developer
@@ -274,6 +275,12 @@ The `HeroCountdown` ships with only the `[on wishlist]` toggle. `[trailer]` and 
 
 **29. Wishlist is sync'd between two tables, not stored in one (Post-rework — 2026-05-07)**
 The "wishlist" concept lives in two tables and they're kept in sync at one boundary — `POST /api/upcoming/:igdbId/wishlist`. `WishlistRelease` carries upcoming-release metadata (date, hype, category, releaseDateCategory) needed for the Releases page. `UserGame.status = 'Wishlist'` carries the library-citizen role: search results, Library Wishlist shelf, `/game/:id` detail page. Toggling on creates both atomically via `$transaction`; toggling off deletes both, but the `UserGame` is dropped only when its status is still `'Wishlist'` — preserves the user's library decision when they've manually moved a wishlisted game off the shelf. The two tables intentionally aren't merged because: (a) `WishlistRelease` carries fields `UserGame` doesn't, (b) consolidation would force schema work for zero functional gain. Per-response decoration: every `IgdbUpcomingRelease` response includes a `userGameId: string | null` field via a `userGameMap(userId, igdbIds)` helper, so the client can route to `/game/${userGameId}` without a separate lookup. RECENT page filter rule was tweaked alongside: drop a starred row only when its `UserGame.status !== 'Wishlist'` (i.e., the user actually owns it via sync or manual move) — the prior "drop if any UserGame exists" rule would have dropped every starred drop after the auto-creation kicked in.
+
+**30. Platform sync cadence is client-side, not server-side cron ("feel alive" batch — 2026-05-07)**
+`Platform.syncFrequency` is read by `apps/web/src/hooks/useAutoSync.ts` — mounted once at `AppShell` — which fires `POST /api/platforms/:code/sync` for any platform whose `lastSyncAt` is older than its frequency window. Triggers: on mount, on `visibilitychange` (returning to the tab), and on a once-per-minute interval while the tab is visible. The picker label intentionally reads "how often hoard polls your library **while the app is open**" — that's what it does, and that's what the user actually experiences. **Decision:** server-side cron (Railway cron job or `node-cron` inside the API process) was rejected for v1 because (a) Hoard is a one-user personal tool — running a long-lived scheduler for one user is disproportionate, (b) Steam/PSN library data doesn't change often enough to warrant background polling when the user isn't looking, and (c) honest semantics beats infrastructure: the user opens the app to check things, the app refreshes on open. If overnight catch-up becomes desirable later, a single nightly Railway cron is a small additional step on top of this — not a precondition. Default `HOURLY`. `MANUAL` opts out entirely (the explicit "sync now" button is always available regardless of cadence).
+
+**31. HeroCountdown ticks live, paused when tab hidden ("feel alive" batch — 2026-05-07)**
+The Wishlist Hero's d/h/m/s grid re-renders at 1 Hz via the `useNow(intervalMs)` hook (`apps/web/src/hooks/useNow.ts`), pausing on `document.hidden` and resuming on `visibilitychange` so a backgrounded tab doesn't burn battery. `countdownParts(iso, now?)` and `daysUntil(iso, now?)` in `lib/utils.ts` accept an optional `now` parameter (default `Date.now()`) so the live value is threaded through deterministically per render — every digit in the grid reflects the same instant. The 1 Hz cadence is what makes the seconds digit visibly tick, which is what makes the page feel alive vs. frozen. Other timestamp surfaces ("synced 2h ago" labels, `T-N` pills on Agenda rows) deliberately do **not** tick — those only need to be correct on each route entry, and the constant re-render cost is unwarranted at that grain.
 
 ---
 

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import type { IgdbUpcomingRelease } from '@hoard/types';
 
@@ -234,6 +234,39 @@ describe('HeroCountdown', () => {
     render(<HeroCountdown release={makeRelease({ wishlisted: true })} />);
     expect(screen.queryByText(/on wishlist/i)).toBeNull();
     expect(screen.queryByText(/\+ wishlist/i)).toBeNull();
+  });
+
+  it('ticks the d/h/m/s box live (1Hz, useNow integration)', () => {
+    vi.useFakeTimers();
+    try {
+      const baseline = new Date('2026-05-07T12:00:00.000Z');
+      vi.setSystemTime(baseline);
+      // Release exactly 1d 0h 0m 5s away from baseline so the seconds digit
+      // shows '05' on first render and decrements on each tick.
+      const release = new Date(baseline.getTime() + (24 * 3600 + 5) * 1000).toISOString();
+      const r = makeRelease({ releaseDate: release, wishlisted: true });
+      const { container } = render(<HeroCountdown release={r} />);
+
+      // Each box is rendered as a stack of value + label; pull all big-ish
+      // numerics out of the d/h/m/s grid and verify the seconds slot shifts.
+      const reading = () => Array.from(container.querySelectorAll('.t-tnum'))
+        .map((el) => el.textContent ?? '')
+        .filter((t) => /^\d{2}$/.test(t));
+
+      expect(reading()).toContain('05'); // s slot
+
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(reading()).toContain('04');
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(reading()).toContain('02');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

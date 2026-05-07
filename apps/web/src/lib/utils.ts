@@ -20,9 +20,9 @@ export function formatRelative(iso: string | null): string {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
-export function daysUntil(iso: string | null): number {
+export function daysUntil(iso: string | null, now: number = Date.now()): number {
   if (!iso) return 9999;
-  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+  return Math.ceil((new Date(iso).getTime() - now) / 86_400_000);
 }
 
 export function formatReleaseDate(iso: string | null): string {
@@ -77,9 +77,9 @@ export function upcomingDateParts(iso: string | null): { full: string; month: st
   };
 }
 
-export function countdownParts(iso: string | null): { d: string; h: string; m: string; s: string } | null {
+export function countdownParts(iso: string | null, now: number = Date.now()): { d: string; h: string; m: string; s: string } | null {
   if (!iso) return null;
-  const ms = new Date(iso).getTime() - Date.now();
+  const ms = new Date(iso).getTime() - now;
   if (ms <= 0) return { d: '00', h: '00', m: '00', s: '00' };
   const totalSec = Math.floor(ms / 1000);
   const s = totalSec % 60;

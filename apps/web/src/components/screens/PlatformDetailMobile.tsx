@@ -8,7 +8,7 @@ import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
-import type { PlatformDetail } from '@hoard/types';
+import type { PlatformDetail, SyncFrequency } from '@hoard/types';
 
 const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
 
@@ -64,6 +64,14 @@ export function PlatformDetailMobile() {
   function handleSync() {
     setSyncing(true);
     void api.syncPlatform(code.toUpperCase()).catch(() => setSyncing(false));
+  }
+
+  function handleSyncFrequencyChange(freq: SyncFrequency) {
+    if (!platform) return;
+    setPlatform({ ...platform, syncFrequency: freq });
+    void api.updatePlatform(code.toUpperCase(), { syncFrequency: freq }).catch(() => {
+      setPlatform(platform);
+    });
   }
 
   const isConnected = !!platform;
@@ -240,10 +248,21 @@ export function PlatformDetailMobile() {
                 <div style={{ marginTop: 12 }}>
                   <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)", marginBottom: 8 }}>// frequency</div>
                   <div role="radiogroup" aria-label="Sync frequency" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Radio name="sync-freq" on={false} label="every 5 minutes" />
-                    <Radio name="sync-freq" on={true}  label="every 15 minutes" />
-                    <Radio name="sync-freq" on={false} label="every hour" />
-                    <Radio name="sync-freq" on={false} label="manual only" sub="sync only when you tap below" />
+                    {([
+                      ['FIVE_MIN',    'every 5 minutes',  null],
+                      ['FIFTEEN_MIN', 'every 15 minutes', null],
+                      ['HOURLY',      'every hour',       null],
+                      ['MANUAL',      'manual only',      'sync only when you tap below'],
+                    ] as [SyncFrequency, string, string | null][]).map(([value, label, sub]) => (
+                      <Radio
+                        key={value}
+                        name="sync-freq"
+                        on={platform?.syncFrequency === value}
+                        label={label}
+                        {...(sub ? { sub } : {})}
+                        onClick={() => handleSyncFrequencyChange(value)}
+                      />
+                    ))}
                   </div>
                 </div>
                 <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 14 }}>

@@ -48,6 +48,7 @@ router.get('/platforms/status', requireUser, async (req: Request, res: Response)
     syncable: p.syncable,
     connected: true,
     syncStatus: p.syncStatus as PlatformDetail['syncStatus'],
+    syncFrequency: p.syncFrequency as PlatformDetail['syncFrequency'],
     lastSyncAt: p.lastSyncAt?.toISOString() ?? null,
     gameCount: countByCode[p.code] ?? null,
     who: (p.credentials as Record<string, string> | null)?.['username'] ?? null,
@@ -56,6 +57,58 @@ router.get('/platforms/status', requireUser, async (req: Request, res: Response)
   const body: PlatformStatusResponse = { platforms: result };
   res.set('Cache-Control', 'private, max-age=30');
   res.json(body);
+});
+
+// PATCH /api/platforms/:code — update per-platform settings (currently
+// just `syncFrequency`). Returns the updated `PlatformDetail`-shaped row
+// so the client can swap state without a refetch.
+router.patch('/platforms/:code', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP'];
+  if (!code || !validCodes.includes(code)) {
+    res.status(400).json({ error: 'Invalid platform code' });
+    return;
+  }
+
+  const schema = z.object({
+    syncFrequency: z.enum(['FIVE_MIN', 'FIFTEEN_MIN', 'HOURLY', 'MANUAL']).optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+    return;
+  }
+
+  // No-op body: respond with the current row instead of a 400. Lets the
+  // client send `{}` to refresh state without special-casing.
+  const platform = await prisma.platform.findUnique({
+    where: { userId_code: { userId: req.userId, code } },
+  });
+  if (!platform) {
+    res.status(404).json({ error: 'Platform not connected' });
+    return;
+  }
+
+  const updated = parsed.data.syncFrequency
+    ? await prisma.platform.update({
+        where: { id: platform.id },
+        data: { syncFrequency: parsed.data.syncFrequency },
+      })
+    : platform;
+
+  res.json({
+    id: updated.id,
+    userId: updated.userId,
+    code: updated.code as PlatformDetail['code'],
+    name: PLATFORM_NAMES[updated.code] ?? updated.code,
+    syncable: updated.syncable,
+    connected: true,
+    syncStatus: updated.syncStatus as PlatformDetail['syncStatus'],
+    syncFrequency: updated.syncFrequency as PlatformDetail['syncFrequency'],
+    lastSyncAt: updated.lastSyncAt?.toISOString() ?? null,
+    gameCount: null,
+    who: (updated.credentials as Record<string, string> | null)?.['username'] ?? null,
+  } satisfies PlatformDetail);
 });
 
 // POST /api/platforms/:code/sync

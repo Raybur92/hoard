@@ -35,6 +35,13 @@ enum SyncStatus {
   manual
 }
 
+enum SyncFrequency {
+  FIVE_MIN
+  FIFTEEN_MIN
+  HOURLY
+  MANUAL
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -58,15 +65,16 @@ model User {
 }
 
 model Platform {
-  id          String       @id @default(cuid())
-  userId      String
-  code        PlatformCode
-  credentials Json?
-  syncable    Boolean      @default(true)
-  lastSyncAt  DateTime?
-  syncStatus  SyncStatus   @default(manual)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id            String        @id @default(cuid())
+  userId        String
+  code          PlatformCode
+  credentials   Json?
+  syncable      Boolean       @default(true)
+  lastSyncAt    DateTime?
+  syncStatus    SyncStatus    @default(manual)
+  syncFrequency SyncFrequency @default(HOURLY)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

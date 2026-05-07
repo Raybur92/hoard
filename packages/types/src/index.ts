@@ -10,6 +10,15 @@ export type PlatformCode = 'ST' | 'PS' | 'XB' | 'GG' | 'NT' | 'EP';
 
 export type SyncStatus = 'ok' | 'syncing' | 'error' | 'stale' | 'manual';
 
+/**
+ * Per-platform auto-sync cadence. Stored on Platform.syncFrequency. Drives
+ * the client's useAutoSync hook — a platform's `lastSyncAt` older than its
+ * frequency window triggers a background sync on app open / visibility
+ * change. `MANUAL` disables auto-sync (the explicit "sync now" button is
+ * always available regardless).
+ */
+export type SyncFrequency = 'FIVE_MIN' | 'FIFTEEN_MIN' | 'HOURLY' | 'MANUAL';
+
 export type ReleaseDateCategory = 'exact' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'TBA';
 
 export interface User {
@@ -26,6 +35,7 @@ export interface Platform {
   syncable: boolean;
   lastSyncAt: string | null;
   syncStatus: SyncStatus;
+  syncFrequency: SyncFrequency;
 }
 
 export interface Game {
@@ -216,6 +226,7 @@ export interface PlatformDetail {
   syncable: boolean;
   connected: boolean;
   syncStatus: SyncStatus;
+  syncFrequency: SyncFrequency;
   lastSyncAt: string | null;
   gameCount: number | null;
   who: string | null;

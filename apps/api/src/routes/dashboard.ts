@@ -208,6 +208,7 @@ router.get('/dashboard', requireUser, async (req: Request, res: Response): Promi
     syncable: p.syncable,
     lastSyncAt: p.lastSyncAt?.toISOString() ?? null,
     syncStatus: p.syncStatus as Platform['syncStatus'],
+    syncFrequency: p.syncFrequency as Platform['syncFrequency'],
   }));
 
   const wishlistCountdown = wishlistReleases.map((w) => ({

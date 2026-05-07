@@ -171,6 +171,64 @@ describe('DELETE /api/platforms/:code', () => {
   });
 });
 
+/* ── PATCH /api/platforms/:code ── */
+
+describe('PATCH /api/platforms/:code', () => {
+  it('returns 400 for an invalid platform code', async () => {
+    const res = await request(app).patch('/api/platforms/zz').send({ syncFrequency: 'HOURLY' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for an invalid syncFrequency value', async () => {
+    const res = await request(app).patch('/api/platforms/st').send({ syncFrequency: 'EVERY_NIGHT' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the platform is not connected', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).patch('/api/platforms/st').send({ syncFrequency: 'HOURLY' });
+    expect(res.status).toBe(404);
+  });
+
+  it('updates syncFrequency and returns the mapped PlatformDetail', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-1', userId: 'test-user-id', code: 'ST',
+      syncable: true, syncStatus: 'ok', syncFrequency: 'HOURLY',
+      lastSyncAt: new Date('2026-05-07T10:00:00Z'),
+      credentials: { username: 'andrea' },
+    });
+    (prisma.platform.update as jest.Mock).mockResolvedValue({
+      id: 'plat-1', userId: 'test-user-id', code: 'ST',
+      syncable: true, syncStatus: 'ok', syncFrequency: 'FIVE_MIN',
+      lastSyncAt: new Date('2026-05-07T10:00:00Z'),
+      credentials: { username: 'andrea' },
+    });
+
+    const res = await request(app).patch('/api/platforms/st').send({ syncFrequency: 'FIVE_MIN' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.syncFrequency).toBe('FIVE_MIN');
+    expect(res.body.code).toBe('ST');
+    expect(prisma.platform.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { syncFrequency: 'FIVE_MIN' } }),
+    );
+  });
+
+  it('treats an empty body as a no-op and returns the current row', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-1', userId: 'test-user-id', code: 'ST',
+      syncable: true, syncStatus: 'ok', syncFrequency: 'HOURLY',
+      lastSyncAt: null, credentials: null,
+    });
+
+    const res = await request(app).patch('/api/platforms/st').send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.syncFrequency).toBe('HOURLY');
+    expect(prisma.platform.update).not.toHaveBeenCalled();
+  });
+});
+
 /* ── POST /api/platforms/:code/sync ── */
 
 describe('POST /api/platforms/:code/sync', () => {

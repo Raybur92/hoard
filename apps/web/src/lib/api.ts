@@ -11,6 +11,8 @@ import type {
   RegisterBody,
   PatchMeBody,
   PlatformStatusResponse,
+  PlatformDetail,
+  SyncFrequency,
   ManualAddBody,
   IgdbSearchResult,
   IgdbUpcomingRelease,
@@ -199,6 +201,12 @@ export const api = {
     const r = await post<void>(`/api/platforms/${code.toLowerCase()}/sync`);
     cache.invalidate('platformStatus');
     invalidateLibrary();
+    return r;
+  },
+
+  updatePlatform: async (code: string, body: { syncFrequency?: SyncFrequency }) => {
+    const r = await patch<PlatformDetail>(`/api/platforms/${code.toLowerCase()}`, body);
+    cache.invalidate('platformStatus');
     return r;
   },
 

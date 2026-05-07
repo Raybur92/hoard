@@ -6,6 +6,7 @@ import { Btn } from '../../primitives/Btn';
 import { Icon } from '../../primitives/Icon';
 import { Marker } from '../../primitives/Marker';
 import { countdownParts, daysUntil, upcomingDateParts } from '../../../lib/utils';
+import { useNow } from '../../../hooks/useNow';
 import { toPlatCode, hypeToBars } from './utils';
 
 export interface HeroCountdownProps {
@@ -30,8 +31,11 @@ export interface HeroCountdownProps {
  * rev07 line 2406-2448.
  */
 export function HeroCountdown({ release, onToggleWishlist }: HeroCountdownProps) {
-  const cd = countdownParts(release.releaseDate);
-  const away = daysUntil(release.releaseDate);
+  // Live 1Hz tick — pauses when the tab is hidden. The d/h/m/s grid below
+  // re-renders every second so the countdown stays honest.
+  const now = useNow(1000);
+  const cd = countdownParts(release.releaseDate, now);
+  const away = daysUntil(release.releaseDate, now);
   const dateParts = upcomingDateParts(release.releaseDate);
   const isWishlisted = release.wishlisted;
 

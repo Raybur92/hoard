@@ -8,7 +8,7 @@ import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
-import type { PlatformDetail } from '@hoard/types';
+import type { PlatformDetail, SyncFrequency } from '@hoard/types';
 
 const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
 
@@ -67,6 +67,17 @@ export function PlatformDetailDesktop() {
   function handleSync() {
     setSyncing(true);
     void api.syncPlatform(info?.name ?? code.toUpperCase()).catch(() => setSyncing(false));
+  }
+
+  function handleSyncFrequencyChange(freq: SyncFrequency) {
+    if (!platform) return;
+    // Optimistic local update — the panel reflects the new value immediately;
+    // the server response is the source of truth on next mount.
+    setPlatform({ ...platform, syncFrequency: freq });
+    void api.updatePlatform(info?.name ?? code.toUpperCase(), { syncFrequency: freq }).catch(() => {
+      // Roll back on failure.
+      setPlatform(platform);
+    });
   }
 
   if (!info) {
@@ -196,7 +207,7 @@ export function PlatformDetailDesktop() {
                       <AuthTab code={code} platform={platform} />
                     )}
                     {activeTab === 'scope' && <ScopeTab />}
-                    {activeTab === 'sync'  && <SyncTab platform={platform} code={info.name} syncing={syncing} onSync={handleSync} />}
+                    {activeTab === 'sync'  && <SyncTab platform={platform} code={info.name} syncing={syncing} onSync={handleSync} onChangeFrequency={handleSyncFrequencyChange} />}
                     {activeTab === 'log'   && <LogTab />}
                   </div>
 
@@ -364,17 +375,33 @@ function ScopeTab() {
   );
 }
 
-function SyncTab({ platform, syncing, onSync }: { platform: PlatformDetail; code: string; syncing: boolean; onSync: () => void }) {
+function SyncTab({ platform, syncing, onSync, onChangeFrequency }: {
+  platform: PlatformDetail;
+  code: string;
+  syncing: boolean;
+  onSync: () => void;
+  onChangeFrequency: (freq: SyncFrequency) => void;
+}) {
+  const freqOptions: [SyncFrequency, string][] = [
+    ['FIVE_MIN',    '5m'],
+    ['FIFTEEN_MIN', '15m'],
+    ['HOURLY',      '1h'],
+    ['MANUAL',      'manual'],
+  ];
   return (
     <div>
       <Marker>// sync schedule</Marker>
       <div style={{ marginTop: 16 }}>
-        <SettingsRow label="sync frequency" hint="how often hoard polls your library.">
+        <SettingsRow label="sync frequency" hint="how often hoard polls your library while the app is open.">
           <div style={{ display: 'flex', gap: 2 }}>
-            <Radio on={false} label="5m" />
-            <Radio on={true}  label="15m" />
-            <Radio on={false} label="1h" />
-            <Radio on={false} label="manual" />
+            {freqOptions.map(([value, label]) => (
+              <Radio
+                key={value}
+                on={platform.syncFrequency === value}
+                label={label}
+                onClick={() => onChangeFrequency(value)}
+              />
+            ))}
           </div>
         </SettingsRow>
       </div>
