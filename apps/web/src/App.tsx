@@ -23,7 +23,7 @@ const LibraryDesktop        = lazyNamed(() => import('./components/screens/Libra
 const LibraryMobile         = lazyNamed(() => import('./components/screens/LibraryMobile'),         'LibraryMobile');
 const UpcomingMobile        = lazyNamed(() => import('./components/screens/UpcomingMobile'),        'UpcomingMobile');
 const ReleasesDesktop       = lazyNamed(() => import('./components/screens/ReleasesDesktop'),       'ReleasesDesktop');
-const ReleasesRecentDesktop = lazyNamed(() => import('./components/screens/ReleasesDesktop'),       'ReleasesRecentDesktop');
+const ReleasesRecentDesktop = lazyNamed(() => import('./components/screens/ReleasesRecentDesktop'), 'ReleasesRecentDesktop');
 const GameDetailDesktop     = lazyNamed(() => import('./components/screens/GameDetailDesktop'),     'GameDetailDesktop');
 const GameDetailMobile      = lazyNamed(() => import('./components/screens/GameDetailMobile'),      'GameDetailMobile');
 const SettingsDesktop       = lazyNamed(() => import('./components/screens/SettingsDesktop'),       'SettingsDesktop');

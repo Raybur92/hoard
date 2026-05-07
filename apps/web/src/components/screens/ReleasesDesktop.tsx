@@ -4,7 +4,6 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { TopBar } from '../layout/TopBar';
 import { Marker } from '../primitives/Marker';
 import { Btn } from '../primitives/Btn';
-import { Icon } from '../primitives/Icon';
 import { useUpcoming, type UpcomingScope } from '../../hooks/useUpcoming';
 import { useQuery } from '../../hooks/useQuery';
 import { api } from '../../lib/api';
@@ -398,59 +397,3 @@ function ReleasesContent({
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────
- * RECENT page placeholder — R4 will fill this in with a proper layout.
- * Lives here so the route is registered when R3 lands and the banner's
- * [view recent →] button has somewhere to go.
- * ──────────────────────────────────────────────────────────────────────── */
-
-export function ReleasesRecentDesktop() {
-  useDocumentTitle('Recent · Releases');
-  const navigate = useNavigate();
-  const { data, loading } = useQuery<RecentReleasesResponse>(
-    'releases:recent',
-    () => api.releasesRecent(),
-  );
-
-  return (
-    <>
-      <TopBar crumbs={['hoard', 'releases', 'recent']} />
-      <div style={{ padding: '24px 32px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <Btn sm onClick={() => navigate('/releases')}>
-          <Icon name="back" size={11} /> back to releases
-        </Btn>
-        <span className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)' }}>/</span>
-        <span className="t-display" style={{ fontSize: 'var(--text-xl)', color: 'var(--paper)', lineHeight: 1, letterSpacing: '-0.01em' }}>RECENT</span>
-        <span className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginLeft: 2 }}>// last 14 days</span>
-      </div>
-      <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '20px 32px 32px' }}>
-        {loading && <Marker>// loading…</Marker>}
-        {!loading && data && data.starred.length === 0 && data.hyped.length === 0 && (
-          <>
-            <Marker>// nothing in the last 14 days</Marker>
-            <p style={{ marginTop: 14, color: 'var(--paper-dim)', fontSize: 'var(--text-sm)' }}>
-              no starred or high-hype releases dropped recently.
-            </p>
-            <div style={{ marginTop: 14 }}>
-              <Btn variant="primary" onClick={() => navigate('/releases')}>back to releases</Btn>
-            </div>
-          </>
-        )}
-        {!loading && data && (data.starred.length > 0 || data.hyped.length > 0) && (
-          <>
-            {/* R4 will replace this stub with the proper two-section layout
-                from handoff §10 (`// just out · starred` + `// also released ·
-                not on your wishlist`). For R3 we just render the cards so the
-                /releases/recent route works end-to-end with R1's data. */}
-            <Marker>// recent · {data.starred.length} starred · {data.hyped.length} high-hype</Marker>
-            <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-              {[...data.starred, ...data.hyped].map((r) => (
-                <ReleaseCard key={r.igdbId} release={r} variant="recent" />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </>
-  );
-}
