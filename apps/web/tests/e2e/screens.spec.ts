@@ -109,10 +109,17 @@ test.describe('Releases recent /releases/recent', () => {
     await waitForRender(page);
   });
 
-  test('renders the page chrome', async ({ page }) => {
+  test('renders the page chrome', async ({ page, viewport }) => {
     await expect(page.getByText(/RECENT|last 14 day/i).first()).toBeVisible();
-    // back-to-releases CTA should always be reachable.
-    await expect(page.getByRole('button', { name: /back to releases/i }).first()).toBeVisible();
+    // back-to-releases is reachable from a different control on each
+    // breakpoint: desktop has an explicit `[← back to releases]` button in
+    // its page header; mobile uses the shared `MobileHeader` back caret
+    // (aria-label="Go back").
+    if (!viewport || viewport.width >= 1024) {
+      await expect(page.getByRole('button', { name: /back to releases/i }).first()).toBeVisible();
+    } else {
+      await expect(page.getByRole('button', { name: /go back/i }).first()).toBeVisible();
+    }
   });
 
   test('drift-guard: no [mark all owned] anywhere on the page', async ({ page }) => {
