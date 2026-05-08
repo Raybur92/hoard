@@ -288,12 +288,12 @@ describe('WelcomeScreen — request-sent state', () => {
 /* ── request-access flow ── */
 
 describe('WelcomeScreen — request-access flow', () => {
-  it('submits the message and updates the user to flip into request-sent state', async () => {
+  it('submits the trimmed message and flips user into request-sent state', async () => {
     (api.requestAccess as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
     renderWelcome();
 
     fireEvent.click(screen.getByRole('button', { name: /request access/i }));
-    fireEvent.change(screen.getByLabelText(/tell andrea who you are/i), { target: { value: 'Hi, I am Marco.' } });
+    fireEvent.change(screen.getByLabelText(/tell andrea who you are/i), { target: { value: '  Hi, I am Marco.  ' } });
     fireEvent.click(screen.getByRole('button', { name: /send request/i }));
 
     await waitFor(() => {
@@ -310,15 +310,41 @@ describe('WelcomeScreen — request-access flow', () => {
     expect(textarea.value.length).toBe(500);
   });
 
-  it('empty message is allowed: sends undefined', async () => {
-    (api.requestAccess as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  // Form-level non-empty constraint — keeps accessRequestedAt from
+  // being refreshed on rows with no new content. Server-side schema
+  // remains optional for non-UI callers, but this UI never lets an
+  // empty submit reach the API.
+  it('the [send request] button is DISABLED when the textarea is empty', () => {
     renderWelcome();
     fireEvent.click(screen.getByRole('button', { name: /request access/i }));
-    fireEvent.click(screen.getByRole('button', { name: /send request/i }));
+    const submit = screen.getByRole('button', { name: /send request/i }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
 
-    await waitFor(() => {
-      expect(api.requestAccess).toHaveBeenCalledWith(undefined);
-    });
+  it('the [send request] button stays DISABLED when the textarea is whitespace-only', () => {
+    renderWelcome();
+    fireEvent.click(screen.getByRole('button', { name: /request access/i }));
+    fireEvent.change(screen.getByLabelText(/tell andrea who you are/i), { target: { value: '   \n\t  ' } });
+    const submit = screen.getByRole('button', { name: /send request/i }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it('the [send request] button ENABLES once the textarea has real content', () => {
+    renderWelcome();
+    fireEvent.click(screen.getByRole('button', { name: /request access/i }));
+    fireEvent.change(screen.getByLabelText(/tell andrea who you are/i), { target: { value: 'M' } });
+    const submit = screen.getByRole('button', { name: /send request/i }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+  });
+
+  it('clicking [send request] with empty content does not call the API (defensive — covers programmatic submits)', async () => {
+    renderWelcome();
+    fireEvent.click(screen.getByRole('button', { name: /request access/i }));
+    // Force-fire submit on the form to bypass the disabled button.
+    const form = screen.getByLabelText(/tell andrea who you are/i).closest('form');
+    if (form) fireEvent.submit(form);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(api.requestAccess).not.toHaveBeenCalled();
   });
 });
 

@@ -197,21 +197,29 @@ Six PRs (I1 → I6). Per CLAUDE.md hard rule 10, agent stops after each PR, land
 - `WelcomeScreen.test.tsx`: default state renders both CTAs; clicking "I have a code" reveals input + Submit; clicking "Request access" reveals textarea + Send; valid code → calls `api.redeemInvite()`; invalid format → shows error without API call; 409 → shows "already redeemed"; 429 → shows rate-limit message; request-sent state shown when `hasRequestedAccess: true`.
 - `safeNext.test.ts`: legitimate paths (`'/library'`, `'/library/Backlog?sort=playtime'`, `'/welcome'`) returned as-is; **open-redirect attack vectors all fall back to `'/'`**: `'//evil.com'`, `'https://evil.com'`, `'http://evil.com/path'`, `'javascript:alert(1)'`, `'\\\\evil.com'`, empty string, `null`, `undefined`, paths missing leading `/`.
 - `RequireActive.test.tsx`: pending user on `/library` → redirected to `/welcome?next=%2Flibrary`; active user on `/library` → renders children; pending user on `/welcome` → renders children (no redirect loop).
-- E2E: `welcome.spec.ts` — **DEFERRED to a follow-up after I5 lands.**
-  Two blocking issues at I4 time:
-  - The existing E2E suite's auth setup leans on `DEV_USER_ID = 'seed-andrea'` (the dev fallback in [middleware/user.ts](../apps/api/src/middleware/user.ts)). I1's pre-step deleted that row, so the existing E2E tests now redirect to `/login` and capture the wrong screens. A welcome E2E that doesn't rely on this fallback would have to register fresh test users (polluting prod DB) and clean up via `DELETE /api/auth/me` — manageable but fragile if a test crashes mid-flow.
-  - The redemption-success path needs a real invite code in the DB; we don't have a way to mint one in test setup without admin auth.
+- E2E: `welcome.spec.ts` — **DEFERRED.** Reinstating the welcome E2E cases is a deliverable of whatever workstream restores the broader E2E suite — not a separate I-series task.
 
-  **The unit tests in [WelcomeScreen.test.tsx](../apps/web/src/components/screens/__tests__/WelcomeScreen.test.tsx) provide equivalent coverage of the user-facing flows:**
+  **Why the existing E2E suite is broken:** `DEV_USER_ID` defaults to `'seed-andrea'` in [middleware/user.ts](../apps/api/src/middleware/user.ts), and I1's pre-step deleted that row. Cookie-less requests in dev now 401 → frontend `RequireAuth` redirects to `/login` → snapshots and assertions capture the wrong screens. The E2E suite needs auth-setup work (real test row, dedicated test DB, or teardown hooks) before it produces meaningful results again.
+
+  **The right answer when E2E is restored is NOT register-fresh-users-against-prod.** That pattern was considered and rejected here: it pollutes prod DB on every CI run, leaks state if a test crashes mid-flow, and would put closed-beta `User` rows into the same table Andrea uses to run the admin panel. Acceptable approaches: dedicated test database (the `hoard-test` Supabase project mentioned in earlier docs but never provisioned), or a Playwright `globalSetup`/`globalTeardown` that mints + reaps test rows in a transaction the test code never sees. Either way, the test must not write to the prod `User` table.
+
+  **Cases to land when the suite is restored** (not before — don't reopen):
+  - fresh signup → `/welcome` with no `next` (Steam path) and with `next=/library` (deep-link path)
+  - successful redemption navigates to `next`
+  - redemption with `next=//evil.com` navigates to `/` (open-redirect defense end-to-end)
+  - request-access → received-code-immediately → redeem flow (no friction)
+
+  **Equivalent unit-level coverage already in place** at [WelcomeScreen.test.tsx](../apps/web/src/components/screens/__tests__/WelcomeScreen.test.tsx):
   - Default state with both CTAs ✓
-  - All three distinct error messages (format-invalid, code-not-found, code-already-redeemed) + 429 + UNKNOWN ✓
+  - All four distinct error messages (format-invalid, code-not-found, code-already-redeemed, rate-limited) + UNKNOWN ✓
   - Open-redirect defense (`next=//evil.com` falls back to `/`) ✓
   - Successful redemption flow with `next=...` preservation ✓ (mocked api.redeemInvite)
   - **Andrea's friction-free flow** — request-sent state shows code input without click; pasting a code from there redeems and navigates to `next`. Test name: "redeeming from the request-sent state works without 'but you already requested access' friction." ✓
   - ACTIVE user redirect (post-redemption flash protection) ✓
+  - Form-level non-empty constraint on `[send request]` (button disabled empty / whitespace-only / programmatic-submit guard) ✓
   - Sign-out works ✓
 
-  When the E2E suite is restored (presumably as a workstream that fixes `DEV_USER_ID` to point at a real test row + provides a way to seed an invite code in test setup), `welcome.spec.ts` should land alongside it covering: fresh signup → `/welcome`; redemption with `next=/library`; redemption with `next=//evil.com` → `/`; request-access → paste-code-immediately friction-free flow.
+  **The integration gap that unit tests don't cover** — actual router preserving `?next=`, actual backend 403 producing actual frontend redirect, actual Vercel SPA routing serving `/welcome` — is verified manually as part of this PR's deploy smoke test (see CLAUDE.md "Recent fixes" rollout entry when I6 lands).
 
 **Success criteria:**
 - 196 + ~8 new web tests pass.

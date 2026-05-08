@@ -88,9 +88,14 @@ export function WelcomeScreen() {
 
   async function handleRequest(e: FormEvent) {
     e.preventDefault();
+    // Defense in depth — the button is disabled on empty/whitespace per
+    // the form-level constraint; this guard catches any path that
+    // bypasses it (programmatic submit, etc.).
+    const trimmed = requestMessage.trim();
+    if (trimmed.length === 0) return;
     setRequestBusy(true);
     try {
-      await api.requestAccess(requestMessage.trim() || undefined);
+      await api.requestAccess(trimmed);
       // Refresh user from context so hasRequestedAccess flips to true
       // and the panel switches to the request-sent state.
       if (user) setUser({ ...user, hasRequestedAccess: true });
@@ -199,7 +204,7 @@ export function WelcomeScreen() {
           {!requestSent && inlinePanel === 'request' && (
             <form onSubmit={(e) => void handleRequest(e)} style={{ marginTop: 20 }}>
               <label htmlFor="welcome-message" className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-                // tell andrea who you are (optional)
+                // tell andrea who you are
               </label>
               <textarea
                 id="welcome-message"
@@ -215,7 +220,17 @@ export function WelcomeScreen() {
               <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', marginTop: 4, textAlign: 'right' }}>
                 {requestMessage.length}/500
               </div>
-              <Btn type="submit" variant="primary" disabled={requestBusy} style={{ width: '100%', height: 42, fontSize: 'var(--text-xs)', marginTop: 8 }}>
+              {/* Form-level non-empty constraint — server-side schema keeps
+                  message optional so non-UI callers stay flexible; here we
+                  block empty/whitespace-only submits so accessRequestedAt
+                  doesn't get refreshed on rows with no new content (would
+                  make the admin panel feel weirdly active). */}
+              <Btn
+                type="submit"
+                variant="primary"
+                disabled={requestBusy || requestMessage.trim().length === 0}
+                style={{ width: '100%', height: 42, fontSize: 'var(--text-xs)', marginTop: 8 }}
+              >
                 {requestBusy ? '// sending…' : '$ send request →'}
               </Btn>
             </form>
