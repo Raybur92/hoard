@@ -288,7 +288,7 @@ Six PRs (I1 → I6). Per CLAUDE.md hard rule 10, agent stops after each PR, land
 
 ---
 
-## 4. Exhaustive route audit (2026-05-08, before I2 implementation)
+## 3. Exhaustive route audit (2026-05-08, before I2 implementation)
 
 Every authenticated route in the API mapped against the I2 gating decision. Audit method: grep `requireUser` consumers in `apps/api/src/routes/*.ts` (every authenticated route is wrapped in this middleware) cross-referenced against every `'/api/...'` path string in `apps/web/src` (every endpoint the frontend calls).
 
@@ -336,7 +336,7 @@ Frontend-only (no API call): `/api/auth/steam` is *also* hardcoded as a hyperlin
 
 ---
 
-## 3. Out of scope (mirror of spec §9 + new additions)
+## 4. Out of scope (mirror of spec §9 + new additions)
 
 - Email notifications on access requests (v2: Resend integration).
 - Code expiry (`expiresAt` field — easy to add later).
@@ -346,11 +346,47 @@ Frontend-only (no API call): `/api/auth/steam` is *also* hardcoded as a hyperlin
 - Demoting an active user back to pending (manual Supabase row edit if ever needed — I-D8).
 - Multi-admin support (still v2; the column is in place but only one row will ever have it `true` for v1).
 - Mobile parity for `/admin` (I-D3 — desktop-only).
-- **LoginScreen `?next=` preservation for ACTIVE users hitting deep links from the logged-out state** (small follow-up workstream after I-series wraps — _not_ folded into I5). Today, an ACTIVE user logging out, hitting `https://gamehoardr.com/library` directly, and signing in lands at `/` instead of `/library`. The fix is small and self-contained: `RequireAuth` already preserves `from` in the redirect state to `/login`, so `LoginScreen` just needs to read `?next=` (or the existing `state.from`) and `navigate(safeNext(value), { replace: true })` after a successful login/register/OAuth-callback. **Reuses [apps/web/src/lib/safeNext.ts](../apps/web/src/lib/safeNext.ts) — don't reimplement.** Estimated 30-min fix; not blocking closed-beta launch since the only consequence is missing the deep-link convenience for cold logins. Earns its own focused commit when convenient.
+- ~~LoginScreen `?next=` preservation for ACTIVE users hitting deep links from the logged-out state.~~ **CLOSED 2026-05-09** — landed in the same commit as the §5 register-bounce fix. LoginScreen now reads `?next=`, validates via `safeNext`, and navigates to `next` for ACTIVE users / `/welcome?next=...` for PENDING. Deferral was rendered moot because the broader fix had to touch the same handler.
 
 ---
 
-## 4. Phase status
+## 5. Bugs discovered during smoke tests (Andrea-run, post-deploy)
+
+### 5.1 — Register-then-bounce (2026-05-08, fixed in `386059d` extended in I4-followup commit)
+
+**Symptom (Andrea, smoke test #2 against production after I4 deploy):**
+> "When I try to register a fresh new account I got redirected to the login page. If I try to register again I get error 409 (account already exist). We already had this problem in the past."
+
+**The bug is pre-existing — NOT introduced by the I-series.** It's a latent issue in the local email/password login path that the closed-beta gate happens to surface for the first time. Forwarding context for anyone bisecting "when did register break":
+
+1. `UserProvider` (in [apps/web/src/contexts/UserContext.tsx](../apps/web/src/contexts/UserContext.tsx)) fetches `/api/auth/me` once at App mount via `useEffect(() => void refresh(), [refresh])`. With no cookie at that point, `refresh` resolves to `status='unauthed'`.
+2. User submits the register form. Backend creates the User row (with `status='PENDING_INVITE'` from the I1 default), sets the JWT cookie via `Set-Cookie`, returns 201 with the user.
+3. Frontend's `await api.register(...)` resolves. The pre-fix code discarded the response.
+4. `navigate('/')` runs. `/` is gated by `RequireAuth`, which reads `useUser().status` — still `'unauthed'` from step 1, because there is no second `/api/auth/me` fetch on the path between register and navigate.
+5. `RequireAuth` redirects to `/login`. The user is sitting on `/login` with a perfectly valid cookie, watching the page bounce.
+6. Trying again → 409 because the email IS taken (the first attempt did persist).
+
+**Why it wasn't caught earlier.** OAuth callbacks (Google, Steam) dodge the bug because they're full-page browser redirects: `UserProvider` remounts after the callback's `Set-Cookie` resolves, and the second mount-time `refresh` succeeds. The local email/password form is the only path that uses SPA-internal `navigate(...)` after auth — and that path skips the remount.
+
+**Why the closed-beta gate surfaced it now.** The closed-beta flow forces every new user through `register → immediate-action`, which is exactly the path the bug breaks. Pre-closed-beta, Andrea's typical interaction pattern was "log in once, then refresh / come back later" — which works because subsequent loads remount `UserProvider` with the cookie present.
+
+**The fix** ([apps/web/src/components/screens/LoginScreen.tsx](../apps/web/src/components/screens/LoginScreen.tsx)):
+1. Capture the `AuthResponse` from `api.login` / `api.register`.
+2. Call `setUser(response.user)` *before* `navigate(...)`. UserContext flips to `status='authed'` synchronously.
+3. Branch the navigation target on `response.user.status`:
+   - `ACTIVE` → `safeNext(params.get('next'))` (or `/`).
+   - `PENDING_INVITE` → `/welcome` (with `next` preserved if non-default).
+4. `replace: true` so the back button doesn't return to `/login`.
+
+**Regression guard** ([apps/web/src/components/screens/__tests__/LoginScreen.test.tsx](../apps/web/src/components/screens/__tests__/LoginScreen.test.tsx)): asserts `setUser.mock.invocationCallOrder[0] < navigate.mock.invocationCallOrder[0]` for both register and login paths. Plus per-status target assertions and open-redirect coverage. The "API call resolves, response discarded, context never updated" pattern is the kind of thing that recurs unless pinned down.
+
+**Side effect — closed the §4 LoginScreen `?next=` deferral** in the same commit (had to touch the same handler; doing the deferral inline is strictly less work than a separate follow-up).
+
+**Forward-pointer to E1.** This is exactly the class of bug E2E coverage catches. Adds weight to the `docs/E2E_RESTORATION_PLAN.md` strategy decision being a non-deferrable next step.
+
+---
+
+## 6. Phase status
 
 | PR | Status | Notes |
 |---|---|---|

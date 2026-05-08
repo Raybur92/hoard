@@ -6,6 +6,7 @@ import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Hr } from '../primitives/Hr';
 import { api } from '../../lib/api';
+import { safeNext } from '../../lib/safeNext';
 
 type Mode = 'login' | 'register';
 
@@ -37,8 +38,8 @@ export function LoginScreen() {
     try {
       // Capture the response so we can push the user into UserContext
       // BEFORE navigating. UserProvider only fetches /api/auth/me at
-      // mount; without setUser here, the SPA-internal navigate('/')
-      // would land on a route gated by RequireAuth, which still sees
+      // mount; without setUser here, the SPA-internal navigate would
+      // land on a route gated by RequireAuth, which still sees
       // status='unauthed' from the pre-cookie initial fetch and bounces
       // straight back to /login. OAuth callbacks dodge this because
       // they're full-page redirects (UserProvider remounts with the
@@ -47,10 +48,19 @@ export function LoginScreen() {
         ? await api.login({ email, password })
         : await api.register({ email, password, ...(name ? { name } : {}) });
       setUser(response.user);
-      // Replace so the back button doesn't return to /login.
-      // RequireActive on the destination handles the pending redirect
-      // to /welcome for fresh signups; ACTIVE users stay on /.
-      navigate('/', { replace: true });
+
+      // Status-aware navigation.
+      //   - ACTIVE  → safeNext-validated `next` or `/`
+      //   - PENDING → /welcome, with `next` preserved so post-redemption
+      //               the welcome screen returns the user to where they
+      //               were trying to go. If no `next`, just /welcome.
+      const next = safeNext(params.get('next'));
+      const isActive = response.user.status === 'ACTIVE';
+      const target = isActive
+        ? next
+        : (next === '/' ? '/welcome' : `/welcome?next=${encodeURIComponent(next)}`);
+      // replace: true so the back button doesn't return to /login.
+      navigate(target, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
