@@ -21,11 +21,41 @@ export type SyncFrequency = 'FIVE_MIN' | 'FIFTEEN_MIN' | 'HOURLY' | 'MANUAL';
 
 export type ReleaseDateCategory = 'exact' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'TBA';
 
+/**
+ * Closed-beta gating (docs/INVITE_CODES_PLAN.md).
+ * `PENDING_INVITE` users land on the welcome screen; `ACTIVE` users
+ * have full access to the app.
+ */
+export type UserStatus = 'PENDING_INVITE' | 'ACTIVE';
+
 export interface User {
   id: string;
   email: string;
   name: string | null;
   createdAt: string;
+  // Closed-beta access state.
+  status: UserStatus;
+  isAdmin: boolean;
+  // Access-request fields — set when the user clicks "Request access" on
+  // the welcome screen. `hasRequestedAccess` is append-only (stays true
+  // after redemption per I-D12a) so the admin panel can render a
+  // "redeemed after request" affordance.
+  hasRequestedAccess: boolean;
+  accessRequestMessage: string | null;
+  accessRequestedAt: string | null;
+}
+
+/**
+ * Single-use invite code for the closed beta.
+ * `usedById` is unique — a code maps 1:1 to its redeemer.
+ */
+export interface InviteCode {
+  id: string;
+  code: string;
+  note: string | null;
+  createdAt: string;
+  usedAt: string | null;
+  usedById: string | null;
 }
 
 export interface Platform {

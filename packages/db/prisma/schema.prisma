@@ -48,6 +48,11 @@ enum LogLevel {
   error
 }
 
+enum UserStatus {
+  PENDING_INVITE
+  ACTIVE
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -58,6 +63,19 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Closed-beta gating (docs/INVITE_CODES_PLAN.md). New signups land in
+  // PENDING_INVITE; redemption flips to ACTIVE. isAdmin gates the /admin
+  // surface (one row only — Andrea — for v1; column instead of env var
+  // per I-D4 so the bit survives DB rebuilds). hasRequestedAccess +
+  // accessRequestMessage + accessRequestedAt back the welcome screen's
+  // "request access" path; the flag is append-only (stays true after
+  // redemption per I-D12a, gives admin context).
+  status               UserStatus @default(PENDING_INVITE)
+  isAdmin              Boolean    @default(false)
+  hasRequestedAccess   Boolean    @default(false)
+  accessRequestMessage String?
+  accessRequestedAt    DateTime?
+
   // preferences
   hypeThreshold  Int     @default(5)
   libraryView    String  @default("shelves")
@@ -65,9 +83,27 @@ model User {
   coverDensity   String  @default("standard")
   terminalCursor Boolean @default(true)
 
-  platforms  Platform[]
-  userGames  UserGame[]
-  wishlists  WishlistRelease[]
+  platforms          Platform[]
+  userGames          UserGame[]
+  wishlists          WishlistRelease[]
+  redeemedInviteCode InviteCode?
+}
+
+// Closed-beta access codes (docs/INVITE_CODES_PLAN.md). Format
+// HOARD-XXXX-XXXX from the 32-char alphabet ABCDEFGHJKLMNPQRSTUVWXYZ23456789
+// (no 0/O/1/I — typed by hand, ambiguity matters). Single-use:
+// usedById is @unique so a code maps 1:1 to the user who redeemed it.
+// Generated server-side via /api/admin/invite-codes; redeemed via
+// /api/auth/redeem-invite (atomic update with WHERE usedById IS NULL
+// predicate per I-D10 to make the redemption race-safe).
+model InviteCode {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  note      String?
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+  usedById  String?   @unique
+  usedBy    User?     @relation(fields: [usedById], references: [id])
 }
 
 model Platform {
