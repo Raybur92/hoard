@@ -36,6 +36,7 @@ npx prisma db seed            # seed with mock data
 | What | Where |
 |---|---|
 | Execution plan + phase status | `docs/PLAN.md` |
+| Settings audit + sync log (active workstream — 2026-05-08) | `docs/SETTINGS_AUDIT_PLAN.md` (PR A settings cleanup ready to ship; PR B sync log model awaits Andrea's go-ahead after PR A lands) |
 | Trophies & achievements (complete 2026-05-08) | `docs/TROPHIES_PLAN.md` (T1–T6 all shipped same day; decisions T-D1…T-D10 locked in §1) |
 | Releases page rework (complete 2026-05-07) | `docs/RELEASES_PLAN.md` + handoff `docs/Hoard_releases_handoff.md` + mocks `project/Hoard_releases_mocks.html` |
 | Interaction debt + audits + PR plan (complete 2026-05-06) | `docs/INTERACTION_DEBT_PLAN.md` |
@@ -169,7 +170,14 @@ Visual regression baselines: `apps/web/tests/snapshots/` — committed to repo. 
 
 **Active workstream — Trophies & achievements (decisions locked 2026-05-08).** Plan in `docs/TROPHIES_PLAN.md`. Six PRs T1–T6 (T6 optional). Decisions T-D1 … T-D10 confirmed by Andrea in one pass; T-D7 amended to add a Steam-only public-profile note in PlatformDetail's scope tab. Headline behavior: pull PSN trophies + Steam achievements, store aggregate `(earned, total, percent)` per `UserGame`, auto-flip status to `Completed` when `percent === 100` for rows in `{Backlog, OnHold, Playing}` (preserve `Dropped` / `Wishlist` as explicit user decisions). The plan also bundles `Game.psnNpCommunicationId` to partially close the "store platform-side IDs" gap from sync-quality decision #33.
 
-**Trophies & achievements workstream — complete (T1–T6 all shipped 2026-05-08).** Schema (T1) + PSN trophy fetcher (T2) + Steam achievement fetcher (T3) + shared auto-complete helper (T4, alongside T2) + GameDetail receipt-block UI + Steam scope-tab note (T5) + Dashboard rollup (T6, the optional bonus PR). Library-wide trophy/achievement aggregates are populated by sync, surfaced on GameDetail with the right per-game label, and rolled up on Dashboard with a completion-style gauge. Auto-complete-at-100% fires for `Backlog/OnHold/Playing` rows; preserves `Dropped/Wishlist/Completed`. **No active workstream.** Next workstream is whatever Andrea picks up next.
+**Active workstream — Settings audit + sync log (scoped 2026-05-08).** Plan in `docs/SETTINGS_AUDIT_PLAN.md`. Decisions S1–S4 + L1–L4 locked. Two PRs:
+
+- **PR A — Settings cleanup (~100 LOC, ready to ship).** Wires the `[reveal]` NPSSO toggle, deletes the lying auto-refresh toggle and replaces it with a token-health status row, converts the scope checkboxes to a read-only "what hoard reads" info display, and deletes the empty Log tab placeholder until PR B reintroduces it with real data.
+- **PR B — Platform sync log workstream (~half a day, awaits go-ahead).** New `PlatformLog` table, `logPlatform()` helper called from every sync touchpoint, cursor-paginated `GET /api/platforms/:code/log`, terminal-aesthetic Log tab UI on PlatformDetail desktop + mobile.
+
+Per hard rule 10, PR A ships first; agent stops + waits for Andrea's go-ahead before PR B.
+
+**Trophies & achievements workstream — complete (T1–T6 all shipped 2026-05-08).** Schema (T1) + PSN trophy fetcher (T2) + Steam achievement fetcher (T3) + shared auto-complete helper (T4, alongside T2) + GameDetail receipt-block UI + Steam scope-tab note (T5) + Dashboard rollup (T6, the optional bonus PR). Library-wide trophy/achievement aggregates are populated by sync, surfaced on GameDetail with the right per-game label, and rolled up on Dashboard with a completion-style gauge. Auto-complete-at-100% fires for `Backlog/OnHold/Playing` rows; preserves `Dropped/Wishlist/Completed`.
 
 **Sticky enforcement (always applies, no expiry):**
 
