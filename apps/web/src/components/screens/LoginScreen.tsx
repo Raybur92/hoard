@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { useUser } from '../../contexts/UserContext';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Hr } from '../primitives/Hr';
@@ -14,6 +15,7 @@ export function LoginScreen() {
   useDocumentTitle("Sign in");
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const { setUser } = useUser();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,12 +35,22 @@ export function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      if (mode === 'login') {
-        await api.login({ email, password });
-      } else {
-        await api.register({ email, password, ...(name ? { name } : {}) });
-      }
-      navigate('/');
+      // Capture the response so we can push the user into UserContext
+      // BEFORE navigating. UserProvider only fetches /api/auth/me at
+      // mount; without setUser here, the SPA-internal navigate('/')
+      // would land on a route gated by RequireAuth, which still sees
+      // status='unauthed' from the pre-cookie initial fetch and bounces
+      // straight back to /login. OAuth callbacks dodge this because
+      // they're full-page redirects (UserProvider remounts with the
+      // cookie present); the local form path can't.
+      const response = mode === 'login'
+        ? await api.login({ email, password })
+        : await api.register({ email, password, ...(name ? { name } : {}) });
+      setUser(response.user);
+      // Replace so the back button doesn't return to /login.
+      // RequireActive on the destination handles the pending redirect
+      // to /welcome for fresh signups; ACTIVE users stay on /.
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
