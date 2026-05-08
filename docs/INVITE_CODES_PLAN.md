@@ -346,6 +346,7 @@ Frontend-only (no API call): `/api/auth/steam` is *also* hardcoded as a hyperlin
 - Demoting an active user back to pending (manual Supabase row edit if ever needed — I-D8).
 - Multi-admin support (still v2; the column is in place but only one row will ever have it `true` for v1).
 - Mobile parity for `/admin` (I-D3 — desktop-only).
+- **LoginScreen `?next=` preservation for ACTIVE users hitting deep links from the logged-out state** (small follow-up workstream after I-series wraps — _not_ folded into I5). Today, an ACTIVE user logging out, hitting `https://gamehoardr.com/library` directly, and signing in lands at `/` instead of `/library`. The fix is small and self-contained: `RequireAuth` already preserves `from` in the redirect state to `/login`, so `LoginScreen` just needs to read `?next=` (or the existing `state.from`) and `navigate(safeNext(value), { replace: true })` after a successful login/register/OAuth-callback. **Reuses [apps/web/src/lib/safeNext.ts](../apps/web/src/lib/safeNext.ts) — don't reimplement.** Estimated 30-min fix; not blocking closed-beta launch since the only consequence is missing the deep-link convenience for cold logins. Earns its own focused commit when convenient.
 
 ---
 
