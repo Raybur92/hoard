@@ -19,6 +19,13 @@ jest.mock('../middleware/user', () => ({
   },
 }));
 
+jest.mock('../middleware/active', () => ({
+  requireActive: (req: Request, _res: Response, next: NextFunction) => {
+    (req as Request & { user?: { id: string; status: 'ACTIVE'; isAdmin: boolean } }).user = { id: 'test-user-id', status: 'ACTIVE', isAdmin: false };
+    next();
+  },
+}));
+
 const mockGetRecentlyReleased = jest.fn();
 jest.mock('../services/igdb', () => ({
   getRecentlyReleased: (...args: unknown[]) => mockGetRecentlyReleased(...args),

@@ -8,6 +8,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
+import { requireActive } from '../middleware/active';
 import { getReleaseDetails } from '../services/igdb';
 import type { WishlistRelease } from '@hoard/types';
 
@@ -37,7 +38,7 @@ function mapRelease(w: {
 }
 
 // GET /api/upcoming — user's wishlisted releases from DB
-router.get('/upcoming', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/upcoming', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
   const { platform } = req.query as Record<string, string | undefined>;
 
@@ -73,7 +74,7 @@ router.get('/upcoming', requireUser, async (req: Request, res: Response): Promis
 //  - On un-star, we delete the UserGame ONLY if its status is still 'Wishlist'.
 //    If the user manually moved it to Backlog/Playing/etc, the un-star removes
 //    the release-tracking record but the library entry survives.
-router.post('/upcoming/:igdbId/wishlist', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const igdbId = parseInt(String(req.params['igdbId'] ?? ''), 10);
   if (isNaN(igdbId)) {
     res.status(400).json({ error: 'Invalid igdbId' });

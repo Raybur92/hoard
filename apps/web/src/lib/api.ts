@@ -208,6 +208,21 @@ export const api = {
     return r;
   },
 
+  // Closed-beta gating (docs/INVITE_CODES_PLAN.md). The two unblocking
+  // endpoints called from the welcome screen.
+  redeemInvite: async (code: string) => {
+    const r = await post<AuthResponse>('/api/auth/redeem-invite', { code });
+    // The user's status just flipped ACTIVE — invalidate all caches so
+    // they don't carry the pre-redemption 403 PENDING_INVITE responses
+    // into the active session.
+    cache.invalidate('');
+    return r.user;
+  },
+
+  requestAccess: async (message?: string) => {
+    return post<{ ok: boolean }>('/api/auth/request-access', message ? { message } : {});
+  },
+
   // platforms
   platformStatus: () =>
     get<PlatformStatusResponse>('/api/platforms/status'),

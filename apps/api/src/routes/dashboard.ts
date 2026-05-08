@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
+import { requireActive } from '../middleware/active';
 import { mapUserGame } from '../lib/mappers';
 import type {
   ActivityHeatmap,
@@ -57,7 +58,7 @@ function buildActivity(rows: Array<{ lastPlayedAt: Date | null }>, weeks = ACTIV
   return { weeks, cells };
 }
 
-router.get('/dashboard', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/dashboard', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
   const oneWeekAgo = new Date(Date.now() - 7 * 86_400_000);
 

@@ -242,6 +242,13 @@ export interface AuthUser {
   email: string;
   name: string | null;
   createdAt: string;
+  // Closed-beta gating (docs/INVITE_CODES_PLAN.md). Drives the welcome
+  // screen state on the frontend; isAdmin gates the sidebar admin entry.
+  // accessRequestMessage / accessRequestedAt are deliberately NOT exposed
+  // here — they're admin-only fields on /api/admin/users (I3).
+  status: UserStatus;
+  isAdmin: boolean;
+  hasRequestedAccess: boolean;
   preferences: UserPreferences;
 }
 

@@ -26,6 +26,13 @@ jest.mock('../middleware/user', () => ({
   requireAuth: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
 }));
 
+jest.mock('../middleware/active', () => ({
+  requireActive: (req: Request, _res: Response, next: NextFunction) => {
+    (req as Request & { user?: { id: string; status: 'ACTIVE'; isAdmin: boolean } }).user = { id: 'test-user-id', status: 'ACTIVE', isAdmin: false };
+    next();
+  },
+}));
+
 jest.mock('../services/hltb', () => ({
   fetchHltbWithFallback: jest.fn().mockResolvedValue(null),
 }));

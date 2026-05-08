@@ -2,13 +2,16 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
-import type { AuthResponse, AuthUser } from '@hoard/types';
+import { requireActive } from '../middleware/active';
+import type { AuthResponse, AuthUser, UserStatus } from '@hoard/types';
 
 type DbUser = {
   id: string; email: string; name: string | null; createdAt: Date;
+  status: UserStatus; isAdmin: boolean; hasRequestedAccess: boolean;
   hypeThreshold: number; libraryView: string; showHltb: boolean;
   coverDensity: string; terminalCursor: boolean;
 };
@@ -16,6 +19,7 @@ type DbUser = {
 function toAuthUser(u: DbUser): AuthUser {
   return {
     id: u.id, email: u.email, name: u.name, createdAt: u.createdAt.toISOString(),
+    status: u.status, isAdmin: u.isAdmin, hasRequestedAccess: u.hasRequestedAccess,
     preferences: {
       hypeThreshold: u.hypeThreshold,
       libraryView: u.libraryView as AuthUser['preferences']['libraryView'],
@@ -28,6 +32,7 @@ function toAuthUser(u: DbUser): AuthUser {
 
 const USER_SELECT = {
   id: true, email: true, name: true, createdAt: true,
+  status: true, isAdmin: true, hasRequestedAccess: true,
   hypeThreshold: true, libraryView: true, showHltb: true,
   coverDensity: true, terminalCursor: true,
 } as const;
@@ -154,7 +159,7 @@ router.get('/auth/me', requireUser, async (req: Request, res: Response): Promise
 });
 
 // PATCH /api/auth/me — update profile and/or preferences
-router.patch('/auth/me', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.patch('/auth/me', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const schema = z.object({
     name: z.string().min(1).max(80).optional(),
     email: z.string().email().optional(),
@@ -201,7 +206,7 @@ router.delete('/auth/me', requireUser, async (req: Request, res: Response): Prom
 // WishlistRelease, account, preferences, login history. Caller must confirm
 // via the typed-string modal just like delete-account; the route trusts that
 // and only sees the userId.
-router.post('/auth/me/wipe-library', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.post('/auth/me/wipe-library', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
   const [deletedGames, deletedPlatforms] = await prisma.$transaction([
     prisma.userGame.deleteMany({ where: { userId } }),
@@ -291,7 +296,11 @@ router.get('/auth/google/callback', async (req: Request, res: Response): Promise
     }
 
     setAuthCookie(res, user.id);
-    res.redirect(WEB_URL);
+    // Pending users (brand-new Google signups) land on the welcome
+    // screen so they can redeem a code or request access. The callback
+    // doesn't carry prior-intent context, so there's no `next` param —
+    // dashboard is the post-redemption fallback per I-D11.
+    res.redirect(user.status === 'ACTIVE' ? WEB_URL : `${WEB_URL}/welcome`);
   } catch (err) {
     console.error('[auth] Google OAuth error:', err);
     res.redirect(`${WEB_URL}/login?error=google_failed`);
@@ -403,11 +412,155 @@ router.get('/auth/steam/callback', async (req: Request, res: Response): Promise<
     }
 
     setAuthCookie(res, user.id);
-    res.redirect(WEB_URL);
+    // Pending users (brand-new Steam OpenID signups) land on the welcome
+    // screen so they can redeem a code or request access. The callback
+    // doesn't carry prior-intent context, so there's no `next` param —
+    // dashboard is the post-redemption fallback per I-D11.
+    res.redirect(user.status === 'ACTIVE' ? WEB_URL : `${WEB_URL}/welcome`);
   } catch (err) {
     console.error('[auth] Steam OpenID error:', err);
     res.redirect(`${WEB_URL}/login?error=steam_failed`);
   }
 });
+
+/* ── Closed-beta gating: redeem invite + request access ── */
+
+// Two-tier rate limit on /api/auth/redeem-invite (I-D6). Both keyed on
+// stable identifiers — IP via Express's `trust proxy` for Railway, user
+// via req.userId after requireUser. NEVER keyed on the JWT itself: a
+// malicious user logging out and back in mints a fresh token and would
+// reset their budget if we keyed on it. Production-only via the
+// existing `skipInDev` pattern.
+const skipInDev = (): boolean => process.env['NODE_ENV'] !== 'production';
+
+const redeemInviteIpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => req.ip ?? 'unknown',
+  skip: skipInDev,
+  message: { error: 'Too many redemption attempts — try again in an hour.' },
+});
+
+const redeemInviteUserLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Runs AFTER requireUser so req.userId is populated. Falls back to
+  // req.ip only as paranoia for the misconfigured-middleware case;
+  // shouldn't fire under normal operation.
+  keyGenerator: (req: Request) => req.userId ?? req.ip ?? 'unknown',
+  skip: skipInDev,
+  message: { error: 'Too many redemption attempts — try again in an hour.' },
+});
+
+const REDEEM_CODE_REGEX = /^HOARD-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
+
+const redeemInviteSchema = z.object({
+  code: z.string().regex(REDEEM_CODE_REGEX, 'Code format is HOARD-XXXX-XXXX'),
+});
+
+const requestAccessSchema = z.object({
+  message: z.string().max(500).optional(),
+});
+
+// POST /api/auth/redeem-invite
+//
+// Atomic redemption per I-D10: prisma.inviteCode.updateMany with a
+// `WHERE usedById IS NULL` predicate. If two requests race on the same
+// code, exactly one update returns count=1 (winner) and the other
+// returns count=0 (loser, surfaces 409 CODE_ALREADY_REDEEMED).
+//
+// Wrapped in a single $transaction so the User.status flip and the
+// InviteCode update commit together — partial state can't leak.
+router.post(
+  '/auth/redeem-invite',
+  redeemInviteIpLimiter,
+  requireUser,
+  redeemInviteUserLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    const parsed = redeemInviteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid code format' });
+      return;
+    }
+    const { code } = parsed.data;
+
+    const found = await prisma.inviteCode.findUnique({ where: { code } });
+    if (!found) {
+      res.status(409).json({ error: 'CODE_NOT_FOUND' });
+      return;
+    }
+    if (found.usedById) {
+      res.status(409).json({ error: 'CODE_ALREADY_REDEEMED' });
+      return;
+    }
+
+    // Atomic: updateMany with the predicate. count=0 means a parallel
+    // request snuck in between findUnique and update — the loser. Throw
+    // a sentinel error to bail out of the transaction and surface 409.
+    const RACE_LOST = 'INVITE_RACE_LOST';
+    try {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.inviteCode.updateMany({
+          where: { id: found.id, usedById: null },
+          data: { usedById: req.userId, usedAt: new Date() },
+        });
+        if (updated.count === 0) throw new Error(RACE_LOST);
+        await tx.user.update({
+          where: { id: req.userId },
+          data: { status: 'ACTIVE' },
+        });
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === RACE_LOST) {
+        res.status(409).json({ error: 'CODE_ALREADY_REDEEMED' });
+        return;
+      }
+      throw e;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: USER_SELECT,
+    });
+    if (!user) {
+      res.status(500).json({ error: 'User vanished mid-redemption' });
+      return;
+    }
+    const body: AuthResponse = { user: toAuthUser(user) };
+    res.json(body);
+  },
+);
+
+// POST /api/auth/request-access
+//
+// Idempotent per I-D12: subsequent calls overwrite accessRequestMessage
+// and refresh accessRequestedAt. The hasRequestedAccess flag is
+// append-only (stays true after redemption per I-D12a).
+router.post(
+  '/auth/request-access',
+  requireUser,
+  async (req: Request, res: Response): Promise<void> => {
+    const parsed = requestAccessSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+      return;
+    }
+    const { message } = parsed.data;
+
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: {
+        hasRequestedAccess: true,
+        accessRequestMessage: message ?? null,
+        accessRequestedAt: new Date(),
+      },
+    });
+    res.json({ ok: true });
+  },
+);
 
 export default router;

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
+import { requireActive } from '../middleware/active';
 import type { StatsResponse, PlatformStat, GameStatus } from '@hoard/types';
 
 const router = Router();
@@ -10,7 +11,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   ST: 'STEAM', PS: 'PSN', XB: 'XBOX', GG: 'GOG', NT: 'NINTENDO', EP: 'EPIC',
 };
 
-router.get('/stats', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/stats', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
 
   const userGames = await prisma.userGame.findMany({

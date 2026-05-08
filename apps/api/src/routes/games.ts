@@ -4,6 +4,7 @@ import { prisma } from '@hoard/db';
 import type { GameStatus as PrismaGameStatus } from '@hoard/db';
 import { z } from 'zod';
 import { requireUser } from '../middleware/user';
+import { requireActive } from '../middleware/active';
 import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
 import { fetchHltbWithFallback } from '../services/hltb';
 import { getGame, getTimeToBeat } from '../services/igdb';
@@ -53,7 +54,7 @@ const gamesQuerySchema = z.object({
 });
 
 // GET /api/games
-router.get('/games', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/games', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
 
   const parsed = gamesQuerySchema.safeParse(req.query);
@@ -105,7 +106,7 @@ router.get('/games', requireUser, async (req: Request, res: Response): Promise<v
 });
 
 // GET /api/games/counts — per-status counts without pagination
-router.get('/games/counts', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/games/counts', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const groups = await prisma.userGame.groupBy({
     by: ['status'],
     where: { userId: req.userId },
@@ -128,7 +129,7 @@ const shelvesQuerySchema = z.object({
 // GET /api/games/shelves — top N games per status + counts in one round trip.
 // Replaces the previous Library Desktop pattern of fetching ?limit=2000 and
 // grouping client-side. Per-status payload size is bounded by `perStatus`.
-router.get('/games/shelves', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/games/shelves', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const parsed = shelvesQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid query params' });
@@ -170,7 +171,7 @@ router.get('/games/shelves', requireUser, async (req: Request, res: Response): P
 });
 
 // GET /api/games/:id
-router.get('/games/:id', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/games/:id', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const userId = req.userId;
 
@@ -194,7 +195,7 @@ const patchSchema = z.object({
 });
 
 // PATCH /api/games/:id
-router.patch('/games/:id', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.patch('/games/:id', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const userId = req.userId;
 
@@ -265,7 +266,7 @@ function minDate(a: Date, b: Date): Date {
   return a.getTime() <= b.getTime() ? a : b;
 }
 
-router.post('/games/:id/remap', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.post('/games/:id/remap', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const userId = req.userId;
 

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import type { PlatformCode as PrismaCode, GameStatus as PrismaGameStatus } from '@hoard/db';
 import { requireUser } from '../middleware/user';
+import { requireActive } from '../middleware/active';
 import type { PlatformStatusResponse, PlatformDetail, ManualAddBody, PlatformLogResponse, PlatformLogEntry } from '@hoard/types';
 import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
@@ -25,7 +26,7 @@ const PLATFORM_NAMES: Record<string, string> = {
 };
 
 // GET /api/platforms/status
-router.get('/platforms/status', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/platforms/status', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const [platforms, rawCounts] = await Promise.all([
     prisma.platform.findMany({
       where: { userId: req.userId },
@@ -73,7 +74,7 @@ router.get('/platforms/status', requireUser, async (req: Request, res: Response)
 //   ST → { steamId: string | null }
 //   XB → { apiKey: string | null }
 //   Others (GG/NT/EP) → 404 (no credentials, or not yet implemented).
-router.get('/platforms/:code/credentials', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/platforms/:code/credentials', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
   const validCodes: PrismaCode[] = ['ST', 'PS', 'XB'];
   if (!code || !validCodes.includes(code)) {
@@ -116,7 +117,7 @@ router.get('/platforms/:code/credentials', requireUser, async (req: Request, res
 // platform. Backs the Log tab on PlatformDetail. Sorted by `createdAt DESC`
 // with `id DESC` as the tiebreaker for stable order across entries written
 // in the same millisecond. Capped at 50 entries per page.
-router.get('/platforms/:code/log', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/platforms/:code/log', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
   const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP'];
   if (!code || !validCodes.includes(code)) {
@@ -162,7 +163,7 @@ router.get('/platforms/:code/log', requireUser, async (req: Request, res: Respon
 // PATCH /api/platforms/:code — update per-platform settings (currently
 // just `syncFrequency`). Returns the updated `PlatformDetail`-shaped row
 // so the client can swap state without a refetch.
-router.patch('/platforms/:code', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.patch('/platforms/:code', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
   const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP'];
   if (!code || !validCodes.includes(code)) {
@@ -212,7 +213,7 @@ router.patch('/platforms/:code', requireUser, async (req: Request, res: Response
 });
 
 // POST /api/platforms/:code/sync
-router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
   const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG'];
   if (!code || !validCodes.includes(code)) {
@@ -385,7 +386,7 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
 });
 
 // POST /api/platforms/psn/connect — save NPSSO token
-router.post('/platforms/psn/connect', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.post('/platforms/psn/connect', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const schema = z.object({ npsso: z.string().length(64) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -414,7 +415,7 @@ router.post('/platforms/psn/connect', requireUser, async (req: Request, res: Res
 });
 
 // POST /api/platforms/xbox/connect — save OpenXBL API key
-router.post('/platforms/xbox/connect', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.post('/platforms/xbox/connect', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const schema = z.object({ apiKey: z.string().min(10) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -442,7 +443,7 @@ router.post('/platforms/xbox/connect', requireUser, async (req: Request, res: Re
 });
 
 // DELETE /api/platforms/:code — disconnect a platform
-router.delete('/platforms/:code', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.delete('/platforms/:code', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
   if (!code) {
     res.status(400).json({ error: 'Invalid platform code' });
@@ -462,7 +463,7 @@ router.delete('/platforms/:code', requireUser, async (req: Request, res: Respons
 });
 
 // POST /api/games/manual — manually add a game
-router.post('/games/manual', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.post('/games/manual', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const schema = z.object({
     igdbId: z.number().int().positive(),
     platformLabel: z.string().min(1).max(50),

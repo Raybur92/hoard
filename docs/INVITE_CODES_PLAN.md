@@ -113,9 +113,18 @@ Six PRs (I1 → I6). Per CLAUDE.md hard rule 10, agent stops after each PR, land
 
 **Deliverables:**
 - New middleware [apps/api/src/middleware/requireActive.ts](../apps/api/src/middleware/requireActive.ts): if `req.user.status !== 'ACTIVE'`, returns 403 with `{ error: 'PENDING_INVITE', hasRequestedAccess: boolean }`.
-- Apply `requireActive` to every authenticated router *except*:
-  - **Pre-auth endpoints (no JWT issued yet, so `requireActive` doesn't apply anyway — listed for completeness so the audit is bottom-up complete):** `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/google`, `GET /api/auth/google/callback`, `GET /api/auth/steam`, `GET /api/auth/steam/callback`, `GET /health`. Verified against [apps/api/src/index.ts](../apps/api/src/index.ts) and [apps/api/src/routes/auth.ts](../apps/api/src/routes/auth.ts) — no CSRF token endpoint exists (auth is JWT-cookie + CORS + SameSite, no token-fetch route to worry about).
-  - **Authenticated but exempt:** `GET /api/auth/me` (so the frontend can hydrate the welcome screen with current status), `POST /api/auth/logout` (always allowed), `POST /api/auth/redeem-invite` and `POST /api/auth/request-access` (the unblocking endpoints themselves).
+
+- **Exhaustive route audit (performed 2026-05-08 before implementation):** every `requireUser` consumer in `apps/api/src/routes/*` and every `'/api/...'` reference in `apps/web/src` mapped to a category. The full table is in §4 "Exhaustive route audit" of this plan.
+
+- **Pre-auth endpoints (no JWT issued yet, so `requireActive` doesn't apply anyway — listed for completeness so the audit is bottom-up complete):** `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/google`, `GET /api/auth/google/callback`, `GET /api/auth/steam`, `GET /api/auth/steam/callback`, `GET /health`. Verified against [apps/api/src/index.ts](../apps/api/src/index.ts) and [apps/api/src/routes/auth.ts](../apps/api/src/routes/auth.ts) — no CSRF token endpoint exists (auth is JWT-cookie + CORS + SameSite, no token-fetch route to worry about).
+
+- **Authenticated but exempt from `requireActive`:**
+  - `GET /api/auth/me` (so the frontend can hydrate the welcome screen with current status)
+  - `POST /api/auth/logout` (always allowed; doesn't even use `requireUser` today)
+  - `POST /api/auth/redeem-invite` and `POST /api/auth/request-access` (the unblocking endpoints themselves)
+  - **`DELETE /api/auth/me`** — pending users get a "leave the queue" escape hatch. They have no library data (no platforms, no UserGames); the only state to nuke is the User row + accessRequestMessage. Without this, anyone stuck pending who decides Hoard isn't for them has to email Andrea to manually delete. The destructive scope is small and bounded.
+
+- **`requireActive` applied to every other route** that uses `requireUser` (verified via the §4 audit table). Includes `PATCH /api/auth/me` (preferences edit) and `POST /api/auth/me/wipe-library` (no library to wipe for pending users anyway, but blocked for principle).
 - All three account-creation paths (`POST /api/auth/register`, Google OAuth callback, Steam OpenID callback) set `status: 'PENDING_INVITE'` on new User rows. Existing users remain ACTIVE per I1's backfill.
 - Steam OpenID callback (per I-D11): on first-sign-in for a new user, redirect to `<frontend>/welcome` instead of `<frontend>/`. Active users keep the existing redirect.
 - New route `POST /api/auth/redeem-invite`:
@@ -254,6 +263,54 @@ Six PRs (I1 → I6). Per CLAUDE.md hard rule 10, agent stops after each PR, land
 **Success criteria:**
 - Production: existing users unaffected; new signups land in pending; admin panel works end-to-end; one real friend has redeemed a real code and is using Hoard.
 - All docs current.
+
+---
+
+## 4. Exhaustive route audit (2026-05-08, before I2 implementation)
+
+Every authenticated route in the API mapped against the I2 gating decision. Audit method: grep `requireUser` consumers in `apps/api/src/routes/*.ts` (every authenticated route is wrapped in this middleware) cross-referenced against every `'/api/...'` path string in `apps/web/src` (every endpoint the frontend calls).
+
+| Route | File | I2 disposition | Reason |
+|---|---|---|---|
+| `GET  /health` | index.ts | pre-auth | health probe; no JWT |
+| `POST /api/auth/register` | auth.ts | pre-auth | creates the JWT |
+| `POST /api/auth/login` | auth.ts | pre-auth | creates the JWT |
+| `POST /api/auth/logout` | auth.ts | exempt (no `requireUser` today) | always allowed |
+| `GET  /api/auth/google` | auth.ts | pre-auth | OAuth init redirect |
+| `GET  /api/auth/google/callback` | auth.ts | pre-auth | OAuth callback creates JWT |
+| `GET  /api/auth/steam` | auth.ts | pre-auth | OpenID init redirect (also reachable from logged-in PlatformDetail; no behavioral change either way) |
+| `GET  /api/auth/steam/callback` | auth.ts | pre-auth | OpenID callback creates JWT |
+| `GET  /api/auth/me` | auth.ts | **exempt** | hydrates welcome screen with current status |
+| `PATCH /api/auth/me` | auth.ts | gated | preferences edit; no UI for pending users |
+| `DELETE /api/auth/me` | auth.ts | **exempt** | escape hatch for pending users |
+| `POST /api/auth/me/wipe-library` | auth.ts | gated | no library to wipe for pending; blocked for principle |
+| `POST /api/auth/redeem-invite` | auth.ts (NEW) | exempt | the unblocking endpoint itself |
+| `POST /api/auth/request-access` | auth.ts (NEW) | exempt | the unblocking endpoint itself |
+| `GET  /api/dashboard` | dashboard.ts | gated | core app surface |
+| `GET  /api/games` | games.ts | gated | library list |
+| `GET  /api/games/counts` | games.ts | gated | sidebar counts |
+| `GET  /api/games/shelves` | games.ts | gated | per-shelf endpoint |
+| `GET  /api/games/:id` | games.ts | gated | game detail |
+| `PATCH /api/games/:id` | games.ts | gated | edit notes/status |
+| `POST /api/games/:id/remap` | games.ts | gated | remap UI |
+| `POST /api/games/manual` | platforms.ts | gated | manual add |
+| `GET  /api/upcoming` | upcoming.ts | gated | wishlist DB feed |
+| `POST /api/upcoming/:igdbId/wishlist` | upcoming.ts | gated | wishlist toggle |
+| `GET  /api/releases/recent` | releases.ts | gated | recent releases page |
+| `GET  /api/stats` | stats.ts | gated | stats page |
+| `GET  /api/igdb/search` | igdb.ts | gated | search overlay |
+| `GET  /api/igdb/upcoming` | igdb.ts | gated | upcoming feed |
+| `GET  /api/platforms/status` | platforms.ts | gated | sidebar platform status |
+| `GET  /api/platforms/:code/credentials` | platforms.ts | gated | reveal NPSSO etc. |
+| `GET  /api/platforms/:code/log` | platforms.ts | gated | platform log tab |
+| `PATCH /api/platforms/:code` | platforms.ts | gated | sync frequency picker |
+| `POST /api/platforms/:code/sync` | platforms.ts | gated | manual sync |
+| `DELETE /api/platforms/:code` | platforms.ts | gated | disconnect |
+| `POST /api/platforms/psn/connect` | platforms.ts | gated | PSN connect |
+| `POST /api/platforms/xbox/connect` | platforms.ts | gated | Xbox connect |
+| `GET  /api/admin/*` | admin.ts (I3) | gated + `requireAdmin` | not part of I2; reserved here for completeness |
+
+Frontend-only (no API call): `/api/auth/steam` is *also* hardcoded as a hyperlink target in [LoginScreen.tsx](../apps/web/src/components/screens/LoginScreen.tsx) and `PlatformDetailDesktop/Mobile.tsx` — same backend route as above; no extra gating concerns since the user navigates away to Steam OpenID before the JWT (if any) matters.
 
 ---
 

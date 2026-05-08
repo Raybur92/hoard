@@ -36,6 +36,10 @@ jest.mock('@hoard/db', () => ({
     userGame: {
       deleteMany: jest.fn(),
     },
+    inviteCode: {
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
+    },
     $transaction: jest.fn(),
   },
 }));
@@ -45,6 +49,18 @@ jest.mock('@hoard/db', () => ({
 jest.mock('../middleware/user', () => ({
   requireUser: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
   requireAuth: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
+}));
+
+// Mock requireActive — the gate is tested in isolation in
+// middleware/active.test.ts. Here we just want gated routes to pass through
+// as if the user were ACTIVE, so the route logic itself is exercised.
+jest.mock('../middleware/active', () => ({
+  requireActive: (req: Request, _res: Response, next: NextFunction) => {
+    (req as Request & { user?: { id: string; status: 'ACTIVE'; isAdmin: boolean } }).user = {
+      id: 'test-user-id', status: 'ACTIVE', isAdmin: false,
+    };
+    next();
+  },
 }));
 
 import { app } from '../index';
@@ -58,6 +74,19 @@ const mockUser = {
   createdAt: new Date('2024-01-01'),
   googleId: null as string | null,
   steamId: null as string | null,
+  // Closed-beta gating fields (I1 schema). Default to ACTIVE so existing
+  // tests stay green; tests that need to exercise PENDING_INVITE redirects
+  // override this explicitly via spreads.
+  status: 'ACTIVE' as 'PENDING_INVITE' | 'ACTIVE',
+  isAdmin: false,
+  hasRequestedAccess: false,
+  accessRequestMessage: null as string | null,
+  accessRequestedAt: null as Date | null,
+  hypeThreshold: 5,
+  libraryView: 'shelves',
+  showHltb: true,
+  coverDensity: 'standard',
+  terminalCursor: true,
 };
 
 function sessionCookies(res: request.Response): string[] {
@@ -425,5 +454,209 @@ describe('POST /api/auth/me/wipe-library', () => {
     // wishlist, and shared Game/HltbData rows must stay.
     expect(prisma.user.delete).not.toHaveBeenCalled();
     expect(prisma.user.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+/* ── redeem-invite (I2) ── */
+
+describe('POST /api/auth/redeem-invite', () => {
+  it('returns 400 for a malformed code (does not hit the database)', async () => {
+    const res = await request(app)
+      .post('/api/auth/redeem-invite')
+      .send({ code: 'not-a-real-code' });
+
+    expect(res.status).toBe(400);
+    expect(prisma.inviteCode.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a code with the right shape but lowercase letters', async () => {
+    // Reduced alphabet is uppercase A-Z + 2-9. Lowercase must be rejected.
+    const res = await request(app)
+      .post('/api/auth/redeem-invite')
+      .send({ code: 'HOARD-abcd-efgh' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for a code containing the banned 0/O/1/I characters', async () => {
+    const res = await request(app)
+      .post('/api/auth/redeem-invite')
+      .send({ code: 'HOARD-O0I1-2345' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 409 CODE_NOT_FOUND when the code does not exist', async () => {
+    (prisma.inviteCode.findUnique as jest.Mock).mockResolvedValue(null);
+
+    const res = await request(app)
+      .post('/api/auth/redeem-invite')
+      .send({ code: 'HOARD-7K2M-PLAY' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('CODE_NOT_FOUND');
+  });
+
+  it('returns 409 CODE_ALREADY_REDEEMED when usedById is already set', async () => {
+    (prisma.inviteCode.findUnique as jest.Mock).mockResolvedValue({
+      id: 'code-1', code: 'HOARD-7K2M-PLAY', usedById: 'someone-else', usedAt: new Date(),
+    });
+
+    const res = await request(app)
+      .post('/api/auth/redeem-invite')
+      .send({ code: 'HOARD-7K2M-PLAY' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('CODE_ALREADY_REDEEMED');
+  });
+
+  it('redeems an unused code: flips User.status to ACTIVE inside a transaction and returns the user', async () => {
+    (prisma.inviteCode.findUnique as jest.Mock).mockResolvedValue({
+      id: 'code-1', code: 'HOARD-7K2M-PLAY', usedById: null, usedAt: null,
+    });
+    // $transaction(callback): exercise the callback by passing in a tx with
+    // updateMany returning count=1 (winner) and user.update succeeding.
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        inviteCode: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        user: { update: jest.fn().mockResolvedValue({ ...mockUser, status: 'ACTIVE' }) },
+      };
+      await cb(tx);
+      // Assert the redemption used the predicate-based update — proving
+      // the WHERE usedById IS NULL guard is in place at the callsite.
+      expect(tx.inviteCode.updateMany).toHaveBeenCalledWith({
+        where: { id: 'code-1', usedById: null },
+        data: { usedById: 'test-user-id', usedAt: expect.any(Date) },
+      });
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'test-user-id' },
+        data: { status: 'ACTIVE' },
+      });
+    });
+    // After the transaction commits, the route refetches the fresh user.
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ ...mockUser, status: 'ACTIVE' });
+
+    const res = await request(app)
+      .post('/api/auth/redeem-invite')
+      .send({ code: 'HOARD-7K2M-PLAY' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.status).toBe('ACTIVE');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  // Race-condition test — REAL parallel calls via Promise.all (per Andrea's
+  // pre-commit reminder #2). A serial test that calls redeem twice doesn't
+  // prove the WHERE usedById IS NULL predicate is doing its job; this one
+  // does, by simulating two requests both passing the findUnique check
+  // (both see usedById: null) and then racing to the updateMany. Stateful
+  // mock guarantees exactly one updateMany call returns count=1 (winner)
+  // and the rest return count=0 (losers, surface 409).
+  it('serializes parallel redemptions: exactly one wins, the rest get 409', async () => {
+    // Both findUnique calls see the code as unredeemed — this is the race
+    // window the predicate exists to close.
+    (prisma.inviteCode.findUnique as jest.Mock).mockResolvedValue({
+      id: 'code-race', code: 'HOARD-RACE-TEST', usedById: null, usedAt: null,
+    });
+
+    // Stateful mock: the first updateMany call sees usedById=null and
+    // returns count=1; subsequent calls see the redeemed state and return
+    // count=0. This mirrors what Postgres does with the predicate guard.
+    let redeemed = false;
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        inviteCode: {
+          updateMany: jest.fn().mockImplementation(async () => {
+            if (redeemed) return { count: 0 };
+            redeemed = true;
+            return { count: 1 };
+          }),
+        },
+        user: { update: jest.fn().mockResolvedValue({ ...mockUser, status: 'ACTIVE' }) },
+      };
+      return cb(tx);
+    });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ ...mockUser, status: 'ACTIVE' });
+
+    // Fire two parallel requests with the same code. The race is real —
+    // both supertest agents go through the full route handler concurrently.
+    const [r1, r2] = await Promise.all([
+      request(app).post('/api/auth/redeem-invite').send({ code: 'HOARD-RACE-TEST' }),
+      request(app).post('/api/auth/redeem-invite').send({ code: 'HOARD-RACE-TEST' }),
+    ]);
+
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    const loser = r1.status === 409 ? r1 : r2;
+    expect(loser.body.error).toBe('CODE_ALREADY_REDEEMED');
+
+    const winner = r1.status === 200 ? r1 : r2;
+    expect(winner.body.user.status).toBe('ACTIVE');
+  });
+});
+
+/* ── request-access (I2) ── */
+
+describe('POST /api/auth/request-access', () => {
+  it('first call sets hasRequestedAccess=true and stores the message + timestamp', async () => {
+    (prisma.user.update as jest.Mock).mockResolvedValue(mockUser);
+
+    const res = await request(app)
+      .post('/api/auth/request-access')
+      .send({ message: 'Hi, I am Marco — Luigi told me about Hoard.' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'test-user-id' },
+      data: {
+        hasRequestedAccess: true,
+        accessRequestMessage: 'Hi, I am Marco — Luigi told me about Hoard.',
+        accessRequestedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('accepts a 500-character message exactly at the cap', async () => {
+    (prisma.user.update as jest.Mock).mockResolvedValue(mockUser);
+    const message = 'x'.repeat(500);
+
+    const res = await request(app).post('/api/auth/request-access').send({ message });
+
+    expect(res.status).toBe(200);
+    expect((prisma.user.update as jest.Mock).mock.calls[0][0].data.accessRequestMessage).toBe(message);
+  });
+
+  it('rejects a 501-character message with 400', async () => {
+    const message = 'x'.repeat(501);
+
+    const res = await request(app).post('/api/auth/request-access').send({ message });
+
+    expect(res.status).toBe(400);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts an empty body — message is optional, stores null', async () => {
+    (prisma.user.update as jest.Mock).mockResolvedValue(mockUser);
+
+    const res = await request(app).post('/api/auth/request-access').send({});
+
+    expect(res.status).toBe(200);
+    expect((prisma.user.update as jest.Mock).mock.calls[0][0].data.accessRequestMessage).toBeNull();
+  });
+
+  it('idempotency: a second call overwrites accessRequestMessage and refreshes accessRequestedAt', async () => {
+    (prisma.user.update as jest.Mock).mockResolvedValue(mockUser);
+
+    await request(app).post('/api/auth/request-access').send({ message: 'first message' });
+    await request(app).post('/api/auth/request-access').send({ message: 'second message' });
+
+    expect(prisma.user.update).toHaveBeenCalledTimes(2);
+    const firstArgs = (prisma.user.update as jest.Mock).mock.calls[0][0].data;
+    const secondArgs = (prisma.user.update as jest.Mock).mock.calls[1][0].data;
+    expect(firstArgs.accessRequestMessage).toBe('first message');
+    expect(secondArgs.accessRequestMessage).toBe('second message');
+    // Both calls should have set hasRequestedAccess=true (append-only flag).
+    expect(firstArgs.hasRequestedAccess).toBe(true);
+    expect(secondArgs.hasRequestedAccess).toBe(true);
   });
 });

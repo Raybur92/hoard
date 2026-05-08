@@ -8,6 +8,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
+import { requireActive } from '../middleware/active';
 import { getRecentlyReleased } from '../services/igdb';
 import type { IgdbUpcomingRelease, ReleaseDateCategory } from '@hoard/types';
 
@@ -77,7 +78,7 @@ function wishlistRowToUpcoming(
  * directly — `starred.length` drives green-prominent, `hyped.length` drives
  * the muted variant when starred is empty. See handoff §4.
  */
-router.get('/releases/recent', requireUser, async (req: Request, res: Response): Promise<void> => {
+router.get('/releases/recent', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
 
   const now = new Date();
