@@ -58,6 +58,37 @@ export interface InviteCode {
   usedById: string | null;
 }
 
+/**
+ * Admin-facing user summary returned by GET /api/admin/users.
+ * Includes access-request fields that AuthUser deliberately hides.
+ */
+export interface AdminUser {
+  id: string;
+  email: string;
+  displayIdentity: string;
+  name: string | null;
+  createdAt: string;
+  status: UserStatus;
+  isAdmin: boolean;
+  hasRequestedAccess: boolean;
+  accessRequestMessage: string | null;
+  accessRequestedAt: string | null;
+  redeemedCode: { code: string; usedAt: string } | null;
+  platforms: { count: number; codes: PlatformCode[] };
+}
+
+/**
+ * Admin-facing invite code summary returned by GET /api/admin/invite-codes.
+ */
+export interface AdminInviteCode {
+  id: string;
+  code: string;
+  note: string | null;
+  createdAt: string;
+  usedAt: string | null;
+  usedBy: { id: string; email: string; displayIdentity: string } | null;
+}
+
 export interface Platform {
   id: string;
   userId: string;

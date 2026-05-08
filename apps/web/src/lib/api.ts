@@ -19,6 +19,8 @@ import type {
   IgdbUpcomingRelease,
   RecentReleasesResponse,
   ShelvesResponse,
+  AdminUser,
+  AdminInviteCode,
 } from '@hoard/types';
 import * as cache from './cache';
 
@@ -221,6 +223,28 @@ export const api = {
 
   requestAccess: async (message?: string) => {
     return post<{ ok: boolean }>('/api/auth/request-access', message ? { message } : {});
+  },
+
+  // Closed-beta admin surface (docs/INVITE_CODES_PLAN.md I3). Non-admins
+  // hit 404 from requireAdmin server-side; the sidebar entry is hidden
+  // for non-admin users via userContext.isAdmin so they don't even know
+  // the URL exists.
+  admin: {
+    listUsers: () => get<{ users: AdminUser[] }>('/api/admin/users').then((r) => r.users),
+    listInviteCodes: () => get<{ codes: AdminInviteCode[] }>('/api/admin/invite-codes').then((r) => r.codes),
+    createInviteCode: async (note?: string) => {
+      const r = await post<{ code: AdminInviteCode }>('/api/admin/invite-codes', note ? { note } : {});
+      cache.invalidate('admin:invite-codes');
+      return r.code;
+    },
+    deleteInviteCode: async (id: string) => {
+      const res = await fetch(url(`/api/admin/invite-codes/${id}`), { method: 'DELETE', credentials: 'include' });
+      if (!res.ok && res.status !== 204) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      cache.invalidate('admin:invite-codes');
+    },
   },
 
   // platforms

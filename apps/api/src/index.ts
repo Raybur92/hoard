@@ -15,6 +15,7 @@ import releasesRouter from './routes/releases';
 import statsRouter from './routes/stats';
 import platformsRouter from './routes/platforms';
 import igdbRouter from './routes/igdb';
+import adminRouter from './routes/admin';
 
 const app = express();
 const PORT = process.env['PORT'] ?? 3001;
@@ -114,6 +115,7 @@ app.use('/api', releasesRouter);
 app.use('/api', statsRouter);
 app.use('/api', platformsRouter);
 app.use('/api', igdbRouter);
+app.use('/api', adminRouter);
 
 // ── Global error handler ──────────────────────────────────────────────
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
