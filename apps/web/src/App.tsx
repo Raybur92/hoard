@@ -4,6 +4,7 @@ import { useBreakpoint } from './hooks/useBreakpoint';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OfflineBanner } from './components/layout/OfflineBanner';
 import { RequireAuth } from './components/RequireAuth';
+import { RequireActive } from './components/RequireActive';
 import { AppShell } from './components/layout/AppShell';
 import { UserProvider } from './contexts/UserContext';
 import { PreferencesProvider } from './contexts/PreferencesContext';
@@ -17,6 +18,7 @@ const lazyNamed = <K extends string, T>(
 ) => lazy(() => loader().then((m) => ({ default: m[key] as React.ComponentType })));
 
 const LoginScreen           = lazyNamed(() => import('./components/screens/LoginScreen'),           'LoginScreen');
+const WelcomeScreen         = lazyNamed(() => import('./components/screens/WelcomeScreen'),         'WelcomeScreen');
 const DashboardDesktop      = lazyNamed(() => import('./components/screens/DashboardDesktop'),      'DashboardDesktop');
 const DashboardMobile       = lazyNamed(() => import('./components/screens/DashboardMobile'),       'DashboardMobile');
 const LibraryDesktop        = lazyNamed(() => import('./components/screens/LibraryDesktop'),        'LibraryDesktop');
@@ -51,8 +53,17 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<LoginScreen />} />
 
-              {/* Authed routes inside the persistent shell */}
-              <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+              {/* Welcome screen (closed-beta gate, docs/INVITE_CODES_PLAN.md I4)
+                  is authed but NOT active-gated — pending users have to be able
+                  to reach it without bouncing in a redirect loop. */}
+              <Route element={<RequireAuth><Outlet /></RequireAuth>}>
+                <Route path="/welcome" element={<WelcomeScreen />} />
+              </Route>
+
+              {/* Authed + active routes inside the persistent shell. RequireActive
+                  redirects pending users to `/welcome?next=<original-path>` so
+                  they land back where they were trying to go after redemption. */}
+              <Route element={<RequireAuth><RequireActive><AppShell /></RequireActive></RequireAuth>}>
                 <Route path="/"                                 element={desktop ? <DashboardDesktop />      : <DashboardMobile />} />
                 <Route path="/library"                          element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
                 <Route path="/library/:status"                  element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
@@ -69,8 +80,8 @@ export default function App() {
                 <Route path="/settings/platforms/:code"         element={desktop ? <PlatformDetailDesktop /> : <PlatformDetailMobile />} />
               </Route>
 
-              {/* Authed routes that render their own full-screen wrapper (no app shell) */}
-              <Route element={<RequireAuth><Outlet /></RequireAuth>}>
+              {/* Authed + active full-screen routes (no app shell) */}
+              <Route element={<RequireAuth><RequireActive><Outlet /></RequireActive></RequireAuth>}>
                 <Route path="/settings/platforms/:code/connect" element={desktop ? <PsnGuidedFlowDesktop />  : <PsnGuidedFlowMobile />} />
               </Route>
 

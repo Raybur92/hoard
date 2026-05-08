@@ -19,6 +19,12 @@ vi.mock('../lib/api', () => ({
       email: 'andrea@test',
       name: 'andrea',
       createdAt: '2023-01-01T00:00:00.000Z',
+      // Closed-beta gating fields (I2). Without status: 'ACTIVE',
+      // RequireActive correctly redirects to /welcome — these tests
+      // need an active user to exercise the persistent-shell behavior.
+      status: 'ACTIVE',
+      isAdmin: false,
+      hasRequestedAccess: false,
       preferences: {
         hypeThreshold: 5,
         libraryView: 'shelves',
@@ -163,6 +169,7 @@ describe('PR 1 — persistent shell across navigation', () => {
     // Resolve auth — the shell should mount.
     resolveMe({
       id: 'u1', email: 'andrea@test', name: 'andrea', createdAt: '2023-01-01T00:00:00.000Z',
+      status: 'ACTIVE', isAdmin: false, hasRequestedAccess: false,
       preferences: { hypeThreshold: 5, libraryView: 'shelves', showHltb: true, coverDensity: 'standard', terminalCursor: true },
     });
     await findByTestId('sidebar-username');

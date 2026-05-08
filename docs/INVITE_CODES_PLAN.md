@@ -197,11 +197,21 @@ Six PRs (I1 → I6). Per CLAUDE.md hard rule 10, agent stops after each PR, land
 - `WelcomeScreen.test.tsx`: default state renders both CTAs; clicking "I have a code" reveals input + Submit; clicking "Request access" reveals textarea + Send; valid code → calls `api.redeemInvite()`; invalid format → shows error without API call; 409 → shows "already redeemed"; 429 → shows rate-limit message; request-sent state shown when `hasRequestedAccess: true`.
 - `safeNext.test.ts`: legitimate paths (`'/library'`, `'/library/Backlog?sort=playtime'`, `'/welcome'`) returned as-is; **open-redirect attack vectors all fall back to `'/'`**: `'//evil.com'`, `'https://evil.com'`, `'http://evil.com/path'`, `'javascript:alert(1)'`, `'\\\\evil.com'`, empty string, `null`, `undefined`, paths missing leading `/`.
 - `RequireActive.test.tsx`: pending user on `/library` → redirected to `/welcome?next=%2Flibrary`; active user on `/library` → renders children; pending user on `/welcome` → renders children (no redirect loop).
-- E2E: `welcome.spec.ts` —
-  - fresh signup → lands on `/welcome` with no `next` (Steam path) and with `next=/library` (deep-link path)
-  - successful redemption navigates to `next`
-  - redemption with `next=//evil.com` navigates to `/` (open-redirect defense end-to-end check)
-  - **request-access → received-code-immediately → redeem flow (no friction):** user clicks `[ Request access ]`, lands on the request-sent state with `hasRequestedAccess=true`; then pastes a valid code into the always-present input on that same screen; redemption flips `status=ACTIVE` and navigates to `next` (or `/`) without any "but you've already requested access" interstitial. Per spec §5.2 + I-D12a (`hasRequestedAccess` is append-only and stays `true` post-redemption — admin-context only, gates nothing on the user side). Andrea's expected real-world path: friend asks for access in the morning, Andrea sees the request, sends a code via iMessage at lunch, friend pastes it without losing the welcome state.
+- E2E: `welcome.spec.ts` — **DEFERRED to a follow-up after I5 lands.**
+  Two blocking issues at I4 time:
+  - The existing E2E suite's auth setup leans on `DEV_USER_ID = 'seed-andrea'` (the dev fallback in [middleware/user.ts](../apps/api/src/middleware/user.ts)). I1's pre-step deleted that row, so the existing E2E tests now redirect to `/login` and capture the wrong screens. A welcome E2E that doesn't rely on this fallback would have to register fresh test users (polluting prod DB) and clean up via `DELETE /api/auth/me` — manageable but fragile if a test crashes mid-flow.
+  - The redemption-success path needs a real invite code in the DB; we don't have a way to mint one in test setup without admin auth.
+
+  **The unit tests in [WelcomeScreen.test.tsx](../apps/web/src/components/screens/__tests__/WelcomeScreen.test.tsx) provide equivalent coverage of the user-facing flows:**
+  - Default state with both CTAs ✓
+  - All three distinct error messages (format-invalid, code-not-found, code-already-redeemed) + 429 + UNKNOWN ✓
+  - Open-redirect defense (`next=//evil.com` falls back to `/`) ✓
+  - Successful redemption flow with `next=...` preservation ✓ (mocked api.redeemInvite)
+  - **Andrea's friction-free flow** — request-sent state shows code input without click; pasting a code from there redeems and navigates to `next`. Test name: "redeeming from the request-sent state works without 'but you already requested access' friction." ✓
+  - ACTIVE user redirect (post-redemption flash protection) ✓
+  - Sign-out works ✓
+
+  When the E2E suite is restored (presumably as a workstream that fixes `DEV_USER_ID` to point at a real test row + provides a way to seed an invite code in test setup), `welcome.spec.ts` should land alongside it covering: fresh signup → `/welcome`; redemption with `next=/library`; redemption with `next=//evil.com` → `/`; request-access → paste-code-immediately friction-free flow.
 
 **Success criteria:**
 - 196 + ~8 new web tests pass.

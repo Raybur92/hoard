@@ -48,6 +48,37 @@ export class RemapConflictError extends Error {
   }
 }
 
+/**
+ * Thrown by `api.redeemInvite` to let the welcome screen distinguish
+ * between the user-meaningful failure modes:
+ *   - 'CODE_NOT_FOUND'         — typo in code (server didn't recognize it)
+ *   - 'CODE_ALREADY_REDEEMED' — code is real but used by someone else
+ *   - 'RATE_LIMITED'           — too many attempts (per-IP or per-user limiter)
+ *   - 'INVALID_FORMAT'         — Zod regex failed server-side (we also
+ *                                catch this client-side before calling)
+ *   - 'UNKNOWN'                — anything else (network, 500, etc.)
+ *
+ * Per Andrea's I4 reminder #2: each of these gets its own welcome-screen
+ * message — distinct user states deserve distinct messages.
+ */
+export type RedeemInviteErrorCode =
+  | 'CODE_NOT_FOUND'
+  | 'CODE_ALREADY_REDEEMED'
+  | 'RATE_LIMITED'
+  | 'INVALID_FORMAT'
+  | 'UNKNOWN';
+
+export class RedeemInviteError extends Error {
+  code: RedeemInviteErrorCode;
+  status: number;
+  constructor(code: RedeemInviteErrorCode, status: number, message?: string) {
+    super(message ?? code);
+    this.name = 'RedeemInviteError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 async function fetchWithRetry(input: string, init: RequestInit, retries = 1): Promise<Response> {
   const res = await fetch(input, init);
   if (!res.ok && res.status >= 500 && retries > 0) {
@@ -211,9 +242,32 @@ export const api = {
   },
 
   // Closed-beta gating (docs/INVITE_CODES_PLAN.md). The two unblocking
-  // endpoints called from the welcome screen.
+  // endpoints called from the welcome screen. redeemInvite parses the
+  // server's error body and throws a typed RedeemInviteError so the UI
+  // can render distinct messages per failure mode (Andrea's I4
+  // reminder #2: format-invalid, code-not-found, code-already-redeemed,
+  // and rate-limited each get their own copy).
   redeemInvite: async (code: string) => {
-    const r = await post<AuthResponse>('/api/auth/redeem-invite', { code });
+    const res = await fetch(url('/api/auth/redeem-invite'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      const errorTag = body.error;
+      if (res.status === 429) throw new RedeemInviteError('RATE_LIMITED', 429);
+      if (res.status === 400) throw new RedeemInviteError('INVALID_FORMAT', 400);
+      if (res.status === 409 && errorTag === 'CODE_NOT_FOUND') {
+        throw new RedeemInviteError('CODE_NOT_FOUND', 409);
+      }
+      if (res.status === 409 && errorTag === 'CODE_ALREADY_REDEEMED') {
+        throw new RedeemInviteError('CODE_ALREADY_REDEEMED', 409);
+      }
+      throw new RedeemInviteError('UNKNOWN', res.status);
+    }
+    const r = await res.json() as AuthResponse;
     // The user's status just flipped ACTIVE — invalidate all caches so
     // they don't carry the pre-redemption 403 PENDING_INVITE responses
     // into the active session.
