@@ -140,7 +140,20 @@ User
   showHltb: Boolean @default(true)
   coverDensity: String @default("standard")  -- 'cozy' | 'standard' | 'dense'
   terminalCursor: Boolean @default(true)
+  -- Closed-beta gating (decisions #34/#35; docs/INVITE_CODES_PLAN.md)
+  status: UserStatus @default(PENDING_INVITE)  -- PENDING_INVITE | ACTIVE
+  isAdmin: Boolean @default(false)             -- single admin (Andrea) for v1
+  hasRequestedAccess: Boolean @default(false)  -- append-only after redemption
+  accessRequestMessage: String?
+  accessRequestedAt: DateTime?
   (multi-user schema from day one — all records scoped to userId)
+
+InviteCode (added 2026-05-08, decision #36)
+  id, code (unique), note, createdAt
+  usedAt: DateTime?, usedById: String? @unique  -- 1:1 redeemer
+  -- Single-use; race-safe atomic redemption via $transaction with
+  -- `WHERE usedById IS NULL` predicate on prisma.inviteCode.updateMany.
+  -- ON DELETE SET NULL on the FK so deleted users keep the audit row.
 
 Platform
   id, userId
@@ -287,6 +300,21 @@ The platform-sync flow used to pick `results[0]` from IGDB's relevance search an
 
 **31. HeroCountdown ticks live, paused when tab hidden ("feel alive" batch — 2026-05-07)**
 The Wishlist Hero's d/h/m/s grid re-renders at 1 Hz via the `useNow(intervalMs)` hook (`apps/web/src/hooks/useNow.ts`), pausing on `document.hidden` and resuming on `visibilitychange` so a backgrounded tab doesn't burn battery. `countdownParts(iso, now?)` and `daysUntil(iso, now?)` in `lib/utils.ts` accept an optional `now` parameter (default `Date.now()`) so the live value is threaded through deterministically per render — every digit in the grid reflects the same instant. The 1 Hz cadence is what makes the seconds digit visibly tick, which is what makes the page feel alive vs. frozen. Other timestamp surfaces ("synced 2h ago" labels, `T-N` pills on Agenda rows) deliberately do **not** tick — those only need to be correct on each route entry, and the constant re-render cost is unwarranted at that grain.
+
+**34. Closed-beta gating lives in DB columns, not env vars (closed-beta workstream — 2026-05-08, mirrors I-D4 + I-D5)**
+Three new `User` columns drive the closed-beta gate: `status: UserStatus enum (PENDING_INVITE | ACTIVE)`, `isAdmin: Boolean @default(false)`, `hasRequestedAccess: Boolean @default(false)` (plus optional `accessRequestMessage` / `accessRequestedAt` for the access-request flow). New signups land in `PENDING_INVITE` via the schema default; redemption flips to `ACTIVE` inside the same `$transaction` that updates the InviteCode row. **`isAdmin` is a column, not an env var** (the spec originally proposed `ADMIN_USER_ID`) — survives DB rebuilds without Railway env-var coordination, matches how every other piece of user state is modeled, and there's nothing about "single admin for v1" that requires special infrastructure. The migration backfilled three real existing accounts to ACTIVE (`UPDATE "User" SET status = 'ACTIVE' WHERE "createdAt" < NOW();`) before the I2 code change deployed — schema-ahead-of-code, zero observable behavior change for existing testers. The pattern (additive schema → backfill → behavior change in a later code-only deploy) is the safe direction for any future similarly-shaped migration.
+
+**35. Sidebar `ADMIN` link is a UI affordance, not a security boundary (closed-beta workstream — 2026-05-08, mirrors I-D2 + I-D15)**
+`/api/auth/me` exposes `isAdmin: boolean` so the frontend can conditionally render the `ADMIN` sidebar entry only for users with the column flipped. **The sidebar is purely a visibility hint; security still lives entirely in `requireAdmin` middleware on every `/api/admin/*` route** (defense in depth — a non-admin user typing `/admin` directly into the URL bar can't reach the API regardless of what the sidebar shows). `requireAdmin` returns **404 with the canonical project body `{ error: 'Not found' }`**, byte-identical to the project's standard 404 elsewhere (e.g. `routes/games.ts`). Returning 404 instead of 403 keeps the admin surface invisible at the URL level — non-admins can't even confirm `/api/admin/users` exists. Frontend `/admin` route renders the same 404 view for non-admins (defensive — sidebar already hides the entry).
+
+**36. Atomic invite-code redemption via `$transaction` with `WHERE usedById IS NULL` predicate (closed-beta workstream — 2026-05-08, mirrors I-D10)**
+`POST /api/auth/redeem-invite` wraps two writes in a `prisma.$transaction(async (tx) => { ... })`: `tx.inviteCode.updateMany` with `where: { id, usedById: null }` (predicate-guarded — the SQL becomes `UPDATE ... WHERE id = ? AND usedById IS NULL`, atomic at the DB layer), and `tx.user.update` flipping `status` to `ACTIVE`. If the `updateMany` returns `count: 0`, a race lost the predicate to a parallel transaction and the route surfaces 409 `CODE_ALREADY_REDEEMED`. The race-condition test in `auth.test.ts` fires two `Promise.all` parallel redeem calls with stateful mocked `updateMany` and asserts exactly one wins (200) and the other returns 409 — pinning the predicate guard at the route level so a refactor can't drop it. This pattern (predicate-guarded `updateMany` for "first-write-wins" semantics where standard upsert won't work) is the canonical Hoard answer for similar future endpoints; don't replace with `findUnique` + `update` (read-modify-write window).
+
+**37. Two-tier rate limit on redeem-invite (closed-beta workstream — 2026-05-08, mirrors I-D6)**
+`/api/auth/redeem-invite` carries two stacked `express-rate-limit` instances: per-IP 10/hour (`keyGenerator: req => req.ip`) and per-user 5/hour (`keyGenerator: req => req.userId`, runs after `requireUser` so `userId` is populated). **Per-user limiter MUST key on `req.userId`, never on the JWT token** — a malicious user logging out and back in mints a fresh token; keying on it would reset the budget. Both limiters honor the `skip: () => NODE_ENV !== 'production'` pattern so dev / Playwright runs aren't rate-limited. The 32^8 invite-code keyspace makes brute-force statistically impossible without rate limiting, but defense in depth is the standing posture.
+
+**38. Deep-link preservation channel is URL `?next=`, not router state (closed-beta workstream — 2026-05-09, mirrors I-D1 + §5.2 lifecycle)**
+After a smoke-test diagnostic surfaced a failed first attempt, the redirect-after-auth plumbing is fully URL-based. `RequireAuth` redirects unauthenticated users to `/login?next=<encodeURIComponent(pathname + search)>`. `RequireActive` redirects pending users to `/welcome?next=<encoded>`. Both `LoginScreen` and `WelcomeScreen` read the param via `useSearchParams()`, validate via `safeNext()` (open-redirect defense: must start with `/`, NOT `//`, no `:` before any `/`; falls back to `/`), and `navigate(safeNext(value), { replace: true })` after auth/redemption. **Single channel** — the URL query string. **Why not router state (`location.state.from`):** that was the pre-fix design and it didn't work because `LoginScreen` reads `useSearchParams()` (URL only), not `useLocation().state`. The two channels never connected and the `?next=` plumbing was silently no-op. The integration test at [apps/web/src/__tests__/auth-deeplink.test.tsx](apps/web/src/__tests__/auth-deeplink.test.tsx) mounts `<App>` in `MemoryRouter` with no `?next=` seeded, asserts the param appears on the URL after the unauth redirect, then asserts the user lands on the deep-link after login. Pins the URL-channel invariant. Lesson: closing a deferral requires manual end-to-end verification in the live env — passing unit tests that explicitly seed the param do NOT prove the param actually arrives there in production.
 
 ---
 
