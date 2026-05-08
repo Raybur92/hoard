@@ -12,6 +12,17 @@ export interface SteamCredentials {
   steamId: string;
 }
 
+/**
+ * One row per Steam wishlist item. `priority` is the user's drag-rank in
+ * Steam (lower = more wanted; 0 = top of list). `addedAt` is when they
+ * added it to the wishlist.
+ */
+export interface SteamWishlistItem {
+  appid: number;
+  priority: number;
+  addedAt: Date;
+}
+
 export async function syncSteamLibrary(credentials: SteamCredentials): Promise<SyncedGame[]> {
   const apiKey = process.env['STEAM_API_KEY'];
   if (!apiKey) throw new Error('STEAM_API_KEY not configured');
@@ -41,5 +52,46 @@ export async function syncSteamLibrary(credentials: SteamCredentials): Promise<S
     platformCode: 'ST' as PlatformCode,
     playtimeMinutes: g.playtime_forever,
     lastPlayedAt: g.rtime_last_played > 0 ? new Date(g.rtime_last_played * 1000) : null,
+  }));
+}
+
+/**
+ * Fetch the user's Steam wishlist via the public `IWishlistService/GetWishlist`
+ * endpoint. Same public-profile caveat as `GetPlayerAchievements` (T-D7) —
+ * if the user's Steam wishlist visibility is private, the response is
+ * empty and we silently return `[]`. The PlatformDetail scope-tab note
+ * about public-profile-required (T5) covers both achievements + wishlist.
+ *
+ * Returns `[]` (never throws) on any error / non-2xx / private profile so
+ * the calling sync flow can move on. Errors are logged for diagnostics.
+ */
+export async function getSteamWishlist(steamId: string): Promise<SteamWishlistItem[]> {
+  const apiKey = process.env['STEAM_API_KEY'];
+  if (!apiKey) throw new Error('STEAM_API_KEY not configured');
+
+  const url =
+    `https://api.steampowered.com/IWishlistService/GetWishlist/v1/` +
+    `?key=${apiKey}&steamid=${steamId}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    return [];
+  }
+  if (!res.ok) return [];
+
+  let data: { response?: { items?: { appid: number; priority?: number; date_added?: number }[] } };
+  try {
+    data = await res.json() as { response?: { items?: { appid: number; priority?: number; date_added?: number }[] } };
+  } catch {
+    return [];
+  }
+
+  const items = data.response?.items ?? [];
+  return items.map((it) => ({
+    appid: it.appid,
+    priority: it.priority ?? 0,
+    addedAt: it.date_added ? new Date(it.date_added * 1000) : new Date(),
   }));
 }

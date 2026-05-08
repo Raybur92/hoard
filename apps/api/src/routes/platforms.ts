@@ -5,11 +5,12 @@ import { prisma } from '@hoard/db';
 import type { PlatformCode as PrismaCode, GameStatus as PrismaGameStatus } from '@hoard/db';
 import { requireUser } from '../middleware/user';
 import type { PlatformStatusResponse, PlatformDetail, ManualAddBody } from '@hoard/types';
-import { syncSteamLibrary } from '../services/platforms/steam';
+import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
+import { applySteamWishlistImport } from '../services/wishlistImport';
 
 const router = Router();
 
@@ -193,10 +194,26 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
       // starts so the user's UI flips to "synced" immediately; achievement
       // data trickles in over the next few minutes. Same pattern as HLTB.
       // Fire-and-forget — failures are logged inside the orchestrator.
+      //
+      // Bundled with Steam's wishlist import (2026-05-08): public-profile
+      // caveat is the same as for achievements — silent skip if private.
+      // Wishlist import is a single endpoint call + per-item IGDB resolves;
+      // an order of magnitude smaller than the achievement pass, so we
+      // run it inside the same fire-and-forget block.
       if (code === 'ST' && steamId) {
         const sid = steamId;
         const uid = platform.userId;
         void (async () => {
+          try {
+            const wishlistItems = await getSteamWishlist(sid);
+            if (wishlistItems.length > 0) {
+              const r = await applySteamWishlistImport(uid, wishlistItems);
+              console.log(`[sync ST] wishlist: candidates=${r.candidates} imported=${r.imported} alreadyHad=${r.alreadyHad} unresolved=${r.unresolved} errors=${r.errors}`);
+            }
+          } catch (err) {
+            console.error(`[sync ST] wishlist import failed:`, err);
+          }
+
           try {
             const r = await triggerSteamAchievementsBackground(uid, sid);
             console.log(`[sync ST] achievements: candidates=${r.candidates} fetched=${r.fetched} skipped=${r.skipped} autoCompleted=${r.autoCompleted} errors=${r.errors}`);
