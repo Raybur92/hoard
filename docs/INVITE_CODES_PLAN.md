@@ -346,7 +346,7 @@ Frontend-only (no API call): `/api/auth/steam` is *also* hardcoded as a hyperlin
 - Demoting an active user back to pending (manual Supabase row edit if ever needed — I-D8).
 - Multi-admin support (still v2; the column is in place but only one row will ever have it `true` for v1).
 - Mobile parity for `/admin` (I-D3 — desktop-only).
-- ~~LoginScreen `?next=` preservation for ACTIVE users hitting deep links from the logged-out state.~~ **CLOSED 2026-05-09** — landed in the same commit as the §5 register-bounce fix. LoginScreen now reads `?next=`, validates via `safeNext`, and navigates to `next` for ACTIVE users / `/welcome?next=...` for PENDING. Deferral was rendered moot because the broader fix had to touch the same handler.
+- _(LoginScreen `?next=` preservation entry was here. Removed because it's no longer out of scope — full lifecycle including a failed first fix attempt is recorded in §5.2 below.)_
 
 ---
 
@@ -380,9 +380,33 @@ Frontend-only (no API call): `/api/auth/steam` is *also* hardcoded as a hyperlin
 
 **Regression guard** ([apps/web/src/components/screens/__tests__/LoginScreen.test.tsx](../apps/web/src/components/screens/__tests__/LoginScreen.test.tsx)): asserts `setUser.mock.invocationCallOrder[0] < navigate.mock.invocationCallOrder[0]` for both register and login paths. Plus per-status target assertions and open-redirect coverage. The "API call resolves, response discarded, context never updated" pattern is the kind of thing that recurs unless pinned down.
 
-**Side effect — closed the §4 LoginScreen `?next=` deferral** in the same commit (had to touch the same handler; doing the deferral inline is strictly less work than a separate follow-up).
+**Side effect — attempted to close the §4 LoginScreen `?next=` deferral** in the same commit. **The attempt did not actually achieve the stated behavior** (see §5.2 below for full lifecycle).
 
 **Forward-pointer to E1.** This is exactly the class of bug E2E coverage catches. Adds weight to the `docs/E2E_RESTORATION_PLAN.md` strategy decision being a non-deferrable next step.
+
+---
+
+### 5.2 — Deep-link preservation, failed first attempt then real fix (2026-05-09)
+
+**Lifecycle (recorded honestly so future readers see the full arc, not just the end-state):**
+
+1. **Originally deferred** in §4 of this doc as a small follow-up — "LoginScreen `?next=` preservation for ACTIVE users hitting deep links from logged-out state. Estimated 30-min fix; not blocking closed-beta launch."
+2. **Attempted close in `5024234`** (the §5.1 register-bounce extension commit). The diff added `safeNext(params.get('next'))` to `LoginScreen.handleSubmit` and updated the §4 entry to "CLOSED 2026-05-09." Unit tests in `LoginScreen.test.tsx` passed because they explicitly seed `?next=/library` in the test's `MemoryRouter` URL.
+3. **Smoke test #3 failed in production after the deploy.** Andrea logged out, hit `https://gamehoardr.com/library` directly, signed in — landed on `/`, not `/library`. The CLOSED claim was premature.
+4. **Diagnosis (Andrea-led, 2026-05-09).** Andrea handed over a four-possibility checklist (wrong codepath / `params.get('next')` returns null because the param isn't on the URL / Vercel didn't deploy / safeNext too strict). Working through them in order, hypothesis #2 was the bug:
+
+   - `RequireAuth` redirected unauthenticated users to bare `/login` and passed the original path via React Router's `state={{ from: location.pathname }}`.
+   - `LoginScreen` reads `?next=` via `useSearchParams()` — that only sees URL query strings, not router state.
+   - Two channels, never connected. `params.get('next')` always returned `null` for cold deep-link visits → `safeNext(null) === '/'` → user lands on `/`.
+
+   The `5024234` change was correct *in isolation* — it just had nothing to read. Unit tests passed because they injected `?next=` directly; production cold-deep-links don't have that param until `RequireAuth` puts it there.
+5. **Real fix (this commit).** `RequireAuth` now URL-encodes `location.pathname + location.search` into `?next=` and redirects to `/login?next=<encoded>`. Single channel — the URL query string — used by both `/login` and `/welcome` for the next-after-auth destination. Verified via grep that nothing else consumed `state.from` (it was an orphan).
+
+**Why the unit tests didn't catch it.** [LoginScreen.test.tsx](../apps/web/src/components/screens/__tests__/LoginScreen.test.tsx) seeds the test URL with `?next=/library` directly via `MemoryRouter initialEntries={['/login?next=/library']}`. That tests "if `?next=` IS present, does it get honored" — which it does. It doesn't test "does `?next=` actually arrive on the URL when a logged-out user hits a protected route." That gap is exactly why integration tests exist.
+
+**The integration test that would have caught it** ([apps/web/src/__tests__/auth-deeplink.test.tsx](../apps/web/src/__tests__/auth-deeplink.test.tsx)): mounts `<App>` in `MemoryRouter initialEntries={['/library']}` (note: NO `?next=` seeded), waits for the unauth → /login redirect, asserts the URL contains `next=%2Flibrary` (the bit that was broken), submits the form, asserts the user lands on `/library`. Both wrappers exercised together. If `RequireAuth` ever drops `?next=` again (or moves it back into router state), this test fails at the URL assertion.
+
+**Lesson recorded for future debt-paying.** When closing a deferral entry, manually verify the end-to-end behavior in the live environment — passing unit tests do NOT prove integration. This bug-class-as-documentation goes alongside the §5.1 entry as another forward-pointer to E1 (E2E suite restoration) being load-bearing for catching this kind of integration gap before deploy.
 
 ---
 
