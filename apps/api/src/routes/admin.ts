@@ -52,7 +52,7 @@ router.get('/admin/users', async (_req: Request, res: Response): Promise<void> =
   const mapped: AdminUser[] = rows.map((u) => ({
     id: u.id,
     email: u.email,
-    displayIdentity: displayIdentity({ email: u.email, steamId: u.steamId }),
+    displayIdentity: displayIdentity({ email: u.email, name: u.name, steamId: u.steamId }),
     name: u.name,
     createdAt: u.createdAt.toISOString(),
     status: u.status,
@@ -97,7 +97,7 @@ router.get('/admin/users', async (_req: Request, res: Response): Promise<void> =
 router.get('/admin/invite-codes', async (_req: Request, res: Response): Promise<void> => {
   const rows = await prisma.inviteCode.findMany({
     include: {
-      usedBy: { select: { id: true, email: true, steamId: true } },
+      usedBy: { select: { id: true, email: true, name: true, steamId: true } },
     },
   });
 
@@ -111,7 +111,7 @@ router.get('/admin/invite-codes', async (_req: Request, res: Response): Promise<
       ? {
           id: c.usedBy.id,
           email: c.usedBy.email,
-          displayIdentity: displayIdentity({ email: c.usedBy.email, steamId: c.usedBy.steamId }),
+          displayIdentity: displayIdentity({ email: c.usedBy.email, name: c.usedBy.name, steamId: c.usedBy.steamId }),
         }
       : null,
   }));

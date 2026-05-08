@@ -196,7 +196,12 @@ Sets `hasRequestedAccess = true`, `accessRequestMessage = message`, `accessReque
 All gated by a new `requireAdmin` middleware: `req.user.id === process.env.ADMIN_USER_ID`. Returns 404 (not 403) if the check fails — no need to reveal that an admin route exists.
 
 **`GET /api/admin/users`**
-Returns all users with: `id`, `email`, `name`, `status`, `createdAt`, platform connection summary (count + which platforms), `hasRequestedAccess`, `accessRequestMessage`, `accessRequestedAt`, redeemed code if any. For Steam users with synthetic emails, the response includes a `displayIdentity` field: `"Steam user — {steamId}"`.
+Returns all users with: `id`, `email`, `name`, `status`, `createdAt`, platform connection summary (count + which platforms), `hasRequestedAccess`, `accessRequestMessage`, `accessRequestedAt`, redeemed code if any. The response also includes a `displayIdentity` field that the admin UI surfaces as the row's primary label.
+
+**`displayIdentity` fallback order (single source of truth in [apps/api/src/lib/displayIdentity.ts](../apps/api/src/lib/displayIdentity.ts)):**
+1. **Real (non-synthetic) email** → `email`. Email-based and Google-linked accounts always show their email — that's the ground-truth identifier.
+2. **Synthetic Steam email + `name` set** → `name`. The Steam OpenID callback populates `User.name` from `GetPlayerSummaries` (e.g. "Bedkarma"), which is the identifier the admin actually recognizes. Strictly preferred over the Steam64 ID.
+3. **Synthetic Steam email + `name` null** → `"Steam user — {steamId}"`. Fallback path — fires when the Steam profile is private or `GetPlayerSummaries` failed during the OAuth callback.
 
 **`GET /api/admin/invite-codes`**
 Returns all invite codes with: `code`, `note`, `createdAt`, `usedAt`, `usedBy` (user summary if redeemed).

@@ -197,7 +197,11 @@ Six PRs (I1 → I6). Per CLAUDE.md hard rule 10, agent stops after each PR, land
 - `WelcomeScreen.test.tsx`: default state renders both CTAs; clicking "I have a code" reveals input + Submit; clicking "Request access" reveals textarea + Send; valid code → calls `api.redeemInvite()`; invalid format → shows error without API call; 409 → shows "already redeemed"; 429 → shows rate-limit message; request-sent state shown when `hasRequestedAccess: true`.
 - `safeNext.test.ts`: legitimate paths (`'/library'`, `'/library/Backlog?sort=playtime'`, `'/welcome'`) returned as-is; **open-redirect attack vectors all fall back to `'/'`**: `'//evil.com'`, `'https://evil.com'`, `'http://evil.com/path'`, `'javascript:alert(1)'`, `'\\\\evil.com'`, empty string, `null`, `undefined`, paths missing leading `/`.
 - `RequireActive.test.tsx`: pending user on `/library` → redirected to `/welcome?next=%2Flibrary`; active user on `/library` → renders children; pending user on `/welcome` → renders children (no redirect loop).
-- E2E: `welcome.spec.ts` — fresh signup → lands on `/welcome` with no `next` (Steam path) and with `next=/library` (deep-link path); successful redemption navigates to `next`; redemption with `next=//evil.com` navigates to `/` (open-redirect defense end-to-end check).
+- E2E: `welcome.spec.ts` —
+  - fresh signup → lands on `/welcome` with no `next` (Steam path) and with `next=/library` (deep-link path)
+  - successful redemption navigates to `next`
+  - redemption with `next=//evil.com` navigates to `/` (open-redirect defense end-to-end check)
+  - **request-access → received-code-immediately → redeem flow (no friction):** user clicks `[ Request access ]`, lands on the request-sent state with `hasRequestedAccess=true`; then pastes a valid code into the always-present input on that same screen; redemption flips `status=ACTIVE` and navigates to `next` (or `/`) without any "but you've already requested access" interstitial. Per spec §5.2 + I-D12a (`hasRequestedAccess` is append-only and stays `true` post-redemption — admin-context only, gates nothing on the user side). Andrea's expected real-world path: friend asks for access in the morning, Andrea sees the request, sends a code via iMessage at lunch, friend pastes it without losing the welcome state.
 
 **Success criteria:**
 - 196 + ~8 new web tests pass.

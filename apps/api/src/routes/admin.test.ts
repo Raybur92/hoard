@@ -129,7 +129,7 @@ describe('GET /api/admin/users', () => {
     expect(u.isAdmin).toBe(true);
   });
 
-  it('renders Steam-synthetic users with displayIdentity = "Steam user — {steamId}"', async () => {
+  it('renders Steam-synthetic users with displayIdentity = User.name when set (preferred over Steam-id fallback)', async () => {
     (prisma.user.findMany as jest.Mock).mockResolvedValue([
       mkUser({
         id: 'steam-u',
@@ -141,6 +141,20 @@ describe('GET /api/admin/users', () => {
 
     const res = await request(app).get('/api/admin/users');
     expect(res.status).toBe(200);
+    expect(res.body.users[0].displayIdentity).toBe('Bedkarma');
+  });
+
+  it('falls back to "Steam user — {steamId}" only when name is null on a synthetic-Steam account', async () => {
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([
+      mkUser({
+        id: 'steam-u-noname',
+        email: 'steam:76561198012345678@hoard.internal',
+        name: null,
+        steamId: '76561198012345678',
+      }),
+    ]);
+
+    const res = await request(app).get('/api/admin/users');
     expect(res.body.users[0].displayIdentity).toBe('Steam user — 76561198012345678');
   });
 
@@ -173,7 +187,7 @@ describe('GET /api/admin/users', () => {
 const mkCode = (overrides: Partial<{
   id: string; code: string; note: string | null;
   createdAt: Date; usedAt: Date | null;
-  usedBy: { id: string; email: string; steamId: string | null } | null;
+  usedBy: { id: string; email: string; name: string | null; steamId: string | null } | null;
 }>) => ({
   id: overrides.id ?? 'c-1',
   code: overrides.code ?? 'HOARD-TEST-AAAA',
@@ -190,7 +204,7 @@ describe('GET /api/admin/invite-codes', () => {
       mkCode({
         id: 'c-1', code: 'HOARD-7K2M-PLAY', note: 'for marco',
         usedAt: new Date('2026-05-08'),
-        usedBy: { id: 'marco-id', email: 'marco@example.com', steamId: null },
+        usedBy: { id: 'marco-id', email: 'marco@example.com', name: 'Marco', steamId: null },
       }),
     ]);
 
@@ -215,8 +229,8 @@ describe('GET /api/admin/invite-codes', () => {
 
   it('sorts unused first, then used by usedAt desc', async () => {
     (prisma.inviteCode.findMany as jest.Mock).mockResolvedValue([
-      mkCode({ id: 'used-old',   usedAt: new Date('2026-05-01'), usedBy: { id: 'u1', email: 'a@x.com', steamId: null } }),
-      mkCode({ id: 'used-new',   usedAt: new Date('2026-05-08'), usedBy: { id: 'u2', email: 'b@x.com', steamId: null } }),
+      mkCode({ id: 'used-old',   usedAt: new Date('2026-05-01'), usedBy: { id: 'u1', email: 'a@x.com', name: null, steamId: null } }),
+      mkCode({ id: 'used-new',   usedAt: new Date('2026-05-08'), usedBy: { id: 'u2', email: 'b@x.com', name: null, steamId: null } }),
       mkCode({ id: 'unused-old', createdAt: new Date('2026-04-01') }),
       mkCode({ id: 'unused-new', createdAt: new Date('2026-05-08') }),
     ]);
