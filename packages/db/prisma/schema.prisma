@@ -42,6 +42,12 @@ enum SyncFrequency {
   MANUAL
 }
 
+enum LogLevel {
+  info
+  warn
+  error
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -76,9 +82,40 @@ model Platform {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs PlatformLog[]
 
   @@unique([userId, code])
+}
+
+// PR B of the settings audit workstream (`docs/SETTINGS_AUDIT_PLAN.md`).
+// Per-platform activity feed: every sync touchpoint emits one or more
+// log entries that the client surfaces on PlatformDetail's Log tab in
+// terminal aesthetic. Aggregates only — per-game events (which would
+// explode entry count) are out of scope for v1.
+model PlatformLog {
+  id         String   @id @default(cuid())
+  platformId String
+  userId     String
+  level      LogLevel @default(info)
+  // Machine-readable event tag, e.g. "sync.started", "sync.ok",
+  // "library.imported", "trophies.applied", "achievements.applied",
+  // "wishlist.imported", "token.expired", "syncFrequency.changed".
+  // Used by the UI to color-code entries; humans read `message`.
+  event      String
+  // Human-readable terminal-style message, e.g.
+  //   "library: 488 imported, 4 skipped"
+  //   "trophies: 111 matched, 5 auto-completed, 0 missed"
+  message    String
+  // Optional structured payload for future filtering / drill-down.
+  // v1 stores nothing here yet — reserved.
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  platform Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@index([platformId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Game {

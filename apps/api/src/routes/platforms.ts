@@ -4,13 +4,14 @@ import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import type { PlatformCode as PrismaCode, GameStatus as PrismaGameStatus } from '@hoard/db';
 import { requireUser } from '../middleware/user';
-import type { PlatformStatusResponse, PlatformDetail, ManualAddBody } from '@hoard/types';
+import type { PlatformStatusResponse, PlatformDetail, ManualAddBody, PlatformLogResponse, PlatformLogEntry } from '@hoard/types';
 import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
 import { applySteamWishlistImport } from '../services/wishlistImport';
+import { logPlatform } from '../services/platformLog';
 
 const router = Router();
 
@@ -111,6 +112,53 @@ router.get('/platforms/:code/credentials', requireUser, async (req: Request, res
   }
 });
 
+// GET /api/platforms/:code/log — cursor-paginated activity feed for the
+// platform. Backs the Log tab on PlatformDetail. Sorted by `createdAt DESC`
+// with `id DESC` as the tiebreaker for stable order across entries written
+// in the same millisecond. Capped at 50 entries per page.
+router.get('/platforms/:code/log', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP'];
+  if (!code || !validCodes.includes(code)) {
+    res.status(400).json({ error: 'Invalid platform code' });
+    return;
+  }
+
+  const platform = await prisma.platform.findUnique({
+    where: { userId_code: { userId: req.userId, code } },
+  });
+  if (!platform) {
+    res.status(404).json({ error: 'Platform not connected' });
+    return;
+  }
+
+  const cursor = req.query['cursor'] as string | undefined;
+  const PAGE = 50;
+
+  const entries = await prisma.platformLog.findMany({
+    where: { platformId: platform.id },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: PAGE,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+  });
+
+  const mapped: PlatformLogEntry[] = entries.map((e) => ({
+    id: e.id,
+    level: e.level as PlatformLogEntry['level'],
+    event: e.event,
+    message: e.message,
+    details: (e.details as Record<string, unknown> | null) ?? null,
+    createdAt: e.createdAt.toISOString(),
+  }));
+
+  // If we got a full page, the next cursor is the last entry's id. Anything
+  // smaller than PAGE means we drained the table.
+  const nextCursor = entries.length === PAGE ? entries[entries.length - 1]!.id : null;
+
+  const body: PlatformLogResponse = { entries: mapped, nextCursor };
+  res.json(body);
+});
+
 // PATCH /api/platforms/:code — update per-platform settings (currently
 // just `syncFrequency`). Returns the updated `PlatformDetail`-shaped row
 // so the client can swap state without a refetch.
@@ -192,6 +240,12 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
 
   // Fire-and-forget sync; respond immediately
   void (async () => {
+    // PR B — every sync touchpoint emits a log entry the user can see on
+    // the Log tab. Logging failures never fail the sync (logPlatform
+    // swallows its own errors).
+    const startedAt = Date.now();
+    await logPlatform(platform.id, platform.userId, 'info', 'sync.started', `// ${code} sync started`);
+
     try {
       let syncedGames: Awaited<ReturnType<typeof syncSteamLibrary>> = [];
       // Captured for the inline trophy fetch (PSN) and background
@@ -213,7 +267,19 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
       // XB, GG — stubs return [] until fully implemented
 
       if (syncedGames.length > 0) {
-        await runSync(platform.userId, syncedGames);
+        const r = await runSync(platform.userId, syncedGames);
+        await logPlatform(
+          platform.id, platform.userId, 'info',
+          'library.imported',
+          `library: ${r.imported} imported, ${r.skipped} skipped`,
+          { imported: r.imported, skipped: r.skipped },
+        );
+      } else if (code === 'XB' || code === 'GG') {
+        await logPlatform(
+          platform.id, platform.userId, 'warn',
+          'library.unsupported',
+          `library sync not implemented for ${code} yet`,
+        );
       }
 
       // T2 — pull PSN trophy aggregates after the library import. T-D4:
@@ -226,9 +292,19 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
         try {
           const trophyTitles = await getPsnTrophyTitles(psnNpsso);
           const result = await applyPsnTrophyAggregates(platform.userId, trophyTitles);
-          console.log(`[sync PS] trophies: matched=${result.matched} autoCompleted=${result.autoCompleted} missed=${result.missed}`);
+          await logPlatform(
+            platform.id, platform.userId, 'info',
+            'trophies.applied',
+            `trophies: ${result.matched} matched, ${result.autoCompleted} auto-completed, ${result.missed} missed`,
+            result,
+          );
         } catch (err) {
           console.error(`[sync PS] trophy fetch failed (library import succeeded):`, err);
+          await logPlatform(
+            platform.id, platform.userId, 'warn',
+            'trophies.failed',
+            'trophy fetch failed — library import still succeeded',
+          );
         }
       }
 
@@ -236,6 +312,13 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
         where: { id: platform.id },
         data: { syncStatus: 'ok', lastSyncAt: new Date() },
       });
+      const durationS = ((Date.now() - startedAt) / 1000).toFixed(1);
+      await logPlatform(
+        platform.id, platform.userId, 'info',
+        'sync.ok',
+        `sync ok in ${durationS}s`,
+        { durationMs: Date.now() - startedAt },
+      );
 
       // T3 — background pass over every Steam-platformed UserGame to fetch
       // achievement aggregates. Throttled at ~3 req/s, so a 1000-game
@@ -252,22 +335,35 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
       if (code === 'ST' && steamId) {
         const sid = steamId;
         const uid = platform.userId;
+        const pid = platform.id;
         void (async () => {
           try {
             const wishlistItems = await getSteamWishlist(sid);
             if (wishlistItems.length > 0) {
               const r = await applySteamWishlistImport(uid, wishlistItems);
-              console.log(`[sync ST] wishlist: candidates=${r.candidates} imported=${r.imported} alreadyHad=${r.alreadyHad} unresolved=${r.unresolved} errors=${r.errors}`);
+              await logPlatform(
+                pid, uid, 'info',
+                'wishlist.imported',
+                `wishlist: ${r.imported} imported, ${r.alreadyHad} already had, ${r.unresolved} unresolved`,
+                r,
+              );
             }
           } catch (err) {
             console.error(`[sync ST] wishlist import failed:`, err);
+            await logPlatform(pid, uid, 'warn', 'wishlist.failed', 'wishlist import failed');
           }
 
           try {
             const r = await triggerSteamAchievementsBackground(uid, sid);
-            console.log(`[sync ST] achievements: candidates=${r.candidates} fetched=${r.fetched} skipped=${r.skipped} autoCompleted=${r.autoCompleted} errors=${r.errors}`);
+            await logPlatform(
+              pid, uid, 'info',
+              'achievements.applied',
+              `achievements: ${r.fetched} fetched, ${r.skipped} skipped, ${r.autoCompleted} auto-completed, ${r.errors} errors`,
+              r,
+            );
           } catch (err) {
             console.error(`[sync ST] achievement background pass failed:`, err);
+            await logPlatform(pid, uid, 'warn', 'achievements.failed', 'achievement background pass failed');
           }
         })();
       }
@@ -277,6 +373,11 @@ router.post('/platforms/:code/sync', requireUser, async (req: Request, res: Resp
         where: { id: platform.id },
         data: { syncStatus: 'error' },
       });
+      await logPlatform(
+        platform.id, platform.userId, 'error',
+        'sync.error',
+        `sync failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
     }
   })();
 

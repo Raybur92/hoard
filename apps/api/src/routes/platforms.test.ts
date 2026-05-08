@@ -10,6 +10,10 @@ jest.mock('@hoard/db', () => ({
       update: jest.fn(),
       deleteMany: jest.fn(),
     },
+    platformLog: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
     game: {
       upsert: jest.fn(),
     },
@@ -168,6 +172,64 @@ describe('DELETE /api/platforms/:code', () => {
     expect(prisma.platform.deleteMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ code: 'ST' }) }),
     );
+  });
+});
+
+/* ── GET /api/platforms/:code/log ── */
+
+describe('GET /api/platforms/:code/log', () => {
+  const sampleEntries = [
+    { id: 'log-3', platformId: 'plat-1', userId: 'test-user-id', level: 'info', event: 'sync.ok', message: 'sync ok in 10.2s', details: { durationMs: 10234 }, createdAt: new Date('2026-05-08T17:55:19Z') },
+    { id: 'log-2', platformId: 'plat-1', userId: 'test-user-id', level: 'info', event: 'library.imported', message: 'library: 488 imported, 4 skipped', details: { imported: 488, skipped: 4 }, createdAt: new Date('2026-05-08T17:55:14Z') },
+    { id: 'log-1', platformId: 'plat-1', userId: 'test-user-id', level: 'info', event: 'sync.started', message: '// ST sync started', details: null, createdAt: new Date('2026-05-08T17:55:09Z') },
+  ];
+
+  it('returns 400 for an invalid platform code', async () => {
+    const res = await request(app).get('/api/platforms/zz/log');
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the user has not connected this platform', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).get('/api/platforms/st/log');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns mapped entries with createdAt as ISO and nextCursor=null when fewer than PAGE entries returned', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({ id: 'plat-1', userId: 'test-user-id', code: 'ST' });
+    (prisma.platformLog.findMany as jest.Mock).mockResolvedValue(sampleEntries);
+
+    const res = await request(app).get('/api/platforms/st/log');
+    expect(res.status).toBe(200);
+    expect(res.body.entries).toHaveLength(3);
+    expect(res.body.entries[0].id).toBe('log-3');
+    expect(res.body.entries[0].createdAt).toBe('2026-05-08T17:55:19.000Z');
+    expect(res.body.entries[0].details).toEqual({ durationMs: 10234 });
+    // Fewer than PAGE entries means we drained.
+    expect(res.body.nextCursor).toBeNull();
+  });
+
+  it('forwards the cursor query param to Prisma and returns nextCursor on full pages', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({ id: 'plat-1', userId: 'test-user-id', code: 'ST' });
+    // Simulate a full 50-entry page.
+    const fullPage = Array.from({ length: 50 }, (_, i) => ({
+      ...sampleEntries[0]!,
+      id: `log-${50 - i}`,
+      createdAt: new Date(Date.now() - i * 1000),
+    }));
+    (prisma.platformLog.findMany as jest.Mock).mockResolvedValue(fullPage);
+
+    const res = await request(app).get('/api/platforms/st/log?cursor=log-99');
+    expect(res.status).toBe(200);
+    expect(res.body.entries).toHaveLength(50);
+    expect(res.body.nextCursor).toBe('log-1'); // last id in the page
+
+    const findManyCall = (prisma.platformLog.findMany as jest.Mock).mock.calls[0][0];
+    expect(findManyCall.cursor).toEqual({ id: 'log-99' });
+    expect(findManyCall.skip).toBe(1);
+    expect(findManyCall.take).toBe(50);
+    expect(findManyCall.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+    expect(findManyCall.where).toEqual({ platformId: 'plat-1' });
   });
 });
 

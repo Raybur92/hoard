@@ -12,6 +12,7 @@ import type {
   PatchMeBody,
   PlatformStatusResponse,
   PlatformDetail,
+  PlatformLogResponse,
   SyncFrequency,
   ManualAddBody,
   IgdbSearchResult,
@@ -222,6 +223,16 @@ export const api = {
     const r = await patch<PlatformDetail>(`/api/platforms/${code.toLowerCase()}`, body);
     cache.invalidate('platformStatus');
     return r;
+  },
+
+  // Cursor-paginated activity feed for one platform. Backs the Log tab
+  // on PlatformDetail (PR B in `docs/SETTINGS_AUDIT_PLAN.md`). Not cached
+  // — log entries are append-only and we want the latest run to show
+  // up immediately after a sync. Pass `cursor` from the previous page's
+  // `nextCursor` to fetch the next 50; pass nothing for the first page.
+  platformLog: (code: string, cursor?: string | null) => {
+    const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    return get<PlatformLogResponse>(`/api/platforms/${code.toLowerCase()}/log${qs}`);
   },
 
   // Reveal-on-demand fetch of the user's stored platform credential.

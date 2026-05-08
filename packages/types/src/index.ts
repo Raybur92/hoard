@@ -260,6 +260,32 @@ export interface PlatformStatusResponse {
   platforms: PlatformDetail[];
 }
 
+/* ── Platform sync log (PR B of the settings audit workstream) ── */
+
+export type PlatformLogLevel = 'info' | 'warn' | 'error';
+
+export interface PlatformLogEntry {
+  id: string;
+  level: PlatformLogLevel;
+  /** Machine-readable event tag — e.g. `sync.started`, `library.imported`,
+   *  `trophies.applied`, `achievements.applied`, `wishlist.imported`,
+   *  `sync.ok`, `sync.error`. UI uses it for color-coding. */
+  event: string;
+  /** Human-readable terminal-style message — what the user actually reads
+   *  in the Log tab. */
+  message: string;
+  /** Reserved for v2 drill-down. v1 stores nothing here. */
+  details: Record<string, unknown> | null;
+  /** ISO 8601 timestamp; client renders `[YYYY-MM-DD HH:MM:SS]`. */
+  createdAt: string;
+}
+
+export interface PlatformLogResponse {
+  entries: PlatformLogEntry[];
+  /** Opaque cursor for the next page; `null` when fully drained. */
+  nextCursor: string | null;
+}
+
 export interface ManualAddBody {
   igdbId: number;
   platformLabel: string;

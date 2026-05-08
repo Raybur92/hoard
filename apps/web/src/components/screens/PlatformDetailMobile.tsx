@@ -9,6 +9,7 @@ import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
 import type { PlatformDetail, SyncFrequency } from '@hoard/types';
+import { PlatformLogTab } from './PlatformLogTab';
 
 const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
 
@@ -25,9 +26,9 @@ const PLATFORM_NAMES: Record<string, string> = {
   st: 'Steam', ps: 'PSN', xb: 'Xbox', gg: 'GOG', nt: 'Nintendo', ep: 'Epic Games',
 };
 
-// S4 — `log` tab dropped in PR A. PR B (sync log workstream) brings it
-// back with a real PlatformLog model behind it.
-type MobileTab = 'auth' | 'scope' | 'sync';
+// PR B reintroduces the activity log tab with a real PlatformLog model
+// behind it (see docs/SETTINGS_AUDIT_PLAN.md L1–L4).
+type MobileTab = 'auth' | 'scope' | 'sync' | 'log';
 
 export function PlatformDetailMobile() {
   const { code = '' } = useParams<{ code: string }>();
@@ -187,7 +188,7 @@ export function PlatformDetailMobile() {
       {isConnected && (
         <>
           <div role="tablist" aria-label="Platform sections" style={{ display: 'flex', borderBottom: '1px solid var(--rule)', padding: '0 16px' }}>
-            {(['auth', 'scope', 'sync'] as MobileTab[]).map((t) => (
+            {(['auth', 'scope', 'sync', 'log'] as MobileTab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -346,6 +347,7 @@ export function PlatformDetailMobile() {
                 </div>
               </div>
             )}
+            {activeTab === 'log' && <PlatformLogTab code={code} />}
           </div>
         </>
       )}

@@ -9,6 +9,7 @@ import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
 import { formatRelative } from '../../lib/utils';
+import { PlatformLogTab } from './PlatformLogTab';
 import type { PlatformDetail, SyncFrequency } from '@hoard/types';
 
 const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
@@ -28,7 +29,7 @@ const PLATFORM_INFO: Record<string, {
   ep: { name: 'EP', fullName: 'Epic Games',         syncable: false, authMethod: 'manual import only',         connectPath: null },
 };
 
-type TabKey = 'authentication' | 'scope' | 'sync';
+type TabKey = 'authentication' | 'scope' | 'sync' | 'log';
 
 export function PlatformDetailDesktop() {
   const { code = '' } = useParams<{ code: string }>();
@@ -93,12 +94,13 @@ export function PlatformDetailDesktop() {
   const rawStatus = isConnected ? (syncing ? 'syncing' : platform.syncStatus) : 'available';
   const status: PlatConnectStatus = (rawStatus === 'ok' ? 'connected' : rawStatus) as PlatConnectStatus;
 
-  // S4 — `log` tab dropped in PR A. PR B (sync log workstream) will
-  // bring it back with a real PlatformLog model behind it.
+  // PR B reintroduces the activity log tab with a real PlatformLog model
+  // behind it (see docs/SETTINGS_AUDIT_PLAN.md L1–L4).
   const TABS: [TabKey, string][] = [
     ['authentication', 'authentication'],
     ['scope',          'scope & permissions'],
     ['sync',           'sync schedule'],
+    ['log',            'activity log'],
   ];
 
   return (
@@ -210,6 +212,7 @@ export function PlatformDetailDesktop() {
                     )}
                     {activeTab === 'scope' && <ScopeTab code={code} />}
                     {activeTab === 'sync'  && <SyncTab platform={platform} code={info.name} syncing={syncing} onSync={handleSync} onChangeFrequency={handleSyncFrequencyChange} />}
+                    {activeTab === 'log'   && <PlatformLogTab code={code} />}
                   </div>
 
                   {/* right: stats sidebar */}
