@@ -171,6 +171,54 @@ describe('DELETE /api/platforms/:code', () => {
   });
 });
 
+/* ── GET /api/platforms/:code/credentials ── */
+
+describe('GET /api/platforms/:code/credentials', () => {
+  it('returns 404 for an unsupported platform code', async () => {
+    const res = await request(app).get('/api/platforms/zz/credentials');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 for a supported code that the user has not connected', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).get('/api/platforms/ps/credentials');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns the npsso for PSN when the user has it stored', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-1', userId: 'test-user-id', code: 'PS',
+      credentials: { npsso: 'A'.repeat(64) },
+    });
+    const res = await request(app).get('/api/platforms/ps/credentials');
+    expect(res.status).toBe(200);
+    expect(res.body.npsso).toBe('A'.repeat(64));
+    // Cache-Control: no-store so the credential never sits in browser cache.
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('returns the steamId for Steam', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-2', userId: 'test-user-id', code: 'ST',
+      credentials: { steamId: '76561197960287930', username: 'gabe' },
+    });
+    const res = await request(app).get('/api/platforms/st/credentials');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ steamId: '76561197960287930' });
+    // Username should NOT leak through; only the credential field comes back.
+    expect(res.body.username).toBeUndefined();
+  });
+
+  it('returns 404 when credentials column is null on the platform row', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-3', userId: 'test-user-id', code: 'PS',
+      credentials: null,
+    });
+    const res = await request(app).get('/api/platforms/ps/credentials');
+    expect(res.status).toBe(404);
+  });
+});
+
 /* ── PATCH /api/platforms/:code ── */
 
 describe('PATCH /api/platforms/:code', () => {

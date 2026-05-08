@@ -224,6 +224,17 @@ export const api = {
     return r;
   },
 
+  // Reveal-on-demand fetch of the user's stored platform credential.
+  // Server returns the platform-specific field (PS → { npsso }, ST →
+  // { steamId }, XB → { apiKey }). NOT cached anywhere — used by the
+  // [reveal] button on PlatformDetail's auth tab; we never persist this
+  // in the in-memory cache so it doesn't accidentally survive a logout.
+  getPlatformCredentials: async (code: string): Promise<{ npsso?: string; steamId?: string; apiKey?: string }> => {
+    const res = await fetch(url(`/api/platforms/${code.toLowerCase()}/credentials`), { credentials: 'include' });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json() as Promise<{ npsso?: string; steamId?: string; apiKey?: string }>;
+  },
+
   disconnectPlatform: async (code: string) => {
     const r = await del<void>(`/api/platforms/${code.toLowerCase()}`);
     cache.invalidate('platformStatus');

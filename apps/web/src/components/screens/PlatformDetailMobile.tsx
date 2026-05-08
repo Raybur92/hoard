@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
-import { PlatformDot, Toggle, Radio } from '../settings';
+import { PlatformDot, Radio } from '../settings';
 import type { PlatConnectStatus } from '../settings';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
@@ -25,7 +25,9 @@ const PLATFORM_NAMES: Record<string, string> = {
   st: 'Steam', ps: 'PSN', xb: 'Xbox', gg: 'GOG', nt: 'Nintendo', ep: 'Epic Games',
 };
 
-type MobileTab = 'auth' | 'scope' | 'sync' | 'log';
+// S4 — `log` tab dropped in PR A. PR B (sync log workstream) brings it
+// back with a real PlatformLog model behind it.
+type MobileTab = 'auth' | 'scope' | 'sync';
 
 export function PlatformDetailMobile() {
   const { code = '' } = useParams<{ code: string }>();
@@ -36,6 +38,12 @@ export function PlatformDetailMobile() {
   const [platform, setPlatform] = useState<PlatformDetail | null>(null);
   const [npssoInput, setNpssoInput] = useState('');
   const [syncing, setSyncing] = useState(false);
+  // S1 — local state for the reveal-NPSSO toggle on the auth tab.
+  const [revealedNpsso, setRevealedNpsso] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState<string | null>(null);
+  // S2 — re-paste flow for when the token has expired.
+  const [reConnecting, setReConnecting] = useState(false);
+  const [reNpsso, setReNpsso] = useState('');
 
   useEffect(() => {
     void api.platformStatus().then((r) => {
@@ -64,6 +72,22 @@ export function PlatformDetailMobile() {
   function handleSync() {
     setSyncing(true);
     void api.syncPlatform(code.toUpperCase()).catch(() => setSyncing(false));
+  }
+
+  // S1 — reveal/hide the user's NPSSO. Server returns it on demand
+  // (no client-side cache); same fetch shape as desktop.
+  async function handleReveal() {
+    if (revealedNpsso) {
+      setRevealedNpsso(null);
+      return;
+    }
+    setRevealError(null);
+    try {
+      const { npsso } = await api.getPlatformCredentials('ps');
+      setRevealedNpsso(npsso ?? null);
+    } catch {
+      setRevealError('Could not fetch token. Try again.');
+    }
   }
 
   function handleSyncFrequencyChange(freq: SyncFrequency) {
@@ -163,7 +187,7 @@ export function PlatformDetailMobile() {
       {isConnected && (
         <>
           <div role="tablist" aria-label="Platform sections" style={{ display: 'flex', borderBottom: '1px solid var(--rule)', padding: '0 16px' }}>
-            {(['auth', 'scope', 'sync', 'log'] as MobileTab[]).map((t) => (
+            {(['auth', 'scope', 'sync'] as MobileTab[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -193,16 +217,54 @@ export function PlatformDetailMobile() {
                 {code.toLowerCase() === 'ps' ? (
                   <>
                     <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// active token</div>
-                    <div className="field" style={{ marginTop: 8, fontSize: "var(--text-2xs)" }}>
-                      <Icon name="key" size={11} style={{ color: 'var(--amber)' }} />
-                      <span style={{ color: 'var(--paper-dim)' }}>NPSSO•••••••••8e2f</span>
+                    <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div className="field" style={{ flex: 1, fontSize: "var(--text-2xs)", overflow: 'hidden' }}>
+                        <Icon name="key" size={11} style={{ color: 'var(--amber)' }} />
+                        <span style={{ color: 'var(--paper-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {revealedNpsso ?? 'NPSSO ' + '•'.repeat(58)}
+                        </span>
+                      </div>
+                      <Btn sm onClick={() => void handleReveal()}>
+                        <Icon name="eye" size={10} /> {revealedNpsso ? 'hide' : 'reveal'}
+                      </Btn>
                     </div>
-                    <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6 }}>
-                      last sync: {platform?.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}
+                    {revealError && <div className="t-mono" style={{ fontSize: "var(--text-3xs)", color: 'var(--red)', marginTop: 6 }} role="alert">{revealError}</div>}
+
+                    {/* S2 — token-health row replaces the lying auto-refresh toggle. */}
+                    <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ display: 'inline-block', width: 8, height: 8, background: platform?.syncStatus === 'ok' ? 'var(--green)' : 'var(--red)' }} aria-hidden="true" />
+                      <span className="t-mono" style={{ fontSize: "var(--text-2xs)", color: 'var(--paper-dim)', flex: 1 }}>
+                        {platform?.syncStatus === 'ok'
+                          ? `// connection healthy · synced ${platform?.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}`
+                          : '// last sync failed — token may be expired'}
+                      </span>
                     </div>
-                    <div style={{ marginTop: 16 }}>
-                      <Toggle on={true} label="auto-refresh 7d before expiry" />
-                    </div>
+                    {platform && platform.syncStatus !== 'ok' && !reConnecting && (
+                      <div style={{ marginTop: 10 }}>
+                        <Btn sm onClick={() => setReConnecting(true)}>paste new token</Btn>
+                      </div>
+                    )}
+                    {reConnecting && (
+                      <div style={{ marginTop: 14, padding: 12, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)' }}>
+                        <label htmlFor="repaste-npsso-mobile" className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// new npsso token (64 chars)</label>
+                        <input
+                          id="repaste-npsso-mobile"
+                          className="field"
+                          value={reNpsso}
+                          onChange={(e) => setReNpsso(e.target.value)}
+                          placeholder="paste from your psn cookies…"
+                          style={{ width: '100%', marginTop: 8, padding: '0 10px', height: 36 }}
+                          maxLength={64}
+                        />
+                        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                          <Btn sm onClick={() => { setReConnecting(false); setReNpsso(''); }}>cancel</Btn>
+                          <Btn sm variant="primary" disabled={reNpsso.length !== 64}
+                            onClick={() => void api.connectPsn(reNpsso).then(() => window.location.reload())}>
+                            save token
+                          </Btn>
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="t-faint" style={{ fontSize: "var(--text-xs)", lineHeight: 1.5 }}>
@@ -223,7 +285,13 @@ export function PlatformDetailMobile() {
             )}
             {activeTab === 'scope' && (
               <div>
-                <Marker>// scope · what hoard reads</Marker>
+                {/* S3 — read-only info display. Same rationale as desktop:
+                    none of these are toggleable in v1, so we drop the
+                    checkbox visual entirely and use plain icons. */}
+                <Marker>// what hoard reads</Marker>
+                <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 4 }}>
+                  non-toggleable in v1 · what's pulled is fixed by platform.
+                </div>
                 <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {([
                     ['library',  'owned games + entitlements', true],
@@ -233,16 +301,11 @@ export function PlatformDetailMobile() {
                   ] as [string, string, boolean][]).map(([k, d, on]) => (
                     <div key={k}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: "var(--text-xs)" }}>
-                        <span style={{ width: 14, height: 14, border: '1px solid var(--rule-bright)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} aria-hidden="true">
-                          {on && <Icon name="check" size={9} style={{ color: 'var(--green)' }} />}
-                        </span>
+                        <Icon name={on ? 'check' : 'x'} size={11} style={{ color: on ? 'var(--green)' : 'var(--red)' }} />
                         <span style={{ color: on ? 'var(--paper)' : 'var(--paper-dim)' }}>{k}</span>
                         <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {d}</span>
                       </div>
-                      {/* T-D7 amendment: Steam-only public-profile note. The
-                          fetcher silently skips when Steam returns "Profile
-                          is not public", so without this note the failure
-                          mode is invisible. */}
+                      {/* T-D7 amendment: Steam-only public-profile note. */}
                       {k === 'trophies' && code.toLowerCase() === 'st' && (
                         <div className="t-faint" style={{ marginLeft: 24, marginTop: 4, fontSize: "var(--text-3xs)", lineHeight: 1.5 }}>
                           // note · steam profile must be public for achievement sync.
@@ -282,11 +345,6 @@ export function PlatformDetailMobile() {
                   Last sync: {platform?.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}.
                 </div>
               </div>
-            )}
-            {activeTab === 'log' && (
-              <pre className="ascii t-faint" style={{ fontSize: "var(--text-3xs)", lineHeight: 1.7 }}>
-                {'// no log entries yet'}
-              </pre>
             )}
           </div>
         </>

@@ -160,7 +160,7 @@ Lazy infinite-scroll via cursor pagination. Colorized by level (green info, ambe
 
 | PR | Status | Notes |
 |---|---|---|
-| PR A — Settings cleanup | Not started | Ships first. ~100 LOC, no schema. |
+| PR A — Settings cleanup | Done (2026-05-08) | Backend: new `GET /api/platforms/:code/credentials` endpoint returning the platform-specific credential field with `Cache-Control: no-store` so it never sits in browser cache. Frontend: `[reveal]` button on PSN auth tab now actually fetches + toggles the NPSSO display (S1); auto-refresh toggle deleted and replaced with a token-health status row reading `Platform.syncStatus` + inline `[paste new token]` CTA when `error` (S2); scope checkboxes converted to a read-only `// what hoard reads` info display with green-check / red-x icons (S3); Log tab dropped from `TabKey` / `MobileTab` types + tabstrip arrays + section renders + the `LogTab` component itself (S4). Both desktop and mobile updated with the same shape. **219 API + 196 web tests pass** (5 new on the credentials endpoint). |
 | PR B — Platform sync log | Not started | Schema + write hooks + read endpoint + UI. ~half a day. Awaits Andrea's go-ahead after PR A lands per hard rule 10. |
 
 ---

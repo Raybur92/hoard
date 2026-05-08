@@ -62,6 +62,55 @@ router.get('/platforms/status', requireUser, async (req: Request, res: Response)
   res.json(body);
 });
 
+// GET /api/platforms/:code/credentials — return the user's revealable
+// credential field for the platform. Used by the [reveal] button on
+// PlatformDetail's auth tab so the user can verify what's stored. Not
+// cached client-side, fetched on-demand only. Auth-required.
+//
+// Response shape varies per platform:
+//   PS → { npsso: string | null }
+//   ST → { steamId: string | null }
+//   XB → { apiKey: string | null }
+//   Others (GG/NT/EP) → 404 (no credentials, or not yet implemented).
+router.get('/platforms/:code/credentials', requireUser, async (req: Request, res: Response): Promise<void> => {
+  const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB'];
+  if (!code || !validCodes.includes(code)) {
+    res.status(404).json({ error: 'No revealable credentials for this platform' });
+    return;
+  }
+
+  const platform = await prisma.platform.findUnique({
+    where: { userId_code: { userId: req.userId, code } },
+  });
+  if (!platform) {
+    res.status(404).json({ error: 'Platform not connected' });
+    return;
+  }
+
+  const creds = platform.credentials as Record<string, string> | null;
+  if (!creds) {
+    res.status(404).json({ error: 'No credentials stored' });
+    return;
+  }
+
+  // Never cache — credentials should not sit in browser cache.
+  res.set('Cache-Control', 'no-store');
+
+  if (code === 'PS') {
+    res.json({ npsso: creds['npsso'] ?? null });
+    return;
+  }
+  if (code === 'ST') {
+    res.json({ steamId: creds['steamId'] ?? null });
+    return;
+  }
+  if (code === 'XB') {
+    res.json({ apiKey: creds['apiKey'] ?? null });
+    return;
+  }
+});
+
 // PATCH /api/platforms/:code — update per-platform settings (currently
 // just `syncFrequency`). Returns the updated `PlatformDetail`-shaped row
 // so the client can swap state without a refetch.

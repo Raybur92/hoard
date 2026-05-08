@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
-import { SettingsNav, SettingsRow, Toggle, Radio, PlatformDot } from '../settings';
+import { SettingsNav, SettingsRow, Radio, PlatformDot } from '../settings';
 import type { PlatConnectStatus } from '../settings';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
+import { formatRelative } from '../../lib/utils';
 import type { PlatformDetail, SyncFrequency } from '@hoard/types';
 
 const API_BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
@@ -27,7 +28,7 @@ const PLATFORM_INFO: Record<string, {
   ep: { name: 'EP', fullName: 'Epic Games',         syncable: false, authMethod: 'manual import only',         connectPath: null },
 };
 
-type TabKey = 'authentication' | 'scope' | 'sync' | 'log';
+type TabKey = 'authentication' | 'scope' | 'sync';
 
 export function PlatformDetailDesktop() {
   const { code = '' } = useParams<{ code: string }>();
@@ -92,11 +93,12 @@ export function PlatformDetailDesktop() {
   const rawStatus = isConnected ? (syncing ? 'syncing' : platform.syncStatus) : 'available';
   const status: PlatConnectStatus = (rawStatus === 'ok' ? 'connected' : rawStatus) as PlatConnectStatus;
 
+  // S4 — `log` tab dropped in PR A. PR B (sync log workstream) will
+  // bring it back with a real PlatformLog model behind it.
   const TABS: [TabKey, string][] = [
     ['authentication', 'authentication'],
     ['scope',          'scope & permissions'],
     ['sync',           'sync schedule'],
-    ['log',            'activity log'],
   ];
 
   return (
@@ -208,7 +210,6 @@ export function PlatformDetailDesktop() {
                     )}
                     {activeTab === 'scope' && <ScopeTab code={code} />}
                     {activeTab === 'sync'  && <SyncTab platform={platform} code={info.name} syncing={syncing} onSync={handleSync} onChangeFrequency={handleSyncFrequencyChange} />}
-                    {activeTab === 'log'   && <LogTab />}
                   </div>
 
                   {/* right: stats sidebar */}
@@ -312,29 +313,99 @@ function PsnConnectPanel({ npssoInput, setNpssoInput }: { npssoInput: string; se
 }
 
 function AuthTab({ code, platform }: { code: string; platform: PlatformDetail }) {
+  const [revealedNpsso, setRevealedNpsso] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState<string | null>(null);
+  const [reConnecting, setReConnecting] = useState(false);
+  const [reNpsso, setReNpsso] = useState('');
+
   if (code.toLowerCase() === 'ps') {
+    // S1 — actually fetch the npsso when the user hits [reveal]. Server
+    // returns it on demand (no client cache), so a logout-then-login
+    // never shows a stale credential. Click again to hide.
+    async function handleReveal() {
+      if (revealedNpsso) {
+        setRevealedNpsso(null);
+        return;
+      }
+      setRevealError(null);
+      try {
+        const { npsso } = await api.getPlatformCredentials('ps');
+        setRevealedNpsso(npsso ?? null);
+      } catch {
+        setRevealError('Could not fetch token. Try again.');
+      }
+    }
+
+    // S2 — token-health status replaces the lying auto-refresh toggle.
+    // syncStatus === 'ok' means the most recent sync passed token auth;
+    // 'error' means it failed (most likely an expired token, but could
+    // also be PSN being down — we don't try to distinguish, both want
+    // the same user action: paste a fresh token).
+    const tokenHealthy = platform.syncStatus === 'ok';
+    const lastSyncRel = platform.lastSyncAt ? formatRelative(platform.lastSyncAt) : 'never';
+
     return (
       <div>
         <Marker>// authentication · token &amp; method</Marker>
         <div style={{ marginTop: 16, padding: 16, border: '1px solid var(--rule)', background: 'var(--ink)' }}>
           <div className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// active token</div>
           <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div className="field" style={{ flex: 1 }}>
+            <div className="field" style={{ flex: 1, overflow: 'hidden' }}>
               <Icon name="key" size={11} style={{ color: 'var(--amber)' }} />
-              <span style={{ color: 'var(--paper-dim)', fontFamily: 'var(--mono)' }}>NPSSO•••••••••••••••••••••••8e2f</span>
+              <span style={{ color: 'var(--paper-dim)', fontFamily: 'var(--mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {revealedNpsso ?? 'NPSSO ' + '•'.repeat(58)}
+              </span>
             </div>
-            <Btn sm><Icon name="eye" size={10} /> reveal</Btn>
+            <Btn sm onClick={() => void handleReveal()}>
+              <Icon name="eye" size={10} /> {revealedNpsso ? 'hide' : 'reveal'}
+            </Btn>
           </div>
+          {revealError && <div className="t-mono" style={{ fontSize: "var(--text-3xs)", color: 'var(--red)', marginTop: 6 }} role="alert">{revealError}</div>}
+
           <div className="kv" style={{ marginTop: 14 }}>
             <span>last sync</span><span className="t-tnum">{platform.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}</span>
             <span>method</span><span>NPSSO cookie</span>
           </div>
         </div>
-        <div style={{ marginTop: 18 }}>
-          <SettingsRow label="auto-refresh" hint="hoard tries to renew the token 7 days before expiry.">
-            <Toggle on={true} label="enabled" />
-          </SettingsRow>
+
+        {/* Token-health row — replaces the (impossible) auto-refresh toggle. */}
+        <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ display: 'inline-block', width: 8, height: 8, background: tokenHealthy ? 'var(--green)' : 'var(--red)' }} aria-hidden="true" />
+          <span className="t-mono" style={{ fontSize: "var(--text-xs)", color: 'var(--paper-dim)', flex: 1 }}>
+            {tokenHealthy
+              ? `// connection healthy · last verified ${lastSyncRel}`
+              : '// last sync failed — token may be expired'}
+          </span>
+          {!tokenHealthy && !reConnecting && (
+            <Btn sm onClick={() => setReConnecting(true)}>paste new token</Btn>
+          )}
         </div>
+
+        {/* Inline re-paste flow — same shape as the initial-connect input. */}
+        {reConnecting && (
+          <div style={{ marginTop: 14, padding: 14, border: '1px dashed var(--rule-bright)', background: 'var(--ink-2)' }}>
+            <label htmlFor="repaste-npsso" className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>// new npsso token (64 chars)</label>
+            <input
+              id="repaste-npsso"
+              className="field"
+              value={reNpsso}
+              onChange={(e) => setReNpsso(e.target.value)}
+              placeholder="paste from your psn cookies…"
+              style={{ width: '100%', marginTop: 8, padding: '0 12px', height: 36 }}
+              maxLength={64}
+            />
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Btn sm onClick={() => { setReConnecting(false); setReNpsso(''); }}>cancel</Btn>
+              <Btn sm variant="primary" disabled={reNpsso.length !== 64}
+                onClick={() => void api.connectPsn(reNpsso).then(() => window.location.reload())}>
+                save token
+              </Btn>
+              {reNpsso.length > 0 && reNpsso.length < 64 && (
+                <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>{reNpsso.length}/64 characters</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -351,23 +422,30 @@ function AuthTab({ code, platform }: { code: string; platform: PlatformDetail })
 }
 
 function ScopeTab({ code }: { code: string }) {
+  // S3 — read-only info display. None of these are toggleable in v1
+  // (library + playtime are mandatory if you sync; trophies fire
+  // automatically when supported; friends is permanently out of scope per
+  // AGENT.md "What Hoard Is Not"). Replaced the checkbox visual with a
+  // plain green-check / red-x icon row to remove any implication of
+  // interactivity.
   const scopes = [
-    ['library', 'owned games + entitlements', true],
-    ['playtime', 'hours per game', true],
-    ['trophies', 'achievement progress', true],
-    ['friends',  'friend list', false],
+    ['library',  'owned games + entitlements', true],
+    ['playtime', 'hours per game',             true],
+    ['trophies', 'achievement progress',       true],
+    ['friends',  'friend list',                false],
   ] as const;
   const isSteam = code.toLowerCase() === 'st';
   return (
     <div>
-      <Marker>// scope · what hoard reads</Marker>
-      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Marker>// what hoard reads</Marker>
+      <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6 }}>
+        non-toggleable in v1 · what's pulled is fixed by platform.
+      </div>
+      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {scopes.map(([k, d, on]) => (
           <div key={k}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: "var(--text-xs)" }}>
-              <span style={{ width: 12, height: 12, border: '1px solid var(--rule-bright)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                {on && <Icon name="check" size={9} style={{ color: 'var(--green)' }} />}
-              </span>
+              <Icon name={on ? 'check' : 'x'} size={11} style={{ color: on ? 'var(--green)' : 'var(--red)' }} />
               <span style={{ color: on ? 'var(--paper)' : 'var(--paper-dim)' }}>{k}</span>
               <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {d}</span>
             </div>
@@ -428,17 +506,6 @@ function SyncTab({ platform, syncing, onSync, onChangeFrequency }: {
       <div className="t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 10 }}>
         last sync: {platform.lastSyncAt ? new Date(platform.lastSyncAt).toLocaleString() : 'never'}
       </div>
-    </div>
-  );
-}
-
-function LogTab() {
-  return (
-    <div>
-      <Marker>// activity log</Marker>
-      <pre className="ascii t-faint" style={{ fontSize: "var(--text-2xs)", lineHeight: 1.7, marginTop: 12 }}>
-        {`// no log entries yet`}
-      </pre>
     </div>
   );
 }
