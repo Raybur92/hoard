@@ -14,6 +14,14 @@
  *   2026-05-05 — purged 5 leftover sign-ups from May 3 (test-may3@,
  *                diag-test-1@, diag-test-4@, karmagames92@, adelecalcopietro@).
  *                Bedkarma + seeded dev user retained.
+ *   2026-05-08 — pre-step of the invite-codes workstream: removed
+ *                andrea@hoard.app (seed-andrea — phantom seed user, 32 games
+ *                / 0 platforms) and daniel.guernieri@gmail.com (unintended
+ *                signup, 0 games / 0 platforms — likely found the URL via a
+ *                Luigi screenshot, never connected anything). Snapshot of
+ *                pre-deletion state in docs/runbooks/users-snapshot-2026-05-08.json.
+ *                Three real accounts retained (Bedkarma, Luigi, secondary test
+ *                karmagames92@gmail.com).
  */
 import { config } from 'dotenv';
 config({ path: new URL('../apps/api/.env', import.meta.url).pathname });

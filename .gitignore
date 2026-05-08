@@ -47,3 +47,8 @@ packages/db/prisma/migrations/*.sql.bak
 # Railway
 .railway
 .lighthouseci/
+
+# Operational runbooks — local-only artifacts (DB snapshots, dump files,
+# rollback references). Frequently contain bcrypt hashes, OAuth IDs, and
+# other sensitive data that must never enter git history.
+docs/runbooks/
