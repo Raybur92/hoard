@@ -137,53 +137,106 @@ Split the suite by what each test actually proves:
 
 ---
 
-## 3. Recommendation
+## 3. Recommendation (LOCKED 2026-05-09 — Andrea confirmed Option F with refinements below)
 
-**Option F (hybrid) — starting with Option E for `welcome.spec.ts` and Option B for `screens.spec.ts`.**
+### 3.1 — The right framing: what does each test uniquely prove?
 
-Rationale:
-1. Welcome flow tests are the most-asked-for missing coverage right now (deferred at I4); they're the most amenable to Option E mocks (predictable error responses, deterministic state transitions).
-2. `screens.spec.ts` is the largest existing investment; it specifically asserts on rendered content that requires real data.
-3. The 50/50 split lets Option E land first as a small PR, while Option B's infrastructure work happens on its own track.
-4. Option B alone is also defensible if you want the simpler one-pattern story; it just delays welcome E2E by however long Supabase provisioning + seed takes.
+The "content vs flow" split that originally framed Option F was a reasonable first cut but the wrong axis. The sharper question is what each test *uniquely proves* relative to the layers below it.
 
-**This is the decision point. Pick a strategy before the implementation PRs (E1+) start.** The strategy locks the seed-data model, the secret-management story, and the test-file naming convention.
+- **Mocked tests (Option E flavor)** prove: a React component reacts correctly to API responses. Error rendering, state transitions, form validation. Most of this is essentially component-test territory — vitest + Testing Library can cover it without Playwright at all, and `WelcomeScreen.test.tsx` + `LoginScreen.test.tsx` already do.
+- **Real-test-DB tests (Option B flavor)** prove: the actual end-to-end integration pipeline works. Real backend issues a real JWT, real cookie lands, real `RequireAuth` reads the real session, real `RequireActive` checks real status, real frontend renders against real data. **This is where integration bugs hide** — exactly like the deep-link `?next=` bug shipped in `5024234`, "fixed," and then actually fixed in `9051b36`. Unit tests passed throughout because they injected `?next=` directly into MemoryRouter URLs; the integration gap (RequireAuth's redirect target not actually carrying the param) was invisible until smoke #3 in production.
+
+By that criterion, mocking should be the *exception* in E2E, not the default. Mocking `/api/auth/redeem-invite` and `/api/auth/me` for welcome-flow tests erases the surface where bugs hide. Mocking the pure state-machine logic of "default panel → request-sent panel" is fine; mocking "register → cookie lands → context updates → RequireActive redirects → welcome renders" defeats the purpose of having E2E at all.
+
+### 3.2 — Refined split: ~30% mocked / ~70% real-DB
+
+Rebalanced from the original implicit 50/50:
+
+- **Real test DB (~70%)**: every test that exercises an actual auth/session/redirect path, every test that asserts on rendered content from a real query, every visual snapshot. This includes most of `welcome.spec.ts` (the integration-pipeline cases Andrea specifically called out at I4) and all of `screens.spec.ts`.
+- **Mocked (~30%)**: targeted at pure UI state-machine assertions where a real backend adds setup cost without proving anything new. Example: "rate-limit error message renders correctly when API returns 429" — the API call shape is well-defined, what's being verified is the UI's reaction. Anything that could equivalently be a vitest component test is a candidate.
+
+The split isn't a quota — it's a guideline for the question "should this be an integration spec or a component spec?" Default to integration; reach for mocks only when the integration adds setup without adding signal.
+
+### 3.3 — Data parity is NOT schema parity (limitation worth acknowledging)
+
+Option B's deterministic seed (3 users + a dozen games) gives perfect schema parity but only synthetic data parity. A real prod bug only manifesting when the user has 745 games (Andrea), or a particular IGDB metadata edge case, or a sync history with specific dates — none of those are exercised by a clean seed. **vitest remains the primary regression-prevention layer**; E2E is integration-pipeline verification, not comprehensive coverage. The seed should be small and stable (~12 games is right), with edge-case scenarios (large libraries, tricky metadata, malformed sync data) captured as targeted unit tests against fixtures or as one-off integration tests when an actual bug surfaces. Don't grow the seed reactively — it becomes a maintenance tax on every migration.
+
+### 3.4 — Locked secondary decisions
+
+- **Free tier with keepalive.** Supabase free tier is fine for the test DB. Auto-pause after 7 days of inactivity is mitigated by a tiny GitHub Action that runs nightly against the test DB (`SELECT 1` is enough). Cheaper than $25/mo and more honest — if the test DB is so unused it's pausing, that itself is signal worth seeing.
+- **`DATABASE_URL_TEST` lives in two places only.** GitHub Actions secret + local `.env.test` (gitignored). NOT in Vercel preview env — E2E doesn't run there, no reason to widen the secret's blast radius.
+- **A11y false-positive fix lands in E1, not E3.** Twelve tests passing for the wrong reason is actively misleading; "restoring the suite" must include un-breaking the parts that were already broken, not deferring them. See §4 below.
+
+### 3.5 — Naming convention: signal isolation level, not test subject
+
+Test files signal *what isolation level they run at*, not *what feature they cover*. Renaming files later is annoying; getting it right at the start is the cheap move.
+
+- `*.integration.spec.ts` — DB-backed; runs against the test Supabase project; exercises the real auth/session/data pipeline. **Default for new E2E tests.** Existing `screens.spec.ts` becomes `screens.integration.spec.ts` in E1.
+- `*.component.spec.ts` — Mocked via `page.route(...)`; no DB; pure UI-reaction assertions. Reach for this only when a real backend adds setup without adding signal.
+
+Per-file pattern goes alongside a one-screen guide in `CONTRIBUTING.md` (or wherever appropriate) so future contributors pick the right pattern by default.
 
 ---
 
-## 4. PR sequence (sketched, NOT to be drafted until §3 lands)
+## 4. PR sequence
 
-The following is contingent on the §3 decision; specifics get rewritten once a strategy is picked.
+§3 is locked; PR specifics below are scoped against Option F with the §3 refinements. Scope-locking only — actual PR drafts wait for Andrea's review of this revision before E1's deliverables get written up in detail.
 
-### E1 — Restoration foundation
-- If Option B/F: provision the test DB, write the seed script (3 users matching closed-beta state + a dozen games, all ACTIVE), wire `DATABASE_URL_TEST` into Playwright config.
-- If Option E only: scaffold `page.route(...)` helper utilities and the canned-response fixtures.
-- Either way: fix the existing `screens.spec.ts` assertions that depend on Andrea's evolving real data ("Hollow Knight: Silksong" → seeded equivalent or platform-only assertions).
-- Update `tests/snapshots/*.png` baselines against the new deterministic data.
-- Document the strategy in `CONTRIBUTING.md` (or wherever appropriate) so future tests use the right pattern.
+### E1 — Restoration foundation (sole PR; everything below ships together because they're load-bearing for each other)
+
+**Infrastructure**
+- Provision the dormant `hoard-test` Supabase project. Free tier; same EU West region as prod for consistent latency.
+- Add `DATABASE_URL_TEST` to two places only: GitHub Actions secrets + `.env.test` (gitignored, locally). NOT in Vercel preview env.
+- New nightly keepalive: `.github/workflows/test-db-keepalive.yml` runs `SELECT 1` against the test DB once a day so Supabase's free-tier 7-day inactivity-pause never bites mid-CI.
+- Apply the prod migration history to the test project via the documented `db execute` + `migrate resolve` recipe. New CI step: `prisma migrate status --schema packages/db/prisma/schema.prisma` against `DATABASE_URL_TEST` fails the build if a migration is pending — catches drift between prod and test.
+- Wire `DATABASE_URL_TEST` into `playwright.config.ts`'s `webServer` for the API process (E2E `dev:api` reads test DB; local dev still reads prod DB via `DATABASE_URL`).
+
+**Seed**
+- New `packages/db/prisma/seed-e2e.ts` — small, stable, deterministic. Three users matching closed-beta shape (1 admin, 1 active, 1 pending-with-request), a dozen games, a handful of platforms with known-state. Run on every E2E suite invocation via `prisma migrate reset --force && prisma db seed -- --e2e` (or equivalent).
+- Seed deliberately stays minimal per §3.3 — vitest carries comprehensive coverage; the seed exists only to back integration-pipeline assertions.
+
+**Auth setup that fails loudly (folded-in a11y fix)**
+- Replace per-test cookie-or-no-cookie assumptions with a global Playwright fixture that authenticates each test before its first navigation. The fixture reads which test user the spec wants (default = ACTIVE seed user; opt-in to PENDING_INVITE or new-signup via per-test override) and lands the session cookie via direct `POST /api/auth/login` against the test backend.
+- **Each spec asserts the URL it ended up on matches the URL it expected to load before the test body runs.** Replaces the per-axe-scan URL check with one global assertion. Misroutes (auth chain redirected somewhere unexpected, mid-test navigation drifted) fail loudly at the navigation step instead of producing false-positive accessibility passes.
+- This is the "a11y false-positive fix" that was previously E3 — folded into E1 because shipping a "restored" suite where 12 tests still pass for the wrong reason is misleading. Restoring means working correctly, not just running.
+
+**Existing-spec migration**
+- Rename `screens.spec.ts` → `screens.integration.spec.ts`. Same applies to `a11y.spec.ts` → `a11y.integration.spec.ts`. Naming signals isolation level per §3.5.
+- Fix assertions that depended on Andrea's evolving real data. "Hollow Knight: Silksong" → a seeded title (or, where the assertion's intent is "any backlog game shows," loosen to a regex/structural check).
+- Regenerate `tests/snapshots/*.png` baselines against the new deterministic seed. **Explicit deliverable** — without this E1 ships with red snapshot tests on day one and the suite gets "always rerun" status. Snapshot drift erodes the value of snapshots; we fix it now or never.
+
+**Documentation**
+- One-screen guide in `CONTRIBUTING.md` (or `apps/web/tests/e2e/README.md`): when to write `*.integration.spec.ts` (default), when to write `*.component.spec.ts` (UI-reaction assertions where the integration adds setup without adding signal), how the global auth fixture works, how to reset the seed during local iteration.
+
+**Success criteria**
+- All renamed `*.integration.spec.ts` files pass against the test DB.
+- Visual snapshots are stable across reruns.
+- a11y suite catches a deliberately-introduced misroute (e.g. a temporarily-broken `RequireAuth`) and fails — not silently passes.
+- CI runtime stays under whatever the current E2E budget is (probably worth profiling before adding the keepalive overhead, but this is a Day 2 problem).
 
 ### E2 — Reinstate `welcome.spec.ts`
-- Cover the four cases drafted in `INVITE_CODES_PLAN.md` I4 §Tests:
+
+Mostly an integration spec under the new convention; one targeted component spec for the pure UI states.
+
+- **`welcome.integration.spec.ts`** — backed by the test DB, four cases per `INVITE_CODES_PLAN.md` I4:
   - fresh signup → `/welcome` (no `next` and with `next=/library`)
   - successful redemption navigates to `next`
-  - redemption with `next=//evil.com` → `/` (open-redirect defense)
+  - redemption with `next=//evil.com` → `/` (open-redirect defense end-to-end against the real `safeNext` + real `RequireActive`)
   - request-access → received-code-immediately → redeem flow (friction-free)
-- Implementation flavor depends on strategy:
-  - Option E: `page.route(...)` to mock `/api/auth/me`, `/api/auth/redeem-invite`, `/api/auth/request-access` per scenario.
-  - Option B: register fresh user (against test DB), exercise welcome screen, assert URL transitions, clean up via `DELETE /api/auth/me` in `afterEach`.
-
-### E3 (optional) — fix the a11y false-positive
-- The current `a11y.spec.ts` "passes" by scanning login. Add an assertion before each axe scan that the rendered route actually matches what's expected (e.g. `expect(page.url()).toContain('/library')` before scanning `/library`).
-- Or restructure so the auth setup guarantees an authenticated session and the assertions catch unintended redirects loudly.
+  - Each test registers a fresh user via `POST /api/auth/register` against the test API, exercises the real welcome flow, asserts URL transitions, cleans up via `DELETE /api/auth/me` in an `afterEach`. Cleanup runs against the test DB, never prod.
+- **`welcome-error-states.component.spec.ts`** (smaller) — pure UI-reaction assertions where a real backend adds setup without adding signal: distinct error copy per `RedeemInviteError` code (INVALID_FORMAT vs CODE_NOT_FOUND vs CODE_ALREADY_REDEEMED vs RATE_LIMITED), the textarea's 500-char silent truncation, the request-sent state's persistence across reloads. `page.route(...)` mocks the API; the test verifies the UI's reaction. The unit-level coverage in `WelcomeScreen.test.tsx` already gets most of this; this spec is the integration-level companion that proves the same assertions hold when the UI is mounted in a real browser, not jsdom.
 
 ---
 
 ## 5. Out of scope (don't reopen)
 
-- **Pointing `DEV_USER_ID` at Andrea's real row** (Option A) — fragile + prod-coupled, disqualified above.
+- **Pointing `DEV_USER_ID` at Andrea's real row** (Option A) — fragile + prod-coupled, disqualified.
 - **Letting tests pollute the prod `User` table** (Option D) — Andrea's standing rejection from the I4 deferral note.
-- **Fully replacing `screens.spec.ts` with mocks** (Option E alone) — defeats the point of E2E for content rendering.
+- **Fully replacing `screens.integration.spec.ts` with mocks** (Option E alone) — defeats the point of E2E for content rendering.
 - **Migrating to a different test framework** (Cypress, etc.) — Playwright is fine; this is a data/auth strategy problem, not a tooling problem.
+- **Per-test URL assertions** as the a11y false-positive fix — band-aid; the real fix is a global auth fixture that asserts each spec lands on the URL it expected to load (in E1's auth-setup deliverable).
+- **Growing the seed reactively** — bug surfaces, add it to the seed, repeat → seed bloats and becomes a maintenance tax on every migration. Targeted unit tests against fixtures + one-off integration tests for actual prod bugs are the right answers (per §3.3).
+- **Free-tier paid upgrade** (yet) — keepalive Action makes inactivity-pause moot. If a real reason emerges (E2E run frequency outpaces free-tier quotas), revisit.
 
 ---
 
@@ -191,8 +244,8 @@ The following is contingent on the §3 decision; specifics get rewritten once a 
 
 | Step | State | Notes |
 |---|---|---|
-| 1 — Diagnose | Done | Captured above. |
-| 2 — Strategy decision | **Open — awaits Andrea** | Recommendation: Option F. |
-| 3 — Restore screens.spec.ts | Pending | Drafts after §2 lands. |
-| 4 — Reinstate welcome.spec.ts | Pending | Drafts after §2 lands. |
-| 5 — Fix a11y false-positive | Pending (optional) | Could fold into E1 or be a small follow-up. |
+| 1 — Diagnose | Done | Captured in §1. |
+| 2 — Strategy decision | **Done (2026-05-09, Andrea confirmed Option F + 5 refinements)** | See §3.1–§3.5 for the locked rationale and §3.4 for secondary decisions (free tier + keepalive, secret locations, a11y fix in E1). |
+| 3 — E1 PR plan drafts (concrete deliverables) | **Open — awaits Andrea's review of this revision** | When confirmed, deliverables under each §4 E1 sub-bullet get expanded into PR-shaped specifics (commit-grouping, file-by-file changes, test counts, manual verification list). Hold per Andrea's "review before drafting" instruction. |
+| 4 — E1 implementation | Pending | After step 3. |
+| 5 — E2 (welcome.integration.spec.ts + welcome-error-states.component.spec.ts) | Pending | After E1 lands. |
