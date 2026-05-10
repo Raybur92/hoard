@@ -103,7 +103,14 @@ model InviteCode {
   createdAt DateTime  @default(now())
   usedAt    DateTime?
   usedById  String?   @unique
-  usedBy    User?     @relation(fields: [usedById], references: [id])
+  // onDelete: SetNull is what the live SQL already does (the I1 migration
+  // hand-wrote `ON DELETE SET NULL` on this FK; per A-D3 in
+  // docs/ADMIN_POLISH_PLAN.md, this annotation makes the same behaviour
+  // explicit at the schema layer instead of relying on Prisma's implicit
+  // default for optional relations — futureproofs against a Prisma
+  // version that ever changes that default. Verified zero SQL diff via
+  // `prisma migrate diff --to-url $DATABASE_URL` before commit landed.
+  usedBy    User?     @relation(fields: [usedById], references: [id], onDelete: SetNull)
 }
 
 model Platform {
@@ -209,13 +216,13 @@ model UserGame {
 }
 
 model HltbData {
-  id             String   @id @default(cuid())
-  gameId         String   @unique
-  mainStory      Int?
-  mainExtras     Int?
-  completionist  Int?
-  source         String   @default("hltb")
-  fetchedAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  gameId        String   @unique
+  mainStory     Int?
+  mainExtras    Int?
+  completionist Int?
+  source        String   @default("hltb")
+  fetchedAt     DateTime @default(now())
 
   game Game @relation(fields: [gameId], references: [id])
 }
@@ -224,21 +231,21 @@ model HltbData {
 // page rename (Upcoming → Releases) is URL + UI labels only. Renaming this
 // table would force a migration for a UI change. Stays `WishlistRelease`.
 model WishlistRelease {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   igdbId              Int
   title               String
   developer           String?
   releaseDate         DateTime?
-  releaseDateCategory String   @default("TBA")
+  releaseDateCategory String    @default("TBA")
   platforms           String[]
   genres              String[]
   userId              String
   hype                Int?
   synopsis            String?
   coverUrl            String?
-  category            Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  category            Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
