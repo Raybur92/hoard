@@ -1,0 +1,50 @@
+name: test-db-migrate-check
+
+# Runs only when migrations or the schema change.
+# Catches drift between prod's migration history and the test DB
+# before E2E tests run against a stale schema.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/db/prisma/migrations/**'
+      - 'packages/db/prisma/schema.prisma'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/db/prisma/migrations/**'
+      - 'packages/db/prisma/schema.prisma'
+  workflow_dispatch:
+
+jobs:
+  migrate-status:
+    name: Test DB migration status
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema packages/db/prisma/schema.prisma
+
+      - name: Check test DB is up to date
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+        run: |
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL_TEST secret is not set"
+            exit 1
+          fi
+          # `migrate status` exits non-zero if any migration is pending.
+          # That is the gate: schema-touching PRs cannot land while the
+          # test DB has migrations from prod that haven't been replayed.
+          npx prisma migrate status --schema packages/db/prisma/schema.prisma

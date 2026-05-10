@@ -12,6 +12,7 @@ out/
 .env
 .env.local
 .env.*.local
+apps/web/.env.test
 
 # Logs
 *.log

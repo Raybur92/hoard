@@ -1,0 +1,65 @@
+name: test-db-keepalive
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping test DB (3 attempts, 30s backoff)
+        env:
+          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+        run: |
+          if [ -z "${DATABASE_URL_TEST:-}" ]; then
+            echo "::error::DATABASE_URL_TEST secret is not set"
+            exit 1
+          fi
+          # Strip Prisma-specific query params (pgbouncer, connection_limit) for libpq.
+          PSQL_URL="${DATABASE_URL_TEST%%\?*}"
+          for attempt in 1 2 3; do
+            if psql "$PSQL_URL" -c "SELECT 1" > /dev/null 2>&1; then
+              echo "✓ test DB is awake (attempt $attempt)"
+              exit 0
+            fi
+            echo "× attempt $attempt failed, retrying in 30s..."
+            sleep 30
+          done
+          echo "::error::test DB ping failed after 3 attempts"
+          exit 1
+
+      - name: Open or update canonical issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANONICAL_TITLE: '[infra] test-db keepalive failing'
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Lookup must match BOTH the label AND the exact title.
+          # Label-only could pick a stale historical issue with the same label;
+          # title-only could miss when label hygiene drifts.
+          existing=$(gh issue list \
+            --label 'infra:test-db' \
+            --state open \
+            --json number,title \
+            --jq ".[] | select(.title == \"$CANONICAL_TITLE\") | .number" \
+            | head -n 1)
+          timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" \
+              --body "Keepalive failed at $timestamp. Run: $RUN_URL"
+          else
+            gh issue create \
+              --title "$CANONICAL_TITLE" \
+              --label 'infra:test-db' \
+              --body "Test DB keepalive Action failed at $timestamp.
+
+          Check Supabase dashboard; manual unpause may be needed.
+          Latest run: $RUN_URL"
+          fi
