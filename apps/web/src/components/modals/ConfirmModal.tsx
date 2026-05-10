@@ -126,8 +126,18 @@ export function ConfirmModal({
           )}
 
           <div style={{ marginTop: 22 }}>
-            <div className="t-up" style={{ fontSize: 'var(--text-3xs)', letterSpacing: '0.12em', color: 'var(--paper-dim)' }}>
-              // type <span style={{ color: 'var(--red)' }}>{confirmKeyword}</span> to confirm
+            {/*
+              Hard-coded uppercase on the static "// TYPE … TO CONFIRM"
+              wrapper instead of the t-up utility class — so the
+              keyword span renders in its actual case (case-sensitive
+              for the delete-user variant where the keyword is an
+              email/displayIdentity). The legacy HOARD/WIPE keywords
+              are already uppercase, so this is a no-op for them.
+              Validation stays strict (exact match); only the
+              displayed instruction is what-you-see-is-what-you-type.
+            */}
+            <div style={{ fontSize: 'var(--text-3xs)', letterSpacing: '0.12em', color: 'var(--paper-dim)' }}>
+              // TYPE <span style={{ color: 'var(--red)' }}>{confirmKeyword}</span> TO CONFIRM
             </div>
             <input
               className="field"

@@ -521,9 +521,24 @@ function PendingRequestRow({ user, onGenerate }: { user: AdminUser; onGenerate: 
 // Grid template shared between UserHeaderRow and UserRow so the
 // header columns line up perfectly with the data columns. 5 cols per
 // A-D10: identity (1fr) / status (70px) / joined (80px) / platforms+
-// games (130px — see A-D11 implementation note in the commit message)
-// / actions (56px).
-const USER_ROW_GRID = '1fr 70px 80px 130px 56px';
+// games (180px) / actions (80px).
+//
+// Column widths — landed values after live-page eyeball:
+//   - Platforms 130 → 180. The 130 the plan first specced was
+//     consistently wrapping "N platforms · M games" to two lines once
+//     M crossed ~3 digits ("488 games" / "395 games"). 180 fits the
+//     longest production case ("4 platforms · 745 games" — Andrea's
+//     row) cleanly on a single line at --text-3xs.
+//   - Actions 56 → 80. The 56 was just-wide-enough for the right-
+//     aligned [delete] text but left it visually butting against the
+//     platforms column boundary. 80 gives ~24 px of breathing room
+//     between the platforms cell content and the [delete] glyph.
+//   - Identity (1fr) loses ~75 px of width vs the prior layout. Long
+//     emails ("daniel.guernieri@gmail.com") still fit at typical
+//     desktop widths (1280+); below ~1100 the ellipsis on overflow
+//     handles it (the cell already has whiteSpace: nowrap +
+//     textOverflow: ellipsis, plus title= for the full email on hover).
+const USER_ROW_GRID = '1fr 70px 80px 180px 80px';
 
 function UserHeaderRow() {
   return (
@@ -642,7 +657,19 @@ function UserRow({
       <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
         {joined}
       </span>
-      <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+      <span
+        className="t-faint"
+        style={{
+          fontSize: 'var(--text-3xs)',
+          // nowrap + overflow + ellipsis so an unexpectedly long
+          // platform-count combo doesn't blow out the grid row at
+          // narrow widths. The 180 px column fits every production
+          // case today; this is the safety net for tomorrow.
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
         {platformsLabel}
       </span>
       <span style={{ textAlign: 'right' }}>
@@ -693,7 +720,12 @@ function CodeRow({ code }: { code: AdminInviteCode }) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '180px 1fr 180px 90px',
+        // Code (180px) / note (1fr) / used-by (240px — widened from
+        // 180 so "used by daniel.guernieri@gmail.com · 2026-05-08"
+        // fits on one line at --text-3xs) / actions (110px — widened
+        // from 90 for [revoke] breathing room, mirroring the
+        // user-row ACTIONS column treatment).
+        gridTemplateColumns: '180px 1fr 240px 110px',
         alignItems: 'baseline',
         padding: '6px 0',
         borderBottom: '1px dashed var(--rule)',
@@ -706,7 +738,18 @@ function CodeRow({ code }: { code: AdminInviteCode }) {
       <span className="t-faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {code.note ?? '(no note)'}
       </span>
-      <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+      <span
+        className="t-faint"
+        style={{
+          fontSize: 'var(--text-3xs)',
+          // Same nowrap + ellipsis safety net as the user-row
+          // platforms cell — 240 px fits every production case today,
+          // ellipsis catches future overflow rather than wrapping.
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
         {used ? `used by ${code.usedBy?.displayIdentity ?? '?'} · ${usedAt}` : 'unused'}
       </span>
       <span style={{ textAlign: 'right' }}>
