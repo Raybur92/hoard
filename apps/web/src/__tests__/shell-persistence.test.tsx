@@ -5,10 +5,16 @@
  *   F1 — Sidebar (and TopBar) stays mounted across navigations.
  *   F2 — `api.me` is called exactly once across multiple route changes.
  *   F3 — `RequireAuth` lives at the layout level and gates render once.
+ *
+ * Active-state assertions at the bottom pick up the deletion from
+ * docs/E2E_RESTORATION_PLAN.md §4.3: the `Navigation sidebar / tab-bar
+ * active state follows route` E2E tests proved pure route-to-DOM wiring
+ * — vitest with MemoryRouter + a forced breakpoint covers it without
+ * booting the API.
  */
 
 import { render, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
 
@@ -35,10 +41,18 @@ vi.mock('../lib/api', () => ({
     }),
     dashboard: vi.fn().mockResolvedValue({
       stats: {
-        totalGames: 0, playingCount: 0, backlogCount: 0, completedCount: 0,
-        onHoldCount: 0, droppedCount: 0, wishlistCount: 0,
-        totalPlaytimeMinutes: 0, completionPct: 0, weeklyAdded: 0,
-        playtimeByPlatform: [], genres: [],
+        totalGames: 0,
+        playingCount: 0,
+        backlogCount: 0,
+        completedCount: 0,
+        onHoldCount: 0,
+        droppedCount: 0,
+        wishlistCount: 0,
+        totalPlaytimeMinutes: 0,
+        completionPct: 0,
+        weeklyAdded: 0,
+        playtimeByPlatform: [],
+        genres: [],
       },
       nowPlaying: [],
       wishlistCountdown: [],
@@ -49,7 +63,14 @@ vi.mock('../lib/api', () => ({
     }),
     games: vi.fn().mockResolvedValue({ games: [], total: 0, page: 1, limit: 50, hasMore: false }),
     shelves: vi.fn().mockResolvedValue({
-      shelves: { Playing: [], Backlog: [], Completed: [], 'On Hold': [], Dropped: [], Wishlist: [] },
+      shelves: {
+        Playing: [],
+        Backlog: [],
+        Completed: [],
+        'On Hold': [],
+        Dropped: [],
+        Wishlist: [],
+      },
       counts: {},
     }),
     gameCounts: vi.fn().mockResolvedValue({ counts: {} }),
@@ -84,7 +105,8 @@ beforeAll(() => {
     unobserve(): void {}
     disconnect(): void {}
   }
-  (window as unknown as { ResizeObserver: typeof StubResizeObserver }).ResizeObserver = StubResizeObserver;
+  (window as unknown as { ResizeObserver: typeof StubResizeObserver }).ResizeObserver =
+    StubResizeObserver;
 });
 
 beforeEach(async () => {
@@ -102,14 +124,22 @@ describe('PR 1 — persistent shell across navigation', () => {
 
     // Wait for initial auth + sidebar to appear with the resolved username.
     await findByTestId('sidebar-username');
-    await waitFor(() => expect(container.querySelector('[data-testid="sidebar-username"]')?.textContent).toBe('andrea'));
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="sidebar-username"]')?.textContent).toBe(
+        'andrea',
+      ),
+    );
 
     const sidebarBefore = container.querySelector('aside.sidebar');
     expect(sidebarBefore).toBeTruthy();
 
     // Navigate to Library via the sidebar nav item.
     fireEvent.click(getByText('Library'));
-    await waitFor(() => expect(window.location.pathname === '/library' || container.querySelector('.topbar')).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        window.location.pathname === '/library' || container.querySelector('.topbar'),
+      ).toBeTruthy(),
+    );
 
     // Navigate to Releases (formerly "Upcoming" — see RELEASES_PLAN.md §1).
     fireEvent.click(getByText('Releases'));
@@ -133,7 +163,11 @@ describe('PR 1 — persistent shell across navigation', () => {
     );
 
     await findByTestId('sidebar-username');
-    await waitFor(() => expect(container.querySelector('[data-testid="sidebar-username"]')?.textContent).toBe('andrea'));
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="sidebar-username"]')?.textContent).toBe(
+        'andrea',
+      ),
+    );
 
     fireEvent.click(getByText('Library'));
     await waitFor(() => expect(container.querySelector('.topbar')).toBeTruthy());
@@ -153,7 +187,10 @@ describe('PR 1 — persistent shell across navigation', () => {
     const meSpy = vi.mocked(apiModule.api.me);
     let resolveMe: (u: unknown) => void = () => {};
     meSpy.mockImplementationOnce(
-      () => new Promise((resolve) => { resolveMe = resolve as (u: unknown) => void; }),
+      () =>
+        new Promise((resolve) => {
+          resolveMe = resolve as (u: unknown) => void;
+        }),
     );
 
     const { container, findByTestId } = render(
@@ -168,13 +205,98 @@ describe('PR 1 — persistent shell across navigation', () => {
 
     // Resolve auth — the shell should mount.
     resolveMe({
-      id: 'u1', email: 'andrea@test', name: 'andrea', createdAt: '2023-01-01T00:00:00.000Z',
-      status: 'ACTIVE', isAdmin: false, hasRequestedAccess: false,
-      preferences: { hypeThreshold: 5, libraryView: 'shelves', showHltb: true, coverDensity: 'standard', terminalCursor: true },
+      id: 'u1',
+      email: 'andrea@test',
+      name: 'andrea',
+      createdAt: '2023-01-01T00:00:00.000Z',
+      status: 'ACTIVE',
+      isAdmin: false,
+      hasRequestedAccess: false,
+      preferences: {
+        hypeThreshold: 5,
+        libraryView: 'shelves',
+        showHltb: true,
+        coverDensity: 'standard',
+        terminalCursor: true,
+      },
     });
     await findByTestId('sidebar-username');
 
     expect(container.querySelector('aside.sidebar')).toBeTruthy();
     expect(meSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Active state in nav (mirrors deleted E2E navigation tests)', () => {
+  it('sidebar item.active follows route on desktop', async () => {
+    // Desktop matchMedia + innerWidth are already set by the file-level
+    // beforeAll. Mounting on /library should give us a sidebar with the
+    // Library item flagged active.
+    const { container } = render(
+      <MemoryRouter initialEntries={['/library']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const active = container.querySelector('.sidebar .item.active');
+      expect(active).toBeTruthy();
+      expect(active?.textContent).toContain('Library');
+    });
+  });
+});
+
+describe('Active state in nav — mobile tab bar', () => {
+  beforeAll(() => {
+    // Flip to mobile for the tab-bar render path. innerWidth drives
+    // useBreakpoint's initial state; matchMedia drives subsequent
+    // re-renders triggered by `change` events.
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: false, // < 1024px → mobile
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+  });
+
+  afterAll(() => {
+    // Restore desktop so any test files that run after this one in the
+    // same vitest worker aren't poisoned with mobile state.
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('min-width: 1024px'),
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  });
+
+  it('tab-bar item.active follows route on mobile', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/library']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const active = container.querySelector('.m-tabbar .item.active');
+      expect(active).toBeTruthy();
+      expect(active?.textContent).toContain('Library');
+    });
   });
 });
