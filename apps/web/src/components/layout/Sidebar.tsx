@@ -91,6 +91,25 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
         </button>
       ))}
 
+      {/* Closed-beta admin entry — only rendered for users with the
+          isAdmin column flipped (just Andrea in v1, per I-D2). The
+          server enforces access via requireAdmin → 404; this is a
+          UI affordance, not a security boundary. */}
+      {user?.isAdmin && (
+        <>
+          <div className="group">// admin</div>
+          <button
+            type="button"
+            className={`item${isActive('/admin') ? ' active' : ''}`}
+            onClick={() => navigate('/admin')}
+            aria-current={isActive('/admin') ? 'page' : undefined}
+          >
+            <span className="glyph"><Icon name="user" size={12} /></span>
+            <span>Admin</span>
+          </button>
+        </>
+      )}
+
       <div className="group">// platforms</div>
       {PLATFORMS.map(({ label, code }) => {
         const p = platforms.find((pl) => pl.code === code);

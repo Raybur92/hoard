@@ -35,6 +35,7 @@ const PlatformDetailDesktop = lazyNamed(() => import('./components/screens/Platf
 const PlatformDetailMobile  = lazyNamed(() => import('./components/screens/PlatformDetailMobile'),  'PlatformDetailMobile');
 const PsnGuidedFlowDesktop  = lazyNamed(() => import('./components/screens/PsnGuidedFlowDesktop'),  'PsnGuidedFlowDesktop');
 const PsnGuidedFlowMobile   = lazyNamed(() => import('./components/screens/PsnGuidedFlowMobile'),   'PsnGuidedFlowMobile');
+const AdminScreen           = lazyNamed(() => import('./components/screens/AdminScreen'),           'AdminScreen');
 
 function SuspenseFallback() {
   return <div className="hoard-noise" style={{ minHeight: '100vh' }} />;
@@ -78,6 +79,11 @@ export default function App() {
                 <Route path="/settings"                         element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/:section"                element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/platforms/:code"         element={desktop ? <PlatformDetailDesktop /> : <PlatformDetailMobile />} />
+                {/* Admin panel — desktop-only per I-D3. The component
+                    handles its own breakpoint check + non-admin 404
+                    fallback (defense-in-depth alongside requireAdmin
+                    server-side and the Sidebar conditional entry). */}
+                <Route path="/admin"                            element={<AdminScreen />} />
               </Route>
 
               {/* Authed + active full-screen routes (no app shell) */}
