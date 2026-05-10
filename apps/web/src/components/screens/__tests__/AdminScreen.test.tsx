@@ -177,17 +177,76 @@ describe('AdminScreen — generate code flow', () => {
     expect(screen.getByLabelText(/note/i)).toBeTruthy();
   });
 
-  it('per-pending-row "generate code for X" button pre-fills the note', async () => {
+  it('per-pending-row "generate code for X" button pre-fills the note with email local-part (no name set)', async () => {
     (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
-      makeUser({ id: 'pr', displayIdentity: 'marco@gmail.com', status: 'PENDING_INVITE', hasRequestedAccess: true, accessRequestedAt: '2026-05-09T00:00:00.000Z' }),
+      makeUser({
+        id: 'pr',
+        email: 'marco@gmail.com',
+        name: null,
+        displayIdentity: 'marco@gmail.com',
+        status: 'PENDING_INVITE',
+        hasRequestedAccess: true,
+        accessRequestedAt: '2026-05-09T00:00:00.000Z',
+      }),
     ]);
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /generate code for marco@gmail.com/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /generate code for marco/i })).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole('button', { name: /generate code for marco@gmail.com/i }));
+    fireEvent.click(screen.getByRole('button', { name: /generate code for marco/i }));
     const input = screen.getByLabelText(/note/i) as HTMLInputElement;
-    expect(input.value).toBe('for marco@gmail.com');
+    // Pre-filled with `for <noteLabel>` — local-part of email when name
+    // is null, NOT the full email. Helps the codes list stay readable.
+    expect(input.value).toBe('for marco');
+  });
+
+  it('pre-fill prefers User.name when set; button label still shows displayIdentity (ground truth)', async () => {
+    // Two distinct concerns:
+    //   - Button label = displayIdentity (what the admin is acting on,
+    //     ground-truth identifier for picking the right row).
+    //   - Pre-fill note = noteLabel (compact recognizer for the codes
+    //     list later).
+    // For email-based users with a name set, these differ: button
+    // shows the email, note pre-fills with the name.
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeUser({
+        id: 'pr',
+        email: 'marco.rossi@example.com',
+        name: 'Marco Rossi',
+        displayIdentity: 'marco.rossi@example.com',
+        status: 'PENDING_INVITE',
+        hasRequestedAccess: true,
+        accessRequestedAt: '2026-05-09T00:00:00.000Z',
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      // Button text uses displayIdentity (ground truth).
+      expect(screen.getByRole('button', { name: /generate code for marco\.rossi@example\.com/i })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /generate code for marco\.rossi@example\.com/i }));
+    // Pre-fill uses noteLabel (compact recognizer).
+    expect((screen.getByLabelText(/note/i) as HTMLInputElement).value).toBe('for Marco Rossi');
+  });
+
+  it('pre-fill falls back to "Steam user — {id}" for synthetic-Steam accounts without a name', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeUser({
+        id: 'pr',
+        email: 'steam:76561198012345678@hoard.internal',
+        name: null,
+        displayIdentity: 'Steam user — 76561198012345678',
+        status: 'PENDING_INVITE',
+        hasRequestedAccess: true,
+        accessRequestedAt: '2026-05-09T00:00:00.000Z',
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /generate code for Steam user — 76561198012345678/i })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /generate code for Steam user/i }));
+    expect((screen.getByLabelText(/note/i) as HTMLInputElement).value).toBe('for Steam user — 76561198012345678');
   });
 
   it('successful generation transitions modal to created state with the code + copy button', async () => {

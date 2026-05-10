@@ -187,9 +187,13 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
 }
 
 function PendingRequestRow({ user, onGenerate }: { user: AdminUser; onGenerate: (note: string) => void }) {
-  // Pre-fill the note with "for <displayIdentity>" so the admin
-  // doesn't have to retype it per spec §7.2.
-  const noteHint = `for ${user.displayIdentity}`;
+  // Pre-fill the note with "for <noteLabel>" per spec §7.2. Using a
+  // compact label rather than the full displayIdentity — the note
+  // shows up later in the codes list as a quick recognizer for the
+  // admin; "for marco" reads better there than "for marco@gmail.com",
+  // and the full email is one row-cross-reference away in /admin/users
+  // if needed. See `noteLabel()` below for the precedence rule.
+  const noteHint = `for ${noteLabel(user)}`;
   return (
     <div className="panel" style={{ padding: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
@@ -447,6 +451,36 @@ function NotFoundView() {
 }
 
 /* ── helpers ──────────────────────────────────────────────── */
+
+/**
+ * Compact label for the pre-fill note on `[generate code for X]`.
+ * Optimized for "quick recognizer in the codes list later," NOT for
+ * "ground-truth identifier" — that's what `displayIdentity` is for.
+ *
+ * Precedence:
+ *   1. user.name             → "Andrea" / "Bedkarma"
+ *   2. real-email local-part → "marco" (when email isn't synthetic-Steam)
+ *   3. fall back to displayIdentity (covers synthetic-Steam users
+ *      without a name set, which renders as "Steam user — {steamId}")
+ *
+ * Mirrors the displayIdentity precedence rule (decision #34 framing)
+ * but skips the "real email always wins" path that displayIdentity
+ * uses for ground-truth — here we'd rather have a 5-char label than
+ * the full email.
+ */
+function noteLabel(user: AdminUser): string {
+  if (user.name && user.name.length > 0) return user.name;
+  const isSyntheticSteam =
+    user.email.startsWith('steam:') && user.email.endsWith('@hoard.internal');
+  if (!isSyntheticSteam) {
+    const at = user.email.indexOf('@');
+    if (at > 0) return user.email.slice(0, at);
+    return user.email;
+  }
+  // Synthetic-Steam without a name — fall back to displayIdentity,
+  // which renders "Steam user — {steamId}".
+  return user.displayIdentity;
+}
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
