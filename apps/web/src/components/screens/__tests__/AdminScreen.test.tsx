@@ -29,7 +29,6 @@ vi.mock('../../../hooks/useBreakpoint', () => ({
 }));
 
 import { api } from '../../../lib/api';
-import * as cache from '../../../lib/cache';
 import { AdminScreen } from '../AdminScreen';
 
 function makeAdmin(): AuthUser {
@@ -85,11 +84,8 @@ function renderScreen() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // The SWR cache (apps/web/src/lib/cache.ts) is module-singleton and
-  // persists across tests in the same file — without flushing here,
-  // earlier tests' resolved data leaks into later tests via cached
-  // entries under `admin:users` / `admin:invite-codes`.
-  cache.invalidate('');
+  // SWR cache reset is handled globally in apps/web/src/test-setup.ts
+  // via cache._resetForTests(). No per-file flush needed here.
   mockUseUser.mockReturnValue({ user: makeAdmin(), status: 'authed', setUser: vi.fn(), signOut: vi.fn(), refresh: vi.fn() });
   mockBp.mockReturnValue('desktop');
   (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([]);
