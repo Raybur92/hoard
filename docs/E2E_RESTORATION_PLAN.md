@@ -254,7 +254,23 @@ If the test fixture or the navigation drifts, the `afterEach` fails the test on 
 
 **What the Action does.** Single `psql -c "SELECT 1"` against `DATABASE_URL_TEST` via the `postgres` client image. Total runtime ~3 seconds. Output captured for the failure-mode handler.
 
-**Failure-mode behavior: open or comment on a single canonical issue.** On Action failure, `gh issue create` (or `gh issue comment` if the canonical issue exists) labeled `infra:test-db`. Single issue titled `[infra] test-db keepalive failing` gets re-opened or commented on across runs — keeps the noise level bounded (no daily issue spam) while making failures visible. Contrast with: paging someone (overkill for a single-user hobby tool, no on-call rotation), logging silently (the original problem we're trying to avoid), failing the workflow without surfacing (would only get noticed on next E2E run, by which point the DB might have paused).
+**Failure-mode behavior: open or comment on a single canonical issue.** On Action failure, find-or-create a canonical issue labeled `infra:test-db` with the exact title `[infra] test-db keepalive failing`. The find step is explicit: lookup must match BOTH the label AND the exact title (label-only matching could pick a stale historical issue with the same label; title-only matching could miss when label hygiene drifts). If a matching open issue exists → `gh issue comment` with the failure timestamp + run URL. If not → `gh issue create` with the canonical title + label. Closed issues with the same title are NOT re-opened automatically — once Andrea has closed an issue, that's a "this was handled" signal, and the next failure starts a fresh issue (so closure dates remain meaningful audit data).
+
+The lookup invocation in the workflow:
+
+```bash
+# Find the open canonical issue, if any. Empty string if none.
+existing=$(gh issue list \
+  --label 'infra:test-db' \
+  --state open \
+  --json number,title \
+  --jq '.[] | select(.title == "[infra] test-db keepalive failing") | .number' \
+  | head -n 1)
+```
+
+`--state open` plus the exact-title filter means: at most one match, by construction. `head -n 1` is belt-and-suspenders against the impossible "two issues with identical label + title both open" case — which would itself be a label-discipline bug worth surfacing rather than silently appending to one of them.
+
+Contrast with rejected alternatives: paging someone (overkill for a single-user hobby tool, no on-call rotation), logging silently (the original problem we're trying to avoid), failing the workflow without surfacing (would only get noticed on next E2E run, by which point the DB might have paused).
 
 **Recovery path if pause-on-inactivity bites despite the keepalive.** Two-layer:
 
@@ -296,16 +312,26 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANONICAL_TITLE: '[infra] test-db keepalive failing'
         run: |
           set -euo pipefail
-          existing=$(gh issue list --label 'infra:test-db' --state open --json number --jq '.[0].number' || true)
+          # Lookup by BOTH label AND exact title — see §3.7 for why.
+          # Label-only could pick a stale historical issue with the same
+          # label; title-only could miss when label hygiene drifts.
+          existing=$(gh issue list \
+            --label 'infra:test-db' \
+            --state open \
+            --json number,title \
+            --jq ".[] | select(.title == \"$CANONICAL_TITLE\") | .number" \
+            | head -n 1)
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body "Keepalive failed at $(date -u +%Y-%m-%dT%H:%M:%SZ). Run: ${{ github.run_url }}"
+            gh issue comment "$existing" \
+              --body "Keepalive failed at $(date -u +%Y-%m-%dT%H:%M:%SZ). Run: ${{ github.run_url }}"
           else
             gh issue create \
-              --title '[infra] test-db keepalive failing' \
+              --title "$CANONICAL_TITLE" \
               --label 'infra:test-db' \
-              --body 'Test DB keepalive Action failed. Check Supabase dashboard; manual unpause may be needed.'
+              --body $'Test DB keepalive Action failed.\n\nCheck Supabase dashboard; manual unpause may be needed.\nLatest run: ${{ github.run_url }}'
           fi
 ```
 
@@ -342,7 +368,7 @@ A single PR review covers all five; merge as a unit.
 | `packages/db/prisma/seed-e2e.ts` | Three users (1 admin matching Andrea's shape, 1 ACTIVE, 1 PENDING_INVITE with `hasRequestedAccess: true`) + 12 games seeded under each ACTIVE user + a handful of platforms with `syncStatus: 'ok'`. Stable IDs (e.g. `e2e-user-admin`, `e2e-game-elden-ring`) so spec assertions can target them by id. Idempotent — runs `prisma migrate reset --force` first via CLI flag; no logic to "skip if exists." |
 | `apps/web/tests/e2e/fixtures.ts` | Global Playwright auth fixture per §3.6. Exports `test`, `expect`. `test.beforeEach` authenticates against the test backend; `test.afterEach` asserts post-nav URL matches `expectedUrl`. Throws helpful error if `expectedUrl` not declared. |
 | `apps/web/tests/e2e/README.md` | Contributor guide (commit 5). Naming convention, fixture usage, seed reset workflow, `infra:test-db` issue runbook. |
-| `.env.test.example` (committed; gitignored real version is `.env.test`) | Template documenting which env vars E2E expects. `DATABASE_URL_TEST=...` placeholder + comment about where to find the real value (1Password, Supabase dashboard, etc.). |
+| `.env.test.example` (committed; the real `.env.test` is gitignored — see §4.6 step 7) | Template documenting which env vars E2E expects. **Placeholder values only — NO real connection strings, NO real secrets.** Format: `DATABASE_URL_TEST=postgresql://<user>:<password>@<host>:<port>/<db>?pgbouncer=true&connection_limit=5` with literal angle-bracket placeholders. Plus a comment block pointing the developer at where to find the real value (Supabase dashboard → Settings → Database). The example file is what a fresh clone reads to know "this env var is required for E2E"; the rule is that anyone running `git diff` on a commit touching this file should never see a real credential. |
 
 **Renamed files:**
 
@@ -356,46 +382,55 @@ A single PR review covers all five; merge as a unit.
 | Path | Change |
 |---|---|
 | `apps/web/playwright.config.ts` | `webServer[0]` (the `dev:api` config) gains an `env: { DATABASE_URL: process.env['DATABASE_URL_TEST'] }` block so the API boots against the test DB. `dev:web` unchanged. Local dev reads `DATABASE_URL` from `apps/api/.env` as before. |
-| `apps/web/tests/e2e/screens.integration.spec.ts` (post-rename) | Imports swap from `@playwright/test` to `./fixtures`. Per-describe `test.use({ expectedUrl })` declarations. Content assertions retargeted from `Hollow Knight: Silksong` etc. to seeded titles (`elden ring`-class). Reclassification verdicts applied (§4.3). Two `test.describe` blocks deleted; one drift-guard moved to vitest. |
+| `apps/web/tests/e2e/screens.integration.spec.ts` (post-rename) | Imports swap from `@playwright/test` to `./fixtures`. Per-describe `test.use({ expectedUrl })` declarations. Content assertions retargeted from `Hollow Knight: Silksong` etc. to seeded titles (`elden ring`-class). Reclassification verdicts applied (§4.3). Seven `test.describe` blocks / specs deleted, with covering vitest tests added in the same commit. |
 | `apps/web/tests/e2e/a11y.integration.spec.ts` (post-rename) | Same import + `test.use` updates. Each route's axe scan now runs against a real authed render (was: false-positive scan against `/login`). |
+| `apps/web/src/__tests__/shell-persistence.test.tsx` | Extended with sidebar + tab-bar active-state assertions, picking up the deletions from §4.3. |
+| `apps/web/src/__tests__/legacy-redirects.test.tsx` (NEW) | Single MemoryRouter test for `/upcoming` → `/releases`. Picks up the deletion from §4.3. |
+| `apps/web/src/components/screens/__tests__/LibraryDesktop.test.tsx` (NEW or extended if exists) | 6-shelf-headers assertion against mocked shelves data. Picks up the deletion from §4.3. |
+| `apps/web/src/components/screens/releases/__tests__/primitives.test.tsx` | Verified to drift-guard "no [mark all owned]"; one-line addition if missing. Picks up the deletion from §4.3. |
 | `tests/snapshots/dashboard*.png` / `library*.png` / `releases*.png` / `releases-recent*.png` / `game-detail*.png` (and mobile variants) | Regenerated against seeded data in commit 4. The current baselines were captured against a populated dashboard pre-I-series and have been broken since. |
-| `apps/web/playwright.offline.config.ts` | Investigated and either updated or marked deprecated. The offline E2E isn't part of E1's scope but if it shares the broken auth path, it gets the same fixture treatment or a clear "deprecated; offline coverage now lives in `*.component.spec.ts` mocks" note. **Open question — flagged for review.** |
+| `.gitignore` | Adds `apps/web/.env.test` if not already covered (verified during E1 — see §4.6 step 5). The existing `.env.*.local` glob does NOT catch `.env.test`. |
 
-**Out-of-band ops** (Andrea performs before commit 1 lands):
+**Deleted files:**
 
-- Provision `hoard-test` Supabase project in EU West region.
-- Apply prod migration history via the documented `db execute` + `migrate resolve` recipe (per `CLAUDE.md` operational gotchas).
-- Add `DATABASE_URL_TEST` to GitHub repo Actions secrets.
-- Save `DATABASE_URL_TEST` to local `apps/web/.env.test` (gitignored).
-- Verify free-tier inactivity timer is reset (a manual `SELECT 1` from psql counts).
+| Path | Reason |
+|---|---|
+| `apps/web/playwright.offline.config.ts` | Per Andrea's instruction (2026-05-10): offline coverage is OUT of E1's scope. Deleting outright rather than updating-or-deprecating means the file's "yes, we used to have offline E2E" footprint is removed from the tree. If offline coverage is later wanted, it lands in a follow-up workstream with proper scoping. The `test:e2e:offline` script in `apps/web/package.json` is removed in the same commit. |
 
 #### 4.3 — Existing test reclassification verdicts
 
-Each existing test gets a verdict — **integration**, **component**, or **delete** — based on what it uniquely proves (per §3.1). Landing in commit 3.
+Each existing test gets a verdict — **integration**, **component**, or **delete** — by asking "if we deleted this, would we lose unique signal that the layer below couldn't recover?" (per §3.1). Stricter pass after Andrea's review reminder: be willing to delete rather than reclassify when a test really proves "this component renders without crashing" or "this prop wires through correctly" — that's vitest territory regardless of where the test lives today. Landing in commit 3.
+
+**Decision rule:** if a visual snapshot already covers the same property (page mounted, headers rendered) AND vitest can prove the structural concern with mocked data, the structural assertion is redundant — delete. Visual snapshots aren't perfect (brittle on CSS changes) but they catch the "did this render at all" property, and vitest catches the wiring-through property; the integration test in the middle doesn't add unique signal.
 
 | Test | Verdict | Reasoning |
 |---|---|---|
-| `Dashboard / shows game count` | **INTEGRATION** | Asserts `.bignum` shows a real number from a real DB query through real rendering. Exact integration shape — keep. |
-| `Dashboard / shows now-playing section` | **INTEGRATION** | Content from seeded game (post-rename: `seed-elden-ring` → "Elden Ring", or whatever the seed picks). Integration. |
-| `Dashboard / visual snapshot` | **INTEGRATION** | Pixel match against full stack render. Integration. |
-| `Library /library shows all 6 shelves` | **INTEGRATION** | Could be vitest with mocked data, but the value here is "real backend returns the right shelf shape AND frontend renders it." Keep as integration. |
-| `Library /library shows HLTB hint on backlog item` | **INTEGRATION** | Real HLTB data path → render. Integration. |
-| `Library /library visual snapshot` | **INTEGRATION** | Same. |
-| `Releases /releases renders the page chrome` | **INTEGRATION** | Mounts the page, asserts mode-toggle / view-header structure. Real render. Integration. |
-| `Releases /releases renders either content or an empty-state CTA` | **INTEGRATION** | Validates the page mounts SOMETHING valid given live IGDB + seed data. Integration. |
-| `Releases /releases visual snapshot` | **INTEGRATION** | Same. |
-| `Releases recent /releases/recent renders the page chrome` | **INTEGRATION** | Validates the RECENT page mounts against the real `/api/releases/recent` feed. Integration. |
-| `Releases recent /releases/recent drift-guard: no [mark all owned]` | **DELETE → vitest** | Asserts a UI element is _not_ rendered. Pure component property; doesn't need real backend. The assertion is already implicitly covered by `releases/__tests__/primitives.test.tsx` drift-guard tests (per CLAUDE.md mentions of removed-mock-button assertions); E1 confirms coverage exists or adds a one-liner there. |
+| `Dashboard / shows game count` | **INTEGRATION** | `.bignum` shows a real number from a real DB query through real rendering. Vitest could prove `<Dashboard stats={{totalGames: 42}} />` shows 42, but couldn't prove the real `/api/dashboard` returns the right shape AND the count is non-zero. Integration. |
+| `Dashboard / shows now-playing section` | **INTEGRATION** | Content assertion targeting a specific seeded game title. Vitest with mocked `nowPlaying` proves rendering; integration proves the API actually returns the seeded game. Integration. |
+| `Dashboard / visual snapshot` | **INTEGRATION** | Pixel match against full stack. Integration. |
+| `Library /library shows all 6 shelves` | **DELETE → vitest** | Iterates 6 hardcoded text labels and checks each is visible. Labels are hardcoded in `LibraryDesktop.tsx`; backend can't influence them. Visual snapshot already proves the shelves view mounted with headers. Vitest with `<LibraryDesktop shelves={...} />` and mocked data can prove the 6 labels render. **Redundant with snapshot AND covered by vitest** — delete. New vitest in `apps/web/src/components/screens/__tests__/LibraryDesktop.test.tsx` if not already covered. |
+| `Library /library shows HLTB hint on backlog item` | **INTEGRATION** | The `~12h`-style regex assertion is the giveaway: this proves real HLTB data was fetched, persisted, returned by the API, and rendered by the frontend. Vitest with mocked HLTB data proves rendering only; integration proves the data path. Keep. |
+| `Library /library visual snapshot` | **INTEGRATION** | Pixel match against full stack. Integration. |
+| `Releases /releases renders the page chrome` | **DELETE → vitest** | Asserts mode-toggle tabs exist on desktop / `.m-view-header` on mobile. Pure structural "page mounted" check. Visual snapshot already covers it. Vitest with mocked feed proves the chrome renders. **Redundant** — delete. |
+| `Releases /releases renders either content or an empty-state CTA` | **INTEGRATION** | Asserts the page mounts SOMETHING valid given **live IGDB feed + seed wishlist** behavior. Vitest cannot prove "with a real (fluctuating) IGDB response, the page renders content OR empty state" — that's a flake-resistance property specifically for the integration layer. Keep. |
+| `Releases /releases visual snapshot` | **INTEGRATION** | Pixel match. Integration. |
+| `Releases recent /releases/recent renders the page chrome` | **INTEGRATION (kept)** | Borderline case — same shape as `Releases /releases renders chrome` (which gets deleted) — BUT `/releases/recent` has no visual snapshot fallback. Deleting this test would leave the page with E2E coverage of zero. Keeping as the page's only integration smoke. If a `/releases/recent` snapshot is later added, this can be deleted then. |
+| `Releases recent /releases/recent drift-guard: no [mark all owned]` | **DELETE → vitest** | Asserts a UI element is _not_ rendered. Pure component property; doesn't need real backend. Assertion is already implicitly covered by `releases/__tests__/primitives.test.tsx` drift-guard tests (per CLAUDE.md mentions of removed-mock-button assertions); E1 confirms coverage exists or adds a one-liner there. |
 | `Legacy redirects /upcoming redirects to /releases` | **DELETE → vitest** | Pure client-side router behavior. Zero integration value. `MemoryRouter` test in vitest can prove it exhaustively without booting the API. Add a new test in `apps/web/src/__tests__/legacy-redirects.test.tsx` (or extend `auth-deeplink.test.tsx`) — single `expect(getPath()).toBe('/releases')` assertion. |
-| `Game Detail /game/:id shows game title` | **INTEGRATION** | Content from seeded game. Integration. |
-| `Game Detail /game/:id shows receipt` | **INTEGRATION** | Real-render structural assertion against a real game's data. Integration. |
-| `Game Detail /game/:id visual snapshot` | **INTEGRATION** | Same. |
-| `Navigation sidebar active state follows route (desktop)` | **INTEGRATION** | Real route → real DOM `.active` class. Vitest could prove with MemoryRouter but adds little signal vs the integration test. Keep — the assertion is cheap and pins the routing-to-rendering pipeline. |
-| `Navigation tab bar active state follows route (mobile)` | **INTEGRATION** | Same. |
-| `Navigation navigating from dashboard to library works` | **INTEGRATION** | Click → real navigation → real fetch → real render. Pure integration value. |
-| `a11y.integration.spec.ts` (12 tests across 6 routes × 2 viewports) | **INTEGRATION** | Currently false-positive. After E1's fixture lands, axe-core scans the actual authed routes. Integration. |
+| `Game Detail /game/:id shows game title` | **INTEGRATION** | Content from seeded game retrieved via real `/api/games/:id` query. Integration. |
+| `Game Detail /game/:id shows receipt` | **INTEGRATION** | Asserts `.receipt` mounts AND "thank u for hoarding" text is present. Real-render structural plus content assertion. Vitest with mocked `UserGameDetail` proves rendering; integration proves the real game data flows through the receipt block. Keep — the receipt is design-system-heavy enough that pixel-stable rendering through a real data path adds signal. |
+| `Game Detail /game/:id visual snapshot` | **INTEGRATION** | Pixel match. Integration. |
+| `Navigation sidebar active state follows route (desktop)` | **DELETE → vitest** | Asserts `.sidebar .item.active` contains "Library" after `goto('/library')`. Pure route-to-DOM wiring. Vitest with `MemoryRouter initialEntries={['/library']}` can prove this exhaustively; `shell-persistence.test.tsx` already does similar route-driven assertions. Add a sibling test there (one extra `expect`). **Redundant.** |
+| `Navigation tab bar active state follows route (mobile)` | **DELETE → vitest** | Same shape as sidebar, mobile variant. Vitest with `useBreakpoint()` mocked to mobile + MemoryRouter covers it. Delete; extend shell-persistence.test.tsx. |
+| `Navigation navigating from dashboard to library works` | **INTEGRATION** | Click → real navigation → real fetch (`/api/games/shelves` or similar fires) → real content render. Three integration concerns at once that vitest can't prove together: vitest-with-mocks can do click-to-navigate, but the `/api/games/shelves` fetch is the integration property — it triggers when the route mounts. Keep. |
+| `a11y.integration.spec.ts` (12 tests across 6 routes × 2 viewports) | **INTEGRATION** | Currently false-positive (scans `/login` for every authed route). After E1's fixture lands, axe-core scans the actual authed routes. Integration. |
 
-**Net change:** 38 → 36 tests in `screens.integration.spec.ts` (drop 2 to vitest); 12 tests in `a11y.integration.spec.ts` (unchanged count, becomes meaningful). Plus 2 new vitest entries.
+**Net change:**
+- **Before:** 18 unique screens.spec.ts tests (×2 viewports for visual snapshots + most others where viewport-aware = ~38 test instances) + 12 a11y tests.
+- **After E1:**
+  - `screens.integration.spec.ts`: 11 unique tests kept (×2 viewports where applicable) — Dashboard 3, Library 2 (HLTB + visual), Releases 2 (content-or-empty + visual), Releases recent 1 (chrome only), Game Detail 3, Navigation 1 (click-to-navigate). **7 deletions** moved to vitest or covered by visual snapshots.
+  - `a11y.integration.spec.ts`: 12 tests (unchanged count; becomes meaningful instead of false-positive).
+  - **New vitest entries** (in commit 3 or as small follow-ups in E1's same PR): `LibraryDesktop.test.tsx` for the 6-shelf assertion; `legacy-redirects.test.tsx` for `/upcoming` → `/releases`; extension to `shell-persistence.test.tsx` for sidebar + tab-bar active-state assertions; verify primitives.test.tsx drift-guard for "no [mark all owned]" already exists or add it. ~5 new vitest tests covering the 7 deletions.
 
 #### 4.4 — Manual verification checklist
 
@@ -412,14 +447,56 @@ After commit 5 lands and CI is green, Andrea runs through the following before m
 
 #### 4.5 — Success criteria
 
-- 36 tests pass in `screens.integration.spec.ts` against the test DB.
+- 11 tests pass in `screens.integration.spec.ts` against the test DB (after §4.3 reclassification — was 18 before deletions).
 - 12 tests pass in `a11y.integration.spec.ts` — with a manual sanity-spot-check that they're actually scanning the right route (per the misroute test in §4.4).
 - Visual snapshots stable across two consecutive runs.
-- `test-db-keepalive` Action runs daily, opens the canonical issue exactly when it should.
+- `test-db-keepalive` Action runs daily, opens the canonical issue exactly when it should, comments on the existing canonical issue when one is already open.
 - CI's `migrate status` gate fails when migrations drift between prod and test.
 - Local dev (`npm run dev`, `npm run dev:web`, etc.) is unchanged — `DATABASE_URL` still points at prod, no impact on Andrea's normal workflow.
 - New `apps/web/tests/e2e/README.md` is concise enough to read in <2 minutes; contains examples of integration spec + component spec + when to choose each.
-- Two new vitest tests cover the deleted E2E checks (drift-guard, `/upcoming` redirect).
+- ~5 new vitest tests cover the 7 E2E deletions (drift-guard, legacy redirect, sidebar active state, tab-bar active state, library 6-shelf headers).
+- `playwright.offline.config.ts` and the `test:e2e:offline` script are removed cleanly; no dangling references remain.
+
+#### 4.6 — Out-of-band setup checklist (Andrea performs)
+
+The agent's PR commits assume these have already been done. Pulled out of §4.2 so steps don't get buried in the file-by-file diff. Each step is annotated with WHEN it has to happen relative to the PR.
+
+**Phase A — One-time setup (run before commit 1's PR is opened):**
+
+1. **Provision the `hoard-test` Supabase project.** Free tier; `EU West (eu-west-1)` region to match prod (consistent connection latency from the API process during CI). Note the project ref + the connection string with the transaction pooler port (6543).
+
+2. **Apply prod migration history to the test project.** Use the documented pgbouncer workaround per `CLAUDE.md` operational gotchas:
+
+    ```bash
+    DATABASE_URL=<test-db-url-without-pgbouncer-params> \
+    npx prisma db execute \
+      --file packages/db/prisma/migrations/<each-migration>/migration.sql \
+      --schema packages/db/prisma/schema.prisma
+    ```
+
+    Then `npx prisma migrate resolve --applied <name>` for each. Do this in chronological order. Verify end-state by checking `_prisma_migrations` row count matches prod.
+
+3. **Enable RLS on the new project's public tables** (per AGENT.md key decision #10). Re-run the SQL from `20260504100000_enable_rls_on_public_tables/migration.sql` against the test DB.
+
+4. **Run `seed-e2e.ts` once locally** to populate the test DB with the deterministic 3 users + 12 games seed. Verify via Prisma Studio or a `SELECT count(*) FROM "User"` query that you see 3 rows.
+
+**Phase B — Secret distribution (before first CI run):**
+
+5. **Add `DATABASE_URL_TEST` to GitHub repo Actions secrets.** Settings → Secrets and variables → Actions → New repository secret. Value is the test project's full pooled connection string with `?pgbouncer=true&connection_limit=5` query-string params (matching prod's gotchas). Verify the keepalive workflow can read it by manually triggering the Action (Actions tab → workflow_dispatch).
+
+6. **Create local `apps/web/.env.test`** (gitignored) with the same `DATABASE_URL_TEST=...` value. This is what Playwright reads when running E2E locally. **`.env.test.example` is committed alongside as a placeholder** — confirm it contains zero real connection strings (template should be `DATABASE_URL_TEST=postgresql://<user>:<password>@<host>:<port>/<db>?pgbouncer=true&connection_limit=5` with literal angle-bracket placeholders, not real values).
+
+7. **Verify `.env.test` is gitignored.** The existing `.gitignore` covers `.env`, `.env.local`, and `.env.*.local` — but **`.env.test` is NOT covered by any of those globs**. Commit 1 of E1 must include a `.gitignore` line `apps/web/.env.test`. Verify post-commit by running `git check-ignore -v apps/web/.env.test` — output should show the rule that matched.
+
+**Phase C — Verification (after PR merges):**
+
+8. **Manually trigger `test-db-keepalive`** once via the Actions UI to confirm the workflow runs successfully end-to-end (already covered in §4.4's checklist; restated here so the operational sequence is self-contained).
+
+9. **Confirm the keepalive runs unattended at 04:00 UTC on the next day.** Check the Actions tab the morning after merge to confirm a green run exists. If not, the cron didn't fire — investigate via GH Actions docs (cron schedule on the default branch, free-account quotas, etc.).
+
+10. **Watch for the canonical issue.** It should NOT auto-open under healthy operation. If it appears in the first week, that's the failure path doing its job — investigate per the §3.7 recovery flow.
+
+**Sanity check on cost:** Phase A is ~30 minutes (provisioning + migration replay + seed). Phase B is ~5 minutes (paste the secret, add the gitignore line). Phase C is read-only.
 
 ### E2 — Reinstate `welcome.spec.ts`
 
@@ -453,6 +530,6 @@ Mostly an integration spec under the new convention; one targeted component spec
 |---|---|---|
 | 1 — Diagnose | Done | Captured in §1. |
 | 2 — Strategy decision | **Done (2026-05-09)** — Andrea confirmed Option F + 5 refinements | See §3.1–§3.5 for the locked rationale and §3.4 for secondary decisions (free tier + keepalive, secret locations, a11y fix in E1). |
-| 3 — E1 PR plan drafts (concrete deliverables) | **Done (2026-05-10)** — pending Andrea's review of this draft | §3.6 (auth fixture mechanism, recommendation: per-test expected-URL declaration) + §3.7 (keepalive Action specifics: daily cron, canonical-issue failure-mode, two-layer retry/recovery) added. §4 expanded into PR-shaped specifics: 5-commit grouping (§4.1), file-by-file changes (§4.2), 18 existing-test reclassification verdicts incl. 2 deletions moved to vitest (§4.3), 8-item manual verification checklist (§4.4), success criteria (§4.5). |
-| 4 — E1 implementation | Pending | After step 3 review lands. Estimated ~4–6 hours of work + ~30 min of operational ops (Supabase provisioning + secrets) for Andrea. |
+| 3 — E1 PR plan drafts (concrete deliverables) | **Locked (2026-05-10)** — Andrea confirmed all 4 scrutiny items + 3 review adjustments | §3.6 (auth fixture: per-test expected-URL declaration, Option β, recommendation locked) + §3.7 (keepalive Action: daily 04:00 UTC cron, canonical-issue with explicit label-AND-exact-title dedup, two-layer recovery). §4 expanded into PR-shaped specifics: 5-commit grouping (§4.1), file-by-file changes (§4.2, includes outright deletion of `playwright.offline.config.ts`), 18 existing-test reclassification verdicts incl. **7 deletions** moved to vitest (§4.3 — stricter pass after Andrea's review), 8-item manual verification checklist (§4.4), success criteria (§4.5), 10-step out-of-band setup checklist with Phase A/B/C annotations (§4.6). |
+| 4 — E1 implementation | **Pending Andrea's green-light** | After step 3 lock above + Andrea's "proceed to E1 PR" signal. Estimated ~4–6 hours of agent work + Phase A/B operational ops (~35 min for Andrea: Supabase provisioning + migration replay + seed + secret distribution). |
 | 5 — E2 (welcome.integration.spec.ts + welcome-error-states.component.spec.ts) | Pending | After E1 lands. |
