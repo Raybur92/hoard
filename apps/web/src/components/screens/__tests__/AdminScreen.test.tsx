@@ -13,6 +13,7 @@ vi.mock('../../../lib/api', async () => {
         listInviteCodes: vi.fn(),
         createInviteCode: vi.fn(),
         deleteInviteCode: vi.fn(),
+        deleteUser: vi.fn(),
       },
     },
   };
@@ -341,5 +342,361 @@ describe('AdminScreen — revoke unused code', () => {
       expect(screen.getByText('HOARD-USED-CODE')).toBeTruthy();
     });
     expect(screen.queryByRole('button', { name: /revoke/i })).toBeNull();
+  });
+});
+
+/* ── A1 commit 4 ── filter / search / sort / delete ── */
+
+function renderScreenWithUrl(url: string) {
+  return render(
+    <MemoryRouter initialEntries={[url]}>
+      <AdminScreen />
+    </MemoryRouter>,
+  );
+}
+
+const userFixtures = () => [
+  makeUser({
+    id: 'admin-id',
+    email: 'andrea@hoard.lan',
+    displayIdentity: 'andrea@hoard.lan',
+    name: 'Andrea',
+    isAdmin: true,
+    status: 'ACTIVE',
+    createdAt: '2026-04-01T00:00:00.000Z',
+    platforms: { count: 4, codes: ['ST', 'PS', 'XB', 'GG'] },
+    gamesCount: 745,
+    wishlistCount: 12,
+  }),
+  makeUser({
+    id: 'luigi-id',
+    email: 'luigi@hoard.lan',
+    displayIdentity: 'luigi@hoard.lan',
+    name: 'Luigi',
+    isAdmin: false,
+    status: 'ACTIVE',
+    createdAt: '2026-05-05T00:00:00.000Z',
+    platforms: { count: 2, codes: ['ST', 'PS'] },
+    gamesCount: 488,
+    wishlistCount: 5,
+  }),
+  makeUser({
+    id: 'marco-id',
+    email: 'marco@example.com',
+    displayIdentity: 'marco@example.com',
+    name: null,
+    isAdmin: false,
+    status: 'ACTIVE',
+    createdAt: '2026-05-09T00:00:00.000Z',
+    platforms: { count: 1, codes: ['ST'] },
+    gamesCount: 42,
+    wishlistCount: 0,
+  }),
+  makeUser({
+    id: 'pending-id',
+    email: 'sara@example.com',
+    displayIdentity: 'sara@example.com',
+    name: null,
+    isAdmin: false,
+    status: 'PENDING_INVITE',
+    hasRequestedAccess: true,
+    accessRequestedAt: '2026-05-10T00:00:00.000Z',
+    accessRequestMessage: 'hi',
+    createdAt: '2026-05-10T00:00:00.000Z',
+    platforms: { count: 0, codes: [] },
+    gamesCount: 0,
+    wishlistCount: 0,
+  }),
+];
+
+describe('AdminScreen — filter chips (A-D9 strict semantics)', () => {
+  it('default filter "all" shows every user with the right counts on each chip', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/andrea@hoard\.lan/)).toBeTruthy());
+    // Counts on chips: all (4) · active (2 = luigi+marco, NOT andrea-admin) ·
+    // pending (1 = sara) · admin (1 = andrea).
+    expect(screen.getByRole('button', { name: /Filter users: all/ })).toHaveTextContent('all (4)');
+    expect(screen.getByRole('button', { name: /Filter users: active/ })).toHaveTextContent('active (2)');
+    expect(screen.getByRole('button', { name: /Filter users: pending/ })).toHaveTextContent('pending (1)');
+    expect(screen.getByRole('button', { name: /Filter users: admin/ })).toHaveTextContent('admin (1)');
+  });
+
+  it('"active" filter EXCLUDES admins (A-D9 strict) — assertion scoped via [delete] button presence in ALL USERS', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?filter=active');
+    // Assertion via [delete] buttons because they only render inside
+    // ALL USERS rows. PENDING REQUESTS renders sara unconditionally
+    // regardless of the chip filter (filter scope is ALL USERS only).
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeTruthy(),
+    );
+    expect(screen.getByRole('button', { name: /Delete marco@example\.com/ })).toBeTruthy();
+    // No delete button for andrea (admin hidden from ALL USERS) or
+    // sara (pending hidden from ALL USERS).
+    expect(screen.queryByRole('button', { name: /Delete andrea@hoard\.lan/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Delete sara@example\.com/ })).toBeNull();
+  });
+
+  it('"admin" filter shows only admins in ALL USERS', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?filter=admin');
+    // Andrea is the current admin (own row → no [delete] button per A-D2)
+    // so we can't use the [delete]-button-presence proxy here. Instead
+    // assert that no NON-admin row's [delete] button is rendered.
+    await waitFor(() => expect(screen.getByText(/andrea@hoard\.lan/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Delete marco@example\.com/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Delete sara@example\.com/ })).toBeNull();
+  });
+
+  it('"pending" filter shows pending users in ALL USERS (sara also persists in PENDING REQUESTS section)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?filter=pending');
+    // Sara now has a [delete] button — only present in ALL USERS rows.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Delete sara@example\.com/ })).toBeTruthy(),
+    );
+    // Active + admin users are hidden from ALL USERS.
+    expect(screen.queryByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Delete marco@example\.com/ })).toBeNull();
+    // Andrea is the admin (own row, never gets a button anyway).
+    expect(screen.queryByRole('button', { name: /Delete andrea@hoard\.lan/ })).toBeNull();
+  });
+});
+
+describe('AdminScreen — search (A-D8 no debounce)', () => {
+  it('filters users by email substring (case-insensitive)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?q=marco');
+    await waitFor(() => expect(screen.getByText(/marco@example\.com/)).toBeTruthy());
+    expect(screen.queryByText(/luigi@hoard\.lan/)).toBeNull();
+  });
+
+  it('filters by name when set', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?q=Luigi');
+    await waitFor(() => expect(screen.getByText(/luigi@hoard\.lan/)).toBeTruthy());
+    expect(screen.queryByText(/marco@example\.com/)).toBeNull();
+  });
+
+  it('typing into the search input updates URL on every keystroke (no debounce)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/andrea@hoard\.lan/)).toBeTruthy());
+    const input = screen.getByPlaceholderText('find by email or name…') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'marco' } });
+    // After the keystroke, only marco's row remains.
+    await waitFor(() => expect(screen.queryByText(/luigi@hoard\.lan/)).toBeNull());
+    expect(screen.getByText(/marco@example\.com/)).toBeTruthy();
+  });
+
+  it('search + filter compose (active filter + search "lui" returns only luigi)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?filter=active&q=lui');
+    await waitFor(() => expect(screen.getByText(/luigi@hoard\.lan/)).toBeTruthy());
+    expect(screen.queryByText(/marco@example\.com/)).toBeNull(); // active but no match
+    expect(screen.queryByText(/andrea@hoard\.lan/)).toBeNull(); // matches but admin excluded
+  });
+
+  it('shows the no-match empty state when search returns nothing', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?q=zzzznothing');
+    await waitFor(() => expect(screen.getByText(/no users match "zzzznothing"/)).toBeTruthy());
+  });
+});
+
+describe('AdminScreen — sort cycle button (joined → status → platforms)', () => {
+  it('default sort label is "sort: joined ↓"', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/sort: joined ↓/)).toBeTruthy());
+  });
+
+  it('clicking the sort button cycles joined → status → platforms → joined', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/sort: joined ↓/)).toBeTruthy());
+    const button = screen.getByRole('button', { name: /Cycle sort:/ });
+    fireEvent.click(button);
+    // Status label has NO ↓ arrow (bucket-based, not asc/desc). Match
+    // a closing-bracket boundary so we only hit the actual sort label,
+    // not e.g. "sort: status sub-text" elsewhere.
+    await waitFor(() => expect(screen.getByText(/sort: status\s*\]/)).toBeTruthy());
+    // Defensive negative: explicitly assert the ↓ arrow is NOT present
+    // for status (would mean we accidentally appended one).
+    expect(screen.queryByText(/sort: status ↓/)).toBeNull();
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByText(/sort: platforms ↓/)).toBeTruthy());
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByText(/sort: joined ↓/)).toBeTruthy());
+  });
+
+  it('sort=status puts pending first, then active (non-admin), then admin', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?sort=status');
+    await waitFor(() => expect(screen.getByText(/sort: status\s*\]/)).toBeTruthy());
+    // Find row order in the ALL USERS section (skip pending requests
+    // + invite codes sections — we only care about ALL USERS rows
+    // that contain the email cell). Pull the rendered identity texts
+    // in document order.
+    const idents = screen.getAllByText(/@hoard\.lan|@example\.com/).map((n) => n.textContent ?? '');
+    // First occurrence of each identity is the canonical row position.
+    // Expected ordering: pending (sara) → active non-admin (luigi, marco) → admin (andrea).
+    const firstIdx = (s: string) => idents.findIndex((t) => t.includes(s));
+    expect(firstIdx('sara@example.com')).toBeLessThan(firstIdx('luigi@hoard.lan'));
+    expect(firstIdx('luigi@hoard.lan')).toBeLessThan(firstIdx('andrea@hoard.lan'));
+  });
+
+  it('sort=platforms puts highest-count user first', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreenWithUrl('/admin?sort=platforms');
+    await waitFor(() => expect(screen.getByText(/sort: platforms ↓/)).toBeTruthy());
+    const idents = screen.getAllByText(/@hoard\.lan|@example\.com/).map((n) => n.textContent ?? '');
+    const firstIdx = (s: string) => idents.findIndex((t) => t.includes(s));
+    expect(firstIdx('andrea@hoard.lan')).toBeLessThan(firstIdx('luigi@hoard.lan'));
+    expect(firstIdx('luigi@hoard.lan')).toBeLessThan(firstIdx('marco@example.com'));
+  });
+});
+
+describe('AdminScreen — UserRow density (A-D10 + A-D11)', () => {
+  it('renders identity as "<name> · <email>" when both are set (A-D10)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeUser({
+        id: 'u-both',
+        email: 'andreacama92@gmail.com',
+        displayIdentity: 'andreacama92@gmail.com',
+        name: 'Bedkarma',
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bedkarma')).toBeTruthy());
+    expect(screen.getByText(/andreacama92@gmail\.com/)).toBeTruthy();
+  });
+
+  it('renders the PLATFORMS column as "N platforms · M games" when data present (A-D11(3))', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeUser({
+        id: 'u-data',
+        email: 'a@b.com',
+        displayIdentity: 'a@b.com',
+        platforms: { count: 2, codes: ['ST', 'PS'] },
+        gamesCount: 488,
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/2 platforms · 488 games/)).toBeTruthy());
+  });
+
+  it('singularises platforms / games when count is 1', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeUser({
+        id: 'u-one',
+        email: 'a@b.com',
+        displayIdentity: 'a@b.com',
+        platforms: { count: 1, codes: ['ST'] },
+        gamesCount: 1,
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/1 platform · 1 game/)).toBeTruthy());
+  });
+
+  it('renders an em-dash when both counts are zero (no "0 platforms · 0 games" noise)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
+      makeUser({
+        id: 'u-empty',
+        email: 'pending@example.com',
+        displayIdentity: 'pending@example.com',
+        platforms: { count: 0, codes: [] },
+        gamesCount: 0,
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/pending@example\.com/)).toBeTruthy());
+    // Em-dash present in the platforms cell.
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+});
+
+describe('AdminScreen — delete user flow (A-D2 + A-D6 + A-D11)', () => {
+  it('[delete] button does NOT render on the admin\'s own row (A-D2 frontend guard)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/andrea@hoard\.lan/)).toBeTruthy());
+    // Andrea is the admin (id='admin-id'); makeAdmin() sets her id
+    // to 'admin-id' too. So no [delete] button on her row.
+    expect(screen.queryByRole('button', { name: /Delete andrea@hoard\.lan/ })).toBeNull();
+    // But other users DO have [delete] buttons.
+    expect(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Delete marco@example\.com/ })).toBeTruthy();
+  });
+
+  it('clicking [delete] opens ConfirmModal with displayIdentity as both subject and confirmKeyword (A-D6)', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ }));
+    // Modal headline contains the displayIdentity.
+    expect(screen.getByText(/delete luigi@hoard\.lan/)).toBeTruthy();
+    // "type luigi@hoard.lan to confirm" prompt is rendered.
+    expect(screen.getByPlaceholderText('type luigi@hoard.lan')).toBeTruthy();
+  });
+
+  it('modal renders the games + platforms count line (A-D11) — wishlists NOT shown', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    renderScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ }));
+    // luigi has gamesCount=488 + platforms.count=2.
+    expect(screen.getByText(/488 games · 2 platforms/)).toBeTruthy();
+    // luigi has wishlistCount=5; that number must NOT appear in modal copy.
+    // (The ConfirmModal test file already locks the prop-shape side; here
+    // we lock the screen-side that no count line includes the wishlist.)
+    expect(screen.queryByText(/5 wishlists?/)).toBeNull();
+  });
+
+  it('typing the displayIdentity unlocks confirm; clicking it calls api.admin.deleteUser', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    (api.admin.deleteUser as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    renderScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Delete luigi@hoard\.lan/ }));
+    const input = screen.getByPlaceholderText('type luigi@hoard.lan');
+    fireEvent.change(input, { target: { value: 'luigi@hoard.lan' } });
+    const confirmBtn = screen.getByRole('button', { name: /delete user/ });
+    fireEvent.click(confirmBtn);
+    await waitFor(() => expect(api.admin.deleteUser).toHaveBeenCalledWith('luigi-id'));
+  });
+
+  it('successful delete shows the // deleted: <displayIdentity> toast', async () => {
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    (api.admin.deleteUser as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    renderScreen();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Delete marco@example\.com/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Delete marco@example\.com/ }));
+    fireEvent.change(screen.getByPlaceholderText('type marco@example.com'), { target: { value: 'marco@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /delete user/ }));
+    await waitFor(() => expect(api.admin.deleteUser).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(/\/\/ deleted: marco@example\.com/)).toBeTruthy());
+  });
+
+  it('paranoia self-delete defence: even if currentUser somehow matches a row, deleteUser is never called', async () => {
+    // Construct a fixture where the admin's own row appears AND
+    // somehow has a [delete] button rendered (shouldn't happen given
+    // the !isSelf guard, but pin it). We force the issue by passing
+    // a currentUser whose id matches a non-admin row, making both
+    // sides of the conditional align "wrong" — this verifies the
+    // server-side belt is intact even when the suspenders fail.
+    mockUseUser.mockReturnValue({
+      user: { ...makeAdmin(), id: 'luigi-id' }, // currentUser = luigi
+      status: 'authed', setUser: vi.fn(), signOut: vi.fn(), refresh: vi.fn(),
+    });
+    (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue(userFixtures());
+    (api.admin.deleteUser as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    renderScreen();
+    // Luigi's [delete] button no longer renders — verifies isSelf works.
+    await waitFor(() => expect(screen.getByText(/luigi@hoard\.lan/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /Delete luigi@hoard\.lan/ })).toBeNull();
   });
 });

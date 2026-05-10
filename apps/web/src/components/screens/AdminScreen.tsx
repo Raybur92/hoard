@@ -1,15 +1,32 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useUser } from '../../contexts/UserContext';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
 import { useAdminInviteCodes } from '../../hooks/useAdminInviteCodes';
 import { Btn } from '../primitives/Btn';
+import { Chip } from '../primitives/Chip';
+import { ConfirmModal } from '../modals/ConfirmModal';
 import { api } from '../../lib/api';
 import * as cache from '../../lib/cache';
 import { GenerateCodeModal } from './GenerateCodeModal';
 import type { AdminUser, AdminInviteCode } from '@hoard/types';
+
+type FilterKey = 'all' | 'active' | 'pending' | 'admin';
+type SortKey = 'joined' | 'status' | 'platforms';
+
+const FILTER_KEYS: FilterKey[] = ['all', 'active', 'pending', 'admin'];
+const SORT_CYCLE: SortKey[] = ['joined', 'status', 'platforms'];
+
+// "active" excludes admins per A-D9 (strict semantics — admins are
+// their own bucket so the four chip counts partition the user list).
+function matchesFilter(u: AdminUser, f: FilterKey): boolean {
+  if (f === 'all') return true;
+  if (f === 'active') return u.status === 'ACTIVE' && !u.isAdmin;
+  if (f === 'pending') return u.status === 'PENDING_INVITE';
+  return u.isAdmin;
+}
 
 /**
  * Admin panel — closed-beta workstream I5. Three sections per spec §7.1:
@@ -48,10 +65,50 @@ export function AdminScreen() {
 }
 
 function AdminScreenImpl() {
+  const { user: currentUser } = useUser();
   const { data: usersData, loading: usersLoading, error: usersError } = useAdminUsers();
   const { data: codesData, loading: codesLoading, error: codesError } = useAdminInviteCodes();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [generateNote, setGenerateNote] = useState<string>('');
+
+  // Filter / sort / search state lives in the URL per A-D5. Defaults
+  // are omitted from the URL so shareable /admin links stay clean.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter: FilterKey =
+    (searchParams.get('filter') as FilterKey | null) ?? 'all';
+  const sortKey: SortKey =
+    (searchParams.get('sort') as SortKey | null) ?? 'joined';
+  const q = searchParams.get('q') ?? '';
+
+  function setUrlParam(key: string, value: string, defaultValue: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value === defaultValue || value === '') {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    setSearchParams(next, { replace: true });
+  }
+
+  // Delete-user modal state. `target` carries the user being deleted;
+  // `confirmText` is the typed-confirm input value; `working` blocks
+  // double-clicks while the API call is in flight.
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  // Toast state. After a successful delete, show a green inline
+  // // deleted: <displayIdentity> banner under the toolbar for 1.5s.
+  // Banner sits above the section header (viewport-stable position
+  // within the page scroll, NOT anchored to the vacated row — the row
+  // disappears via cache invalidation, so anchoring would mean
+  // rendering against a row that's about to vanish).
+  const [lastDeleted, setLastDeleted] = useState<string | null>(null);
+  useEffect(() => {
+    if (lastDeleted === null) return;
+    const id = setTimeout(() => setLastDeleted(null), 1500);
+    return () => clearTimeout(id);
+  }, [lastDeleted]);
 
   // Memoize `users` so its identity is stable across renders when the
   // underlying SWR data hasn't changed — keeps the pendingRequests
@@ -67,6 +124,56 @@ function AdminScreenImpl() {
     [users],
   );
 
+  // Filter chip counts always reflect the full dataset, not the
+  // currently-selected slice — so the chips read as `[ all (8) ]`
+  // / `[ active (5) ]` etc. regardless of the active filter.
+  const filterCounts = useMemo(
+    () => ({
+      all: users.length,
+      active: users.filter((u) => matchesFilter(u, 'active')).length,
+      pending: users.filter((u) => matchesFilter(u, 'pending')).length,
+      admin: users.filter((u) => matchesFilter(u, 'admin')).length,
+    }),
+    [users],
+  );
+
+  // Apply filter → search → sort. Each step preserves the order of
+  // the prior, so sorting by `status` after filtering by `active`
+  // doesn't try to bucket non-active rows we already removed.
+  const visibleUsers = useMemo(() => {
+    let out = users.filter((u) => matchesFilter(u, filter));
+    if (q) {
+      const ql = q.toLowerCase();
+      out = out.filter(
+        (u) =>
+          u.email.toLowerCase().includes(ql) ||
+          (u.name?.toLowerCase().includes(ql) ?? false) ||
+          u.displayIdentity.toLowerCase().includes(ql),
+      );
+    }
+    const sorted = [...out];
+    if (sortKey === 'joined') {
+      sorted.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    } else if (sortKey === 'platforms') {
+      sorted.sort(
+        (a, b) =>
+          b.platforms.count - a.platforms.count ||
+          Date.parse(b.createdAt) - Date.parse(a.createdAt),
+      );
+    } else if (sortKey === 'status') {
+      // Bucket: pending (0) → active (1) → admin (2). Secondary by
+      // createdAt desc so within-bucket ordering is stable + useful.
+      const bucket = (u: AdminUser) =>
+        u.status === 'PENDING_INVITE' ? 0 : u.isAdmin ? 2 : 1;
+      sorted.sort(
+        (a, b) =>
+          bucket(a) - bucket(b) ||
+          Date.parse(b.createdAt) - Date.parse(a.createdAt),
+      );
+    }
+    return sorted;
+  }, [users, filter, q, sortKey]);
+
   const refresh = () => {
     cache.invalidate('admin:');
   };
@@ -80,6 +187,58 @@ function AdminScreenImpl() {
     setGenerateOpen(false);
     setGenerateNote('');
   };
+
+  const openDelete = (u: AdminUser) => {
+    setDeleteTarget(u);
+    setDeleteConfirmText('');
+  };
+
+  const closeDelete = () => {
+    if (deleting) return; // can't bail mid-flight
+    setDeleteTarget(null);
+    setDeleteConfirmText('');
+  };
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    // Server-side self-protection (A-D2 belt-and-suspenders) — but the
+    // [delete] button is hidden on the admin's own row so this check
+    // is also a paranoia guard against future regressions.
+    if (currentUser && currentUser.id === deleteTarget.id) {
+      setDeleteTarget(null);
+      setDeleteConfirmText('');
+      return;
+    }
+    setDeleting(true);
+    try {
+      await api.admin.deleteUser(deleteTarget.id);
+      // Cache invalidation already fires inside api.admin.deleteUser.
+      setLastDeleted(deleteTarget.displayIdentity);
+      setDeleteTarget(null);
+      setDeleteConfirmText('');
+    } catch (err) {
+      // Surface error inline. A real production-error UI would be a
+      // banner; for closed-beta the alert is acceptable.
+      alert(err instanceof Error ? err.message : 'Failed to delete user');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // Sort cycle button label per A-D11-implementation: status doesn't
+  // have a natural direction (it's bucket-based), so the ↓ arrow is
+  // shown only for joined + platforms. Single label-button cycles
+  // through joined → status → platforms → joined; clicking advances.
+  const sortIndex = SORT_CYCLE.indexOf(sortKey);
+  const cycleSort = () => {
+    const next = SORT_CYCLE[(sortIndex + 1) % SORT_CYCLE.length] ?? 'joined';
+    setUrlParam('sort', next, 'joined');
+  };
+  const sortLabel = sortKey === 'joined'
+    ? 'sort: joined ↓'
+    : sortKey === 'platforms'
+      ? 'sort: platforms ↓'
+      : 'sort: status';
 
   return (
     // Scroll container — `.app-main` has overflow:hidden and expects each
@@ -135,15 +294,114 @@ function AdminScreenImpl() {
 
       {/* ─── All users ────────────────────────────────────────── */}
       <SectionHeader label="all users" count={users.length} />
+
+      {/* Toolbar: filter chips + search + sort cycle (A-D5/A-D8/A-D9). */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {FILTER_KEYS.map((f) => (
+            <Chip
+              key={f}
+              on={filter === f}
+              onClick={() => setUrlParam('filter', f, 'all')}
+              ariaLabel={`Filter users: ${f}`}
+            >
+              {f} ({filterCounts[f]})
+            </Chip>
+          ))}
+        </div>
+        <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setUrlParam('q', e.target.value, '')}
+            placeholder="find by email or name…"
+            aria-label="Search users by email or name"
+            className="t-mono"
+            style={{
+              flex: 1,
+              maxWidth: 280,
+              height: 30,
+              fontSize: 'var(--text-xs)',
+              fontFamily: 'var(--mono)',
+              background: 'var(--ink-2)',
+              border: '1px solid var(--rule)',
+              color: 'var(--paper)',
+              padding: '0 10px',
+              outline: 'none',
+            }}
+          />
+          <button
+            type="button"
+            onClick={cycleSort}
+            className="t-mono t-faint"
+            aria-label={`Cycle sort: currently ${sortLabel}`}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 'var(--text-xs)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.10em',
+              padding: 6,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            [ {sortLabel} ]
+          </button>
+        </div>
+      </div>
+
+      {/* Deleted toast — viewport-stable position within page scroll,
+        * NOT anchored to the vacated row. The row disappears via cache
+        * invalidation, so anchoring would mean rendering against a
+        * row about to vanish (visual jump). Sits between toolbar and
+        * data so it's adjacent to the affected list. */}
+      {lastDeleted && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="t-mono"
+          style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--green)',
+            padding: '6px 10px',
+            border: '1px solid var(--green)',
+            background: 'rgba(95,194,106,0.06)',
+            marginBottom: 12,
+            letterSpacing: '0.04em',
+          }}
+        >
+          // deleted: {lastDeleted}
+        </div>
+      )}
+
       {usersLoading && users.length === 0 ? (
         <div className="t-mono t-faint" style={{ fontSize: 'var(--text-xs)', padding: '8px 0' }}>// loading…</div>
       ) : usersError ? (
         <ErrorBlock message={usersError} />
       ) : users.length === 0 ? (
         <EmptyLine text="// no users" />
+      ) : visibleUsers.length === 0 ? (
+        <EmptyLine text={q ? `// no users match "${q}"` : '// no users in this filter'} />
       ) : (
         <div style={{ marginBottom: 32 }}>
-          {users.map((u) => <UserRow key={u.id} user={u} />)}
+          <UserHeaderRow />
+          {visibleUsers.map((u) => (
+            <UserRow
+              key={u.id}
+              user={u}
+              currentUserId={currentUser?.id ?? null}
+              onDelete={openDelete}
+            />
+          ))}
         </div>
       )}
 
@@ -165,6 +423,23 @@ function AdminScreenImpl() {
           <GenerateCodeModal
             initialNote={generateNote}
             onClose={closeGenerate}
+          />
+        )}
+
+        {deleteTarget && (
+          <ConfirmModal
+            variant="delete-user"
+            subject={deleteTarget.displayIdentity}
+            confirmKeyword={deleteTarget.displayIdentity}
+            confirmText={deleteConfirmText}
+            working={deleting}
+            onTextChange={setDeleteConfirmText}
+            onConfirm={() => void handleConfirmDelete()}
+            onCancel={closeDelete}
+            details={{
+              games: deleteTarget.gamesCount,
+              platforms: deleteTarget.platforms.count,
+            }}
           />
         )}
       </div>
@@ -243,44 +518,154 @@ function PendingRequestRow({ user, onGenerate }: { user: AdminUser; onGenerate: 
   );
 }
 
-function UserRow({ user }: { user: AdminUser }) {
-  // Terminal-style aligned row. Fields collapse cleanly at narrow desktop;
-  // doesn't need full table semantics for v1.
+// Grid template shared between UserHeaderRow and UserRow so the
+// header columns line up perfectly with the data columns. 5 cols per
+// A-D10: identity (1fr) / status (70px) / joined (80px) / platforms+
+// games (130px — see A-D11 implementation note in the commit message)
+// / actions (56px).
+const USER_ROW_GRID = '1fr 70px 80px 130px 56px';
+
+function UserHeaderRow() {
+  return (
+    <div
+      role="row"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: USER_ROW_GRID,
+        alignItems: 'baseline',
+        padding: '6px 0',
+        borderBottom: '1px solid var(--rule)',
+        fontSize: 'var(--text-3xs)',
+        fontFamily: 'var(--mono)',
+        gap: 12,
+        textTransform: 'uppercase',
+        letterSpacing: '0.16em',
+        color: 'var(--paper-dim)',
+      }}
+    >
+      <span>// identity</span>
+      <span>status</span>
+      <span>joined</span>
+      <span>platforms</span>
+      <span style={{ textAlign: 'right' }}>actions</span>
+    </div>
+  );
+}
+
+function UserRow({
+  user,
+  currentUserId,
+  onDelete,
+}: {
+  user: AdminUser;
+  currentUserId: string | null;
+  onDelete: (u: AdminUser) => void;
+}) {
+  // Identity merging per A-D10: render `<name> · <email>` when both are
+  // set, else whichever is set, else displayIdentity (covers Steam-only
+  // synthetic accounts). The displayIdentity helper already handles the
+  // single-source case identically — using it as the fallback keeps
+  // ground-truth behaviour consistent with the rest of the admin
+  // surface (PendingRequestRow + ConfirmModal subject).
+  const showBoth =
+    user.name !== null &&
+    user.name.length > 0 &&
+    !user.email.startsWith('steam:'); // synthetic-Steam: name IS the displayIdentity
+  const identityPrimary = showBoth ? user.name! : user.displayIdentity;
+  const identitySecondary = showBoth ? user.email : null;
+
   const statusColor =
     user.status === 'ACTIVE'
-      ? (user.isAdmin ? 'var(--amber)' : 'var(--green)')
+      ? user.isAdmin
+        ? 'var(--amber)'
+        : 'var(--green)'
       : 'var(--paper-faint)';
-  const statusLabel = user.isAdmin ? 'admin' : user.status === 'ACTIVE' ? 'active' : 'pending';
+  const statusLabel = user.isAdmin
+    ? 'admin'
+    : user.status === 'ACTIVE'
+      ? 'active'
+      : 'pending';
   const joined = new Date(user.createdAt).toISOString().slice(0, 10);
-  const platforms = user.platforms.count > 0
-    ? user.platforms.codes.join('·')
+
+  // PLATFORMS column extension per A-D11(3): "<N> platforms · <M> games".
+  // Game count first as the more useful scan signal; platforms-count
+  // second for context (which storefronts they're connected to).
+  // Singularised at boundaries. Em-dash when both are zero — keeps the
+  // empty case from rendering "0 platforms · 0 games" noise.
+  const hasAnyData = user.platforms.count > 0 || user.gamesCount > 0;
+  const platformsLabel = hasAnyData
+    ? `${user.platforms.count} ${user.platforms.count === 1 ? 'platform' : 'platforms'} · ${user.gamesCount} ${user.gamesCount === 1 ? 'game' : 'games'}`
     : '—';
+
+  // Self-protection per A-D2: [delete] button never renders on the
+  // admin's own row. Server-side 400 CANNOT_DELETE_SELF closes the
+  // URL-typing path; this is the visibility hint.
+  const isSelf = currentUserId !== null && user.id === currentUserId;
 
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 80px 100px 100px',
+        gridTemplateColumns: USER_ROW_GRID,
         alignItems: 'baseline',
-        padding: '6px 0',
+        padding: '4px 0',
         borderBottom: '1px dashed var(--rule)',
         fontSize: 'var(--text-xs)',
         fontFamily: 'var(--mono)',
         gap: 12,
       }}
     >
-      <span style={{ color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {user.displayIdentity}
+      <span
+        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        title={user.email}
+      >
+        <span style={{ color: 'var(--paper)' }}>{identityPrimary}</span>
+        {identitySecondary && (
+          <>
+            {' '}
+            <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+              · {identitySecondary}
+            </span>
+          </>
+        )}
       </span>
-      <span style={{ color: statusColor, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 'var(--text-3xs)' }}>
+      <span
+        style={{
+          color: statusColor,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          fontSize: 'var(--text-3xs)',
+        }}
+      >
         {statusLabel}
       </span>
       <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
-        joined {joined}
+        {joined}
       </span>
-      <span className="t-faint" style={{ fontSize: 'var(--text-3xs)', textAlign: 'right' }}>
-        {user.platforms.count} {user.platforms.count === 1 ? 'platform' : 'platforms'}
-        {user.platforms.count > 0 ? ` · ${platforms}` : ''}
+      <span className="t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+        {platformsLabel}
+      </span>
+      <span style={{ textAlign: 'right' }}>
+        {!isSelf && (
+          <button
+            type="button"
+            onClick={() => onDelete(user)}
+            className="t-mono"
+            aria-label={`Delete ${user.displayIdentity}`}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 'var(--text-3xs)',
+              color: 'var(--red)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              padding: 4,
+            }}
+          >
+            [delete]
+          </button>
+        )}
       </span>
     </div>
   );
