@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { ConfirmModal } from '../modals/ConfirmModal';
 import { TopBar } from '../layout/TopBar';
 import { SettingsNav, SettingsRow, Toggle, Radio, PlatformDot } from '../settings';
 import type { SettingsSection, PlatConnectStatus } from '../settings';
@@ -584,123 +584,6 @@ function DangerSection({ user }: { user: AuthUser | null }) {
         />
       )}
     </>
-  );
-}
-
-interface ConfirmModalProps {
-  variant: 'delete-account' | 'wipe-library';
-  subject: string;
-  confirmKeyword: string;
-  confirmText: string;
-  working: boolean;
-  onTextChange: (v: string) => void;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
-
-function ConfirmModal({ variant, subject, confirmKeyword, confirmText, working, onTextChange, onConfirm, onCancel }: ConfirmModalProps) {
-  const confirmed = confirmText === confirmKeyword;
-  const isDelete = variant === 'delete-account';
-  const titleId = `${variant}-modal-title`;
-  const headline = isDelete
-    ? <>delete {subject}<br />and everything in it.</>
-    : <>wipe {subject}<br />but keep the account.</>;
-  const description = isDelete
-    ? 'this will permanently erase your hoard. there is no recovery, no soft-delete window, no support ticket that brings it back.'
-    : 'deletes every tracked game, status, rating, and note. disconnects every connected platform. your wishlist, account, and preferences stay. you can re-sync from scratch afterwards.';
-  const cancelLabel = isDelete ? 'cancel · keep my hoard' : 'cancel · keep my library';
-  const confirmLabel = isDelete
-    ? (working ? 'deleting…' : 'delete forever')
-    : (working ? 'wiping…' : 'wipe library');
-  const trapRef = useFocusTrap<HTMLDivElement>(true);
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onCancel]);
-  return (
-    <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <button type="button" aria-label="Close" onClick={onCancel} style={{ position: 'absolute', inset: 0, background: 'rgba(8,9,10,0.72)', border: 'none', cursor: 'default' }} />
-      <div className="panel" style={{
-        position: 'relative',
-        width: 560,
-        padding: 0,
-        background: 'var(--ink)',
-        borderColor: 'var(--red)',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
-        zIndex: 1,
-      }}>
-        <div style={{
-          height: 18,
-          background: 'repeating-linear-gradient(135deg, var(--red) 0 8px, var(--ink) 8px 16px)',
-          opacity: 0.6,
-        }} />
-        <div style={{ padding: '24px 28px 28px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Icon name="warn" size={18} style={{ color: 'var(--red)' }} />
-            <span className="t-up" style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.16em', color: 'var(--red)' }}>
-              // destructive · permanent · cannot be undone
-            </span>
-          </div>
-          <h2 id={titleId} className="t-display" style={{ fontSize: 26, marginTop: 14, color: 'var(--paper)', letterSpacing: '-0.01em', lineHeight: 1.1, margin: '14px 0 0', fontWeight: 'normal' }}>
-            {headline}
-          </h2>
-          <div style={{ marginTop: 16, fontSize: "var(--text-xs)", color: 'var(--paper-dim)', lineHeight: 1.55 }}>
-            {description}
-          </div>
-
-          <div style={{ marginTop: 22 }}>
-            <div className="t-up" style={{ fontSize: "var(--text-3xs)", letterSpacing: '0.12em', color: 'var(--paper-dim)' }}>
-              // type <span style={{ color: 'var(--red)' }}>{confirmKeyword}</span> to confirm
-            </div>
-            <input
-              className="field"
-              value={confirmText}
-              onChange={(e) => onTextChange(e.target.value.toUpperCase())}
-              style={{
-                marginTop: 8,
-                height: 38,
-                fontSize: "var(--text-base)",
-                fontFamily: 'var(--mono)',
-                letterSpacing: '0.18em',
-                borderColor: 'var(--red)',
-                color: 'var(--paper)',
-                width: '100%',
-                background: 'var(--ink-2)',
-                border: '1px solid var(--red)',
-                padding: '0 12px',
-                outline: 'none',
-              }}
-              placeholder={`type ${confirmKeyword}`}
-              maxLength={confirmKeyword.length}
-            />
-            {confirmed && (
-              <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="check" size={10} style={{ color: 'var(--green)' }} /> matches · confirm unlocked
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginTop: 22, display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button
-              className="btn"
-              onClick={onCancel}
-              style={{ flex: 1, height: 44, fontSize: "var(--text-xs)", background: 'var(--paper)', color: 'var(--void)', border: '1px solid var(--paper)' }}
-            >
-              <Icon name="back" size={12} style={{ color: 'var(--void)' }} /> {cancelLabel}
-            </button>
-            <button
-              className="btn"
-              disabled={!confirmed || working}
-              onClick={onConfirm}
-              style={{ height: 38, fontSize: "var(--text-2xs)", color: 'var(--red)', borderColor: 'var(--red)', background: 'transparent', opacity: (confirmed && !working) ? 1 : 0.4 }}
-            >
-              <Icon name="trash" size={11} /> {confirmLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
