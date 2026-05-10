@@ -720,12 +720,28 @@ function CodeRow({ code }: { code: AdminInviteCode }) {
     <div
       style={{
         display: 'grid',
-        // Code (180px) / note (1fr) / used-by (240px — widened from
-        // 180 so "used by daniel.guernieri@gmail.com · 2026-05-08"
-        // fits on one line at --text-3xs) / actions (110px — widened
-        // from 90 for [revoke] breathing room, mirroring the
-        // user-row ACTIONS column treatment).
-        gridTemplateColumns: '180px 1fr 240px 110px',
+        // Code (180 px fixed) / note (minmax 120, 1fr) / used-by
+        // (minmax 240, 2fr) / actions (110 px fixed).
+        //
+        // Two flexible columns sharing slack 1:2 — used-by gets
+        // twice as much extra space as the note. The earlier
+        // `180px 1fr 240px 110px` made note absorb all slack while
+        // used-by stayed pegged at 240 px regardless of viewport
+        // width; on a wide window with a short note ("for Giuseppe
+        // Spizzico"), used-by truncated mid-email even though the
+        // row had hundreds of unused pixels. Proportional slack
+        // matches reality — used-by content is consistently longer
+        // than note content (full email + " · " + ISO date), so
+        // the 2fr weighting reflects the actual content bias.
+        //
+        // Minimums: note ≥ 120 px so a long note doesn't compress
+        // to nothing on narrow widths; used-by ≥ 240 px so the
+        // longest email-plus-date still fits at the floor.
+        // Combined: row min-width 180 + 120 + 240 + 110 + 36 (3 gaps)
+        // = 686 px — comfortably below the 724 px content area at
+        // the 1024 px desktop floor.
+        gridTemplateColumns:
+          '180px minmax(120px, 1fr) minmax(240px, 2fr) 110px',
         alignItems: 'baseline',
         padding: '6px 0',
         borderBottom: '1px dashed var(--rule)',
