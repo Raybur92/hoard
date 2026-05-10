@@ -88,7 +88,7 @@ function AdminScreenImpl() {
     // wrapper, content past 100dvh was invisible — page didn't scroll
     // at all on desktop.
     <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
-      <div style={{ padding: '32px 36px 48px', maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ padding: '32px 40px 48px' }}>
         {/* ─── Top bar ──────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 20 }}>
         <h1
@@ -194,13 +194,15 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
 }
 
 function PendingRequestRow({ user, onGenerate }: { user: AdminUser; onGenerate: (note: string) => void }) {
-  // Pre-fill the note with "for <noteLabel>" per spec §7.2. Using a
-  // compact label rather than the full displayIdentity — the note
-  // shows up later in the codes list as a quick recognizer for the
-  // admin; "for marco" reads better there than "for marco@gmail.com",
-  // and the full email is one row-cross-reference away in /admin/users
-  // if needed. See `noteLabel()` below for the precedence rule.
-  const noteHint = `for ${noteLabel(user)}`;
+  // Both the button label AND the pre-fill note use the compact
+  // noteLabel (User.name → email local-part → "Steam user — {steamId}").
+  // The row's identity header above already shows the full
+  // displayIdentity for ground-truth context, so the button doesn't
+  // need to repeat it — "GENERATE CODE FOR DANIEL" reads cleaner than
+  // "GENERATE CODE FOR DANIEL.GUERNIERI@GMAIL.COM" when the email is
+  // already visible one line up.
+  const compact = noteLabel(user);
+  const noteHint = `for ${compact}`;
   return (
     <div className="panel" style={{ padding: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
@@ -235,7 +237,7 @@ function PendingRequestRow({ user, onGenerate }: { user: AdminUser; onGenerate: 
         </div>
       )}
       <div style={{ marginTop: 10 }}>
-        <Btn onClick={() => onGenerate(noteHint)}>generate code for {user.displayIdentity}</Btn>
+        <Btn onClick={() => onGenerate(noteHint)}>generate code for {compact}</Btn>
       </div>
     </div>
   );
@@ -460,9 +462,15 @@ function NotFoundView() {
 /* ── helpers ──────────────────────────────────────────────── */
 
 /**
- * Compact label for the pre-fill note on `[generate code for X]`.
- * Optimized for "quick recognizer in the codes list later," NOT for
- * "ground-truth identifier" — that's what `displayIdentity` is for.
+ * Compact label used in two places on the admin page:
+ *   - The `[generate code for X]` button label on each pending-request row.
+ *   - The pre-fill note that lands on the resulting invite code.
+ *
+ * Optimized for "quick recognizer," NOT for "ground-truth identifier" —
+ * the row above the button already shows the full `displayIdentity`
+ * (which is `email` for real-email users, "Steam user — {steamId}" for
+ * synthetic), so the button + note can use a shorter form without
+ * losing identifying context.
  *
  * Precedence:
  *   1. user.name             → "Andrea" / "Bedkarma"

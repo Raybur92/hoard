@@ -196,14 +196,14 @@ describe('AdminScreen — generate code flow', () => {
     expect(input.value).toBe('for marco');
   });
 
-  it('pre-fill prefers User.name when set; button label still shows displayIdentity (ground truth)', async () => {
-    // Two distinct concerns:
-    //   - Button label = displayIdentity (what the admin is acting on,
-    //     ground-truth identifier for picking the right row).
-    //   - Pre-fill note = noteLabel (compact recognizer for the codes
-    //     list later).
-    // For email-based users with a name set, these differ: button
-    // shows the email, note pre-fills with the name.
+  it('button label + pre-fill note BOTH use the compact noteLabel; row identity header carries the full displayIdentity', async () => {
+    // After the post-launch admin polish (commit `<this>`):
+    //   - Button label = noteLabel (compact recognizer; "GENERATE CODE
+    //     FOR MARCO ROSSI" rather than "...FOR MARCO.ROSSI@EXAMPLE.COM")
+    //   - Pre-fill note = noteLabel (unchanged from earlier — same value)
+    //   - Row identity header above the button = displayIdentity (full
+    //     email; provides ground-truth context one line up so the button
+    //     can stay compact without losing identifying info)
     (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
       makeUser({
         id: 'pr',
@@ -217,11 +217,14 @@ describe('AdminScreen — generate code flow', () => {
     ]);
     renderScreen();
     await waitFor(() => {
-      // Button text uses displayIdentity (ground truth).
-      expect(screen.getByRole('button', { name: /generate code for marco\.rossi@example\.com/i })).toBeTruthy();
+      // Button text uses noteLabel (User.name when set).
+      expect(screen.getByRole('button', { name: /generate code for Marco Rossi/i })).toBeTruthy();
+      // Full email shows in BOTH the pending-row identity header AND
+      // the all-users row — getAllByText catches both, asserts ≥1.
+      expect(screen.getAllByText('marco.rossi@example.com').length).toBeGreaterThanOrEqual(1);
     });
-    fireEvent.click(screen.getByRole('button', { name: /generate code for marco\.rossi@example\.com/i }));
-    // Pre-fill uses noteLabel (compact recognizer).
+    fireEvent.click(screen.getByRole('button', { name: /generate code for Marco Rossi/i }));
+    // Pre-fill uses noteLabel — same as button, by design.
     expect((screen.getByLabelText(/note/i) as HTMLInputElement).value).toBe('for Marco Rossi');
   });
 
