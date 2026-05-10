@@ -7,20 +7,36 @@ import { fileURLToPath } from 'node:url';
 // Resolve the config's own directory from import.meta.url instead.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load DATABASE_URL_TEST from apps/web/.env.test if not already set in env.
-// CI sets it directly via the GH Actions secret block; this is a DX shim
-// so local runs don't require an explicit `export DATABASE_URL_TEST=...`
-// every shell. Single-key parser keeps us dotenv-free.
-if (!process.env['DATABASE_URL_TEST']) {
-  const envPath = path.join(__dirname, '.env.test');
-  if (fs.existsSync(envPath)) {
-    const line = fs
-      .readFileSync(envPath, 'utf8')
-      .split('\n')
-      .find((l) => l.trim().startsWith('DATABASE_URL_TEST='));
-    if (line) {
-      process.env['DATABASE_URL_TEST'] = line.replace(/^DATABASE_URL_TEST=/, '').trim();
-    }
+// Load apps/web/.env.test into process.env if any of its keys aren't
+// already set. CI sets the keys directly via GH Actions secret block;
+// this is a DX shim so local runs don't require explicit `export X=...`
+// every shell. Minimal KEY=VALUE parser keeps us dotenv-free; supports
+// the keys E2E needs today (DATABASE_URL_TEST, E2E_TEST_PASSWORD) plus
+// any future ones without per-key edits.
+//
+// Precedence: ALREADY-SET ENV WINS. If a key is already present in
+// process.env, the value from .env.test does NOT override it. This is
+// the right default — CI sets these via real secrets, and a developer
+// might have a stale `DATABASE_URL` exported from a previous shell that
+// should NOT silently get replaced by the test file's value. Reverse
+// precedence (file wins) would be a footgun.
+const envTestPath = path.join(__dirname, '.env.test');
+if (fs.existsSync(envTestPath)) {
+  const lines = fs.readFileSync(envTestPath, 'utf8').split('\n');
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    // Strip matching paired single or double quotes — some devs reflexively
+    // quote .env values from shell-script muscle memory; we don't want a
+    // login POST sending `"hunter2"` as the literal password.
+    const value = line
+      .slice(eq + 1)
+      .trim()
+      .replace(/^["'](.*)["']$/, '$1');
+    if (!process.env[key]) process.env[key] = value;
   }
 }
 
