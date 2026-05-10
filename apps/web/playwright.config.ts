@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// apps/web/package.json is `"type": "module"`, so __dirname is undefined here.
+// Resolve the config's own directory from import.meta.url instead.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load DATABASE_URL_TEST from apps/web/.env.test if not already set in env.
 // CI sets it directly via the GH Actions secret block; this is a DX shim
