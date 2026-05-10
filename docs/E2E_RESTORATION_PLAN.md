@@ -345,9 +345,9 @@ jobs:
 
 Single PR; the five commits below are load-bearing for each other but each lands a coherent unit so a partial revert (e.g. baselines need re-baking) doesn't take the rest down.
 
-#### 4.1 — Commit grouping (5 commits, one PR)
+#### 4.1 — Commit grouping (5 commits, with 3 Andrea-touchpoints)
 
-Order matters — each commit's tests must pass against the staged state of the prior. Operations that require Andrea (provisioning the Supabase project, populating GH Actions secrets) happen out-of-band before commit 1; the commit content assumes those are already done.
+Order matters — each commit's tests must pass against the staged state of the prior. Operations that require Andrea are interleaved with the commits per the option (a) ordering decision in §4.6: Phase A + B (provision + secret) happen BEFORE commit 1, the seed run happens BETWEEN commits 2 and 3, Phase C (verification) happens AFTER commit 5. Each commit lands separately on `main`; per hard rule 10, the agent stops and summarizes after each, holding for Andrea's green-light to proceed. See §4.6 for the full per-commit handoff sequence.
 
 1. **`infra(e2e): provision test DB + keepalive Action + Prisma migration discipline`** — purely operational + workflow. New `.github/workflows/test-db-keepalive.yml`. New CI gate that fails if `prisma migrate status` against `DATABASE_URL_TEST` shows pending migrations. Test specs untouched. CI green except for the existing E2E rot — which is the next four commits' problem.
 2. **`feat(e2e): seed-e2e.ts + Playwright config wires DATABASE_URL_TEST`** — `packages/db/prisma/seed-e2e.ts` lands. `apps/web/playwright.config.ts` `webServer` for `dev:api` reads `DATABASE_URL_TEST`. Local dev unchanged (still `DATABASE_URL`). Existing specs still using the broken auth path; they stay broken until the next commit, but visibly differently — content is now empty-seeded instead of redirected-to-login.
@@ -457,11 +457,15 @@ After commit 5 lands and CI is green, Andrea runs through the following before m
 - ~5 new vitest tests cover the 7 E2E deletions (drift-guard, legacy redirect, sidebar active state, tab-bar active state, library 6-shelf headers).
 - `playwright.offline.config.ts` and the `test:e2e:offline` script are removed cleanly; no dangling references remain.
 
-#### 4.6 — Out-of-band setup checklist (Andrea performs)
+#### 4.6 — Out-of-band setup checklist (Andrea performs) + interleaved ordering
 
-The agent's PR commits assume these have already been done. Pulled out of §4.2 so steps don't get buried in the file-by-file diff. Each step is annotated with WHEN it has to happen relative to the PR.
+**Ordering decision (locked 2026-05-10): option (a) interleaved.** Andrea raised the ordering ambiguity — Phase A4 (run the seed) can't happen before commit 2 lands because the seed script doesn't exist yet. Option (b) decoupled (Andrea does all ops up front, agent ships all 5 commits) was rejected because it'd require the migration-status CI gate and the renamed-spec CI to tolerate missing secrets across multiple commits, which weakens the gate's protective intent.
 
-**Phase A — One-time setup (run before commit 1's PR is opened):**
+Interleave keeps every commit's CI green when it lands, at the cost of three Andrea-touchpoints across the workstream (one before commit 1, one between commits 2 and 3, one after commit 5).
+
+The `🟢` markers below indicate where Andrea's green-light is required to proceed; per hard rule 10, the agent stops and summarizes after each commit lands.
+
+**Phase A — Test-DB provisioning (BEFORE commit 1):**
 
 1. **Provision the `hoard-test` Supabase project.** Free tier; `EU West (eu-west-1)` region to match prod (consistent connection latency from the API process during CI). Note the project ref + the connection string with the transaction pooler port (6543).
 
@@ -478,25 +482,97 @@ The agent's PR commits assume these have already been done. Pulled out of §4.2 
 
 3. **Enable RLS on the new project's public tables** (per AGENT.md key decision #10). Re-run the SQL from `20260504100000_enable_rls_on_public_tables/migration.sql` against the test DB.
 
-4. **Run `seed-e2e.ts` once locally** to populate the test DB with the deterministic 3 users + 12 games seed. Verify via Prisma Studio or a `SELECT count(*) FROM "User"` query that you see 3 rows.
+**Phase B — Secret distribution (BEFORE commit 1):**
 
-**Phase B — Secret distribution (before first CI run):**
+4. **Add `DATABASE_URL_TEST` to GitHub repo Actions secrets.** Settings → Secrets and variables → Actions → New repository secret. Value is the test project's full pooled connection string with `?pgbouncer=true&connection_limit=5` query-string params (matching prod's gotchas). Without this, commit 1's migration-status CI gate fails to read the secret and the gate becomes a no-op.
 
-5. **Add `DATABASE_URL_TEST` to GitHub repo Actions secrets.** Settings → Secrets and variables → Actions → New repository secret. Value is the test project's full pooled connection string with `?pgbouncer=true&connection_limit=5` query-string params (matching prod's gotchas). Verify the keepalive workflow can read it by manually triggering the Action (Actions tab → workflow_dispatch).
+5. **Create local `apps/web/.env.test`** (will be gitignored once commit 1 lands; safe to create now since the file doesn't exist before commit 1) with the same `DATABASE_URL_TEST=...` value. This is what Playwright reads when running E2E locally. **`.env.test.example`** committed alongside in commit 1 as a placeholder template — angle-bracket dummies only, NO real connection strings.
 
-6. **Create local `apps/web/.env.test`** (gitignored) with the same `DATABASE_URL_TEST=...` value. This is what Playwright reads when running E2E locally. **`.env.test.example` is committed alongside as a placeholder** — confirm it contains zero real connection strings (template should be `DATABASE_URL_TEST=postgresql://<user>:<password>@<host>:<port>/<db>?pgbouncer=true&connection_limit=5` with literal angle-bracket placeholders, not real values).
+🟢 **Andrea ack required: Phase A + B done.** Agent waits for the signal "test DB provisioned, secret added, local env set" before starting commit 1.
 
-7. **Verify `.env.test` is gitignored.** The existing `.gitignore` covers `.env`, `.env.local`, and `.env.*.local` — but **`.env.test` is NOT covered by any of those globs**. Commit 1 of E1 must include a `.gitignore` line `apps/web/.env.test`. Verify post-commit by running `git check-ignore -v apps/web/.env.test` — output should show the rule that matched.
+---
 
-**Phase C — Verification (after PR merges):**
+**Commit 1 — `infra(e2e): provision test DB + keepalive Action + Prisma migration discipline`** lands.
 
-8. **Manually trigger `test-db-keepalive`** once via the Actions UI to confirm the workflow runs successfully end-to-end (already covered in §4.4's checklist; restated here so the operational sequence is self-contained).
+Includes: `.github/workflows/test-db-keepalive.yml`, migrate-status CI gate, `apps/web/.env.test.example`, and the `apps/web/.env.test` gitignore line.
 
-9. **Confirm the keepalive runs unattended at 04:00 UTC on the next day.** Check the Actions tab the morning after merge to confirm a green run exists. If not, the cron didn't fire — investigate via GH Actions docs (cron schedule on the default branch, free-account quotas, etc.).
+Agent stops + summarizes per hard rule 10.
 
-10. **Watch for the canonical issue.** It should NOT auto-open under healthy operation. If it appears in the first week, that's the failure path doing its job — investigate per the §3.7 recovery flow.
+🟢 **Andrea green-lights commit 2.** Optional verification: run `git check-ignore -v apps/web/.env.test` locally to confirm the new gitignore rule matches.
 
-**Sanity check on cost:** Phase A is ~30 minutes (provisioning + migration replay + seed). Phase B is ~5 minutes (paste the secret, add the gitignore line). Phase C is read-only.
+---
+
+**Commit 2 — `feat(e2e): seed-e2e.ts + Playwright config wires DATABASE_URL_TEST`** lands.
+
+Includes: `packages/db/prisma/seed-e2e.ts`, `apps/web/playwright.config.ts` updates.
+
+Agent stops + summarizes — **and inlines the seed contents in the summary message** (3 users with id/email/status/isAdmin/hasRequestedAccess fields, 12 games with id/title/igdbId/genres, platforms with codes + syncStatus). Surfaces shape for Andrea's eyeball BEFORE running the seed.
+
+6. **Andrea reviews the seed contents** (in the agent's summary). Watching for: accidental data-shape collisions with future migrations, IGDB ID dups across games, a closed-beta-realistic spread of statuses (1 admin + 1 ACTIVE + 1 PENDING_INVITE-with-request matches the spec at §4.3).
+
+7. **Andrea runs `seed-e2e.ts` once locally** against the test DB:
+
+    ```bash
+    DATABASE_URL=<test-db-url-as-above> \
+    npx tsx packages/db/prisma/seed-e2e.ts
+    ```
+
+    Verify via Prisma Studio or `SELECT count(*) FROM "User"` (expect 3) and `SELECT count(*) FROM "Game"` (expect 12). Wipe-and-reseed should be idempotent — running twice produces the same state.
+
+🟢 **Andrea green-lights commit 3.** Hold here longest; the seed shape determines what every integration test in commit 3 asserts against.
+
+---
+
+**Commit 3 — `feat(e2e): global auth fixture + per-test expectedUrl declaration`** lands.
+
+Includes: `apps/web/tests/e2e/fixtures.ts`, spec rename + import swap + `test.use({ expectedUrl })` declarations + reclassification verdicts (§4.3) applied. Plus the ~5 new vitest tests covering the 7 deletions.
+
+Agent stops + summarizes.
+
+🟢 **Andrea green-lights commit 4.**
+
+---
+
+**Commit 4 — `feat(e2e): regenerate visual snapshot baselines against deterministic seed`** lands.
+
+Includes: regenerated `tests/snapshots/*.png`. Andrea eyeballs the PNGs in Preview before merging — the byte-size signature trick (login-redirect captures cluster around ~25 KB) is a useful sanity check.
+
+Agent stops + summarizes.
+
+🟢 **Andrea green-lights commit 5.**
+
+---
+
+**Commit 5 — `docs(e2e): contributor guide for the integration vs component naming convention`** lands.
+
+Includes: `apps/web/tests/e2e/README.md`.
+
+Agent stops + summarizes. **Last commit of E1.**
+
+---
+
+**Phase C — Verification (AFTER commit 5):**
+
+8. **Manually trigger `test-db-keepalive`** once via the Actions UI. Verify it completes successfully and the canonical `infra:test-db` issue does NOT open.
+
+9. **Sad-path verification.** Temporarily revoke `DATABASE_URL_TEST` (or replace with a typo). Manually trigger keepalive → verify the canonical issue opens with the expected title + label + comment linking the run. Restore the secret.
+
+10. **Migration drift verification.** Locally export `DATABASE_URL_TEST`; delete a row from `_prisma_migrations` artificially; push a CI-trigger commit (or open a draft PR); verify CI fails with a clear "X migration(s) pending" message. Restore.
+
+11. **Confirm the keepalive runs unattended at 04:00 UTC on the next day.** Check the Actions tab the morning after merge to confirm a green run exists. If not, the cron didn't fire — investigate via GH Actions docs (cron schedule on the default branch, free-account quotas, etc.).
+
+12. **Fixture's missing-`expectedUrl` error verification** (§4.4 item — restated for completeness). Temporarily remove `test.use({ expectedUrl })` from one spec; verify the test fails with the helpful "expectedUrl is required" error. Revert.
+
+13. **Fixture-catches-misroute verification** (§4.4 item — restated). Temporarily corrupt `RequireAuth` to redirect everywhere to `/login`; verify a11y suite fails with `expected URL '/library', got '/login'` rather than reporting login as accessible. Revert.
+
+14. **Watch for the canonical issue** in the days following merge. It should NOT auto-open under healthy operation. If it appears in the first week, that's the failure path doing its job — investigate per the §3.7 recovery flow.
+
+**Sanity check on cost:**
+- **Phase A + B (before commit 1):** ~20 minutes (provisioning + migration replay + RLS + secret + local .env.test).
+- **Between commits 2 and 3:** ~10 minutes (review seed contents in summary, run seed locally, verify counts).
+- **Phase C (after commit 5):** ~30 minutes (workflow trigger + sad-path + migration drift + corrupted-RequireAuth + revert), spread across the day after merge for the cron-runs check.
+
+Total Andrea time: ~60 minutes split across three sittings.
 
 ### E2 — Reinstate `welcome.spec.ts`
 
@@ -531,5 +607,5 @@ Mostly an integration spec under the new convention; one targeted component spec
 | 1 — Diagnose | Done | Captured in §1. |
 | 2 — Strategy decision | **Done (2026-05-09)** — Andrea confirmed Option F + 5 refinements | See §3.1–§3.5 for the locked rationale and §3.4 for secondary decisions (free tier + keepalive, secret locations, a11y fix in E1). |
 | 3 — E1 PR plan drafts (concrete deliverables) | **Locked (2026-05-10)** — Andrea confirmed all 4 scrutiny items + 3 review adjustments | §3.6 (auth fixture: per-test expected-URL declaration, Option β, recommendation locked) + §3.7 (keepalive Action: daily 04:00 UTC cron, canonical-issue with explicit label-AND-exact-title dedup, two-layer recovery). §4 expanded into PR-shaped specifics: 5-commit grouping (§4.1), file-by-file changes (§4.2, includes outright deletion of `playwright.offline.config.ts`), 18 existing-test reclassification verdicts incl. **7 deletions** moved to vitest (§4.3 — stricter pass after Andrea's review), 8-item manual verification checklist (§4.4), success criteria (§4.5), 10-step out-of-band setup checklist with Phase A/B/C annotations (§4.6). |
-| 4 — E1 implementation | **Pending Andrea's green-light** | After step 3 lock above + Andrea's "proceed to E1 PR" signal. Estimated ~4–6 hours of agent work + Phase A/B operational ops (~35 min for Andrea: Supabase provisioning + migration replay + seed + secret distribution). |
+| 4 — E1 implementation | **Awaiting Andrea Phase A + B** | Plan locked at step 3. Ordering picked: option (a) interleaved with three Andrea-touchpoints (§4.6). Agent waits for "test DB provisioned, secret added, local env set" signal before commit 1. ~20 min Andrea work for Phase A + B; ~4–6 hours of agent work spread across 5 commits (with ~10 min Andrea checkpoint between commits 2 and 3 to review + run seed). |
 | 5 — E2 (welcome.integration.spec.ts + welcome-error-states.component.spec.ts) | Pending | After E1 lands. |
