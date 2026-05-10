@@ -299,6 +299,22 @@ export const api = {
       }
       cache.invalidate('admin:invite-codes');
     },
+    // A1 commit 2 — admin user deletion (per docs/ADMIN_POLISH_PLAN.md
+    // A-D1 + A-D2). Server enforces the self-delete guard with 400
+    // CANNOT_DELETE_SELF; the AdminScreen UI also hides the [delete]
+    // button on the admin's own row, so this endpoint is never reached
+    // for the self case under normal flow. Cache invalidation flushes
+    // both admin: prefixes — a deletion can orphan an InviteCode
+    // (usedById flips to NULL via the FK), so the codes section needs
+    // to re-render.
+    deleteUser: async (id: string) => {
+      const res = await fetch(url(`/api/admin/users/${id}`), { method: 'DELETE', credentials: 'include' });
+      if (!res.ok && res.status !== 204) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      cache.invalidate('admin:');
+    },
   },
 
   // platforms

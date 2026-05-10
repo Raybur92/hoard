@@ -75,6 +75,14 @@ export interface AdminUser {
   accessRequestedAt: string | null;
   redeemedCode: { code: string; usedAt: string } | null;
   platforms: { count: number; codes: PlatformCode[] };
+  // Cascade-aware counts surfaced for the pre-deletion confirmation
+  // modal (per A-D11 in docs/ADMIN_POLISH_PLAN.md). Both populated
+  // server-side via Prisma `_count`; the row UI may also display
+  // `gamesCount` inline. The wishlist count rides along even though
+  // the modal copy currently only references games + platforms — kept
+  // in the payload so future UX iterations don't need a payload change.
+  gamesCount: number;
+  wishlistCount: number;
 }
 
 /**

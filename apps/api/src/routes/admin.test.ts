@@ -12,7 +12,11 @@ let testIsAdmin = true;
 
 jest.mock('@hoard/db', () => ({
   prisma: {
-    user: { findMany: jest.fn() },
+    user: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      delete: jest.fn(),
+    },
     inviteCode: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -79,6 +83,12 @@ describe('requireAdmin gating returns canonical 404 for non-admins on every admi
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Not found' });
   });
+
+  it('DELETE /api/admin/users/:id → 404 { error: "Not found" } (A1)', async () => {
+    const res = await request(app).delete('/api/admin/users/some-id');
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Not found' });
+  });
 });
 
 /* ── GET /api/admin/users ── */
@@ -90,6 +100,8 @@ const mkUser = (overrides: Partial<{
   accessRequestedAt: Date | null;
   redeemedInviteCode: { code: string; usedAt: Date | null } | null;
   platforms: { code: string }[];
+  gamesCount: number;
+  wishlistCount: number;
 }>) => ({
   id: overrides.id ?? 'u-1',
   email: overrides.email ?? 'a@example.com',
@@ -103,6 +115,10 @@ const mkUser = (overrides: Partial<{
   accessRequestedAt: overrides.accessRequestedAt ?? null,
   redeemedInviteCode: overrides.redeemedInviteCode ?? null,
   platforms: overrides.platforms ?? [],
+  _count: {
+    userGames: overrides.gamesCount ?? 0,
+    wishlists: overrides.wishlistCount ?? 0,
+  },
 });
 
 describe('GET /api/admin/users', () => {
@@ -343,5 +359,79 @@ describe('DELETE /api/admin/invite-codes/:id', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('CODE_ALREADY_USED');
     expect(prisma.inviteCode.delete).not.toHaveBeenCalled();
+  });
+});
+
+/* ── A1 commit 2: counts on GET /api/admin/users + DELETE /api/admin/users/:id ── */
+
+describe('GET /api/admin/users — A1 commit 2 cascade-aware counts', () => {
+  it('exposes gamesCount + wishlistCount from Prisma _count aggregates (per A-D11)', async () => {
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([
+      mkUser({ id: 'u-many',  email: 'andrea@example.com', gamesCount: 488, wishlistCount: 12 }),
+      mkUser({ id: 'u-empty', email: 'pending@example.com', gamesCount: 0,   wishlistCount: 0 }),
+    ]);
+
+    const res = await request(app).get('/api/admin/users');
+    expect(res.status).toBe(200);
+
+    const byId = Object.fromEntries(
+      (res.body.users as { id: string; gamesCount: number; wishlistCount: number }[]).map(
+        (u) => [u.id, u],
+      ),
+    );
+    expect(byId['u-many']).toMatchObject({ gamesCount: 488, wishlistCount: 12 });
+    expect(byId['u-empty']).toMatchObject({ gamesCount: 0, wishlistCount: 0 });
+
+    // Confirm the select shape in the call — server must be reading
+    // _count: { userGames, wishlists } (matches schema relation names
+    // verified at schema.prisma lines 87-88).
+    const call = (prisma.user.findMany as jest.Mock).mock.calls[0][0] as {
+      select: { _count: { select: { userGames: boolean; wishlists: boolean } } };
+    };
+    expect(call.select._count.select).toEqual({ userGames: true, wishlists: true });
+  });
+});
+
+describe('DELETE /api/admin/users/:id — A1 commit 2', () => {
+  it('returns 204 and deletes the user (FK cascade handles owned rows)', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u-target' });
+    (prisma.user.delete as jest.Mock).mockResolvedValue({});
+
+    const res = await request(app).delete('/api/admin/users/u-target');
+    expect(res.status).toBe(204);
+    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u-target' } });
+  });
+
+  it('returns 400 CANNOT_DELETE_SELF when admin tries to delete own row + does NOT call prisma.user.delete', async () => {
+    // The requireActive mock at the top of this file always populates
+    // req.user.id = 'admin-id' — so deleting `/admin-id` is the
+    // admin-deleting-self case.
+    const res = await request(app).delete('/api/admin/users/admin-id');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'CANNOT_DELETE_SELF' });
+    expect(prisma.user.delete).not.toHaveBeenCalled();
+    // findUnique should also not have been called — the self-check
+    // short-circuits before the existence check.
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 with canonical body when target user does not exist + does NOT call prisma.user.delete', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+    const res = await request(app).delete('/api/admin/users/ghost-id');
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Not found' });
+    expect(prisma.user.delete).not.toHaveBeenCalled();
+  });
+
+  it('does the existence check via findUnique with select { id: true } (cheap)', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u-target' });
+    (prisma.user.delete as jest.Mock).mockResolvedValue({});
+
+    await request(app).delete('/api/admin/users/u-target');
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'u-target' },
+      select: { id: true },
+    });
   });
 });

@@ -46,6 +46,13 @@ router.get('/admin/users', async (_req: Request, res: Response): Promise<void> =
       accessRequestedAt: true,
       redeemedInviteCode: { select: { code: true, usedAt: true } },
       platforms: { select: { code: true } },
+      // Two extra _count aggregates per row (per A-D11). At v1 scale
+      // (8-20 closed-beta users) this is a cheap addition — Prisma
+      // emits a sub-SELECT that's index-friendly via the existing
+      // (userId, …) indexes on UserGame and WishlistRelease. Worth
+      // revisiting at v2 scale (~200+ users) where a denormalized
+      // counter on User or an aggregated query becomes more attractive.
+      _count: { select: { userGames: true, wishlists: true } },
     },
   });
 
@@ -70,6 +77,8 @@ router.get('/admin/users', async (_req: Request, res: Response): Promise<void> =
       count: u.platforms.length,
       codes: u.platforms.map((p) => p.code as PlatformCode),
     },
+    gamesCount: u._count.userGames,
+    wishlistCount: u._count.wishlists,
   }));
 
   // Two-segment sort — pending requests first, then by join date.
@@ -199,6 +208,54 @@ router.delete('/admin/invite-codes/:id', async (req: Request, res: Response): Pr
   }
 
   await prisma.inviteCode.delete({ where: { id } });
+  res.status(204).send();
+});
+
+// DELETE /api/admin/users/:id
+//
+// Hard-delete with FK cascade (per A-D1 in docs/ADMIN_POLISH_PLAN.md).
+// The single prisma.user.delete() call cascades through Platform /
+// UserGame / WishlistRelease / PlatformLog (via Platform's cascade
+// chain); InviteCode.usedById flips to NULL via the FK's ON DELETE
+// SET NULL behaviour (commit 1 of A1 made this explicit in the schema).
+//
+// Self-protection (per A-D2): admin cannot delete their own row. The
+// frontend already hides the [delete] button on the admin's own row;
+// this is the server-side belt-and-suspenders that closes the
+// URL-typing path. 400 (not 403/404) because it's a client-side
+// programming error, not a security gate — non-admins never reach
+// this route at all (requireAdmin returns 404 first).
+//
+// Active sessions of the deleted user invalidate naturally (per A-D12):
+// requireActive does prisma.user.findUnique() on every gated request
+// and returns 401 when the User row is gone. No JWT-blacklist or
+// session-table cleanup needed — the natural-401 property held in
+// the pre-coding audit (every req.user consumer is downstream of a
+// DB lookup; the 4 requireUser-only routes do their own internal
+// lookups).
+router.delete('/admin/users/:id', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+
+  // Self-protection. req.user.id is populated by requireActive earlier
+  // in the chain; the path id is the deletion target.
+  if (req.user && req.user.id === id) {
+    res.status(400).json({ error: 'CANNOT_DELETE_SELF' });
+    return;
+  }
+
+  // Existence check: 404 with the canonical project body for
+  // consistency with the other admin routes (and with how the I-D15
+  // 404-not-403 invisibility story extends to "not found" cases too).
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!target) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  await prisma.user.delete({ where: { id } });
   res.status(204).send();
 });
 

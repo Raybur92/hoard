@@ -58,6 +58,8 @@ function makeUser(overrides: Partial<AdminUser> = {}): AdminUser {
     accessRequestedAt: null,
     redeemedCode: null,
     platforms: { count: 0, codes: [] },
+    gamesCount: 0,
+    wishlistCount: 0,
     ...overrides,
   };
 }
