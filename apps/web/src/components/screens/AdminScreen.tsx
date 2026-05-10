@@ -82,8 +82,14 @@ function AdminScreenImpl() {
   };
 
   return (
-    <div style={{ padding: '32px 36px 48px', maxWidth: 1100, margin: '0 auto' }}>
-      {/* ─── Top bar ──────────────────────────────────────────── */}
+    // Scroll container — `.app-main` has overflow:hidden and expects each
+    // screen to provide its own `flex: 1; overflow: auto` child (same
+    // pattern as DashboardDesktop, LibraryDesktop, etc.). Without this
+    // wrapper, content past 100dvh was invisible — page didn't scroll
+    // at all on desktop.
+    <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
+      <div style={{ padding: '32px 36px 48px', maxWidth: 1100, margin: '0 auto' }}>
+        {/* ─── Top bar ──────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 20 }}>
         <h1
           className="t-mono"
@@ -155,12 +161,13 @@ function AdminScreenImpl() {
         </div>
       )}
 
-      {generateOpen && (
-        <GenerateCodeModal
-          initialNote={generateNote}
-          onClose={closeGenerate}
-        />
-      )}
+        {generateOpen && (
+          <GenerateCodeModal
+            initialNote={generateNote}
+            onClose={closeGenerate}
+          />
+        )}
+      </div>
     </div>
   );
 }
