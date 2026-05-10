@@ -455,7 +455,7 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
       <span
         className="t-mono"
         style={{
-          fontSize: 'var(--text-2xs)',
+          fontSize: 'var(--text-xs)',
           textTransform: 'uppercase',
           letterSpacing: '0.16em',
           color: 'var(--paper-dim)',
@@ -594,7 +594,7 @@ function UserRow({
       ? user.isAdmin
         ? 'var(--amber)'
         : 'var(--green)'
-      : 'var(--paper-faint)';
+      : 'var(--paper-dim)';
   const statusLabel = user.isAdmin
     ? 'admin'
     : user.status === 'ACTIVE'
@@ -793,7 +793,7 @@ function EmptyLine({ text }: { text: string }) {
   return (
     <div
       className="t-mono t-faint"
-      style={{ fontSize: 'var(--text-xs)', padding: '12px 0 28px', color: 'var(--paper-faint)' }}
+      style={{ fontSize: 'var(--text-xs)', padding: '12px 0 28px' }}
     >
       {text}
     </div>

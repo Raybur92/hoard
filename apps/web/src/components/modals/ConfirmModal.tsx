@@ -109,7 +109,7 @@ export function ConfirmModal({
               // destructive · permanent · cannot be undone
             </span>
           </div>
-          <h2 id={titleId} className="t-display" style={{ fontSize: 26, marginTop: 14, color: 'var(--paper)', letterSpacing: '-0.01em', lineHeight: 1.1, margin: '14px 0 0', fontWeight: 'normal' }}>
+          <h2 id={titleId} className="t-display" style={{ fontSize: 'var(--text-xl)', marginTop: 14, color: 'var(--paper)', letterSpacing: '-0.01em', lineHeight: 1.1, margin: '14px 0 0', fontWeight: 'normal' }}>
             {headline}
           </h2>
           <div style={{ marginTop: 16, fontSize: 'var(--text-xs)', color: 'var(--paper-dim)', lineHeight: 1.55 }}>
