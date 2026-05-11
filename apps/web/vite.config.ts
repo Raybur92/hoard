@@ -91,6 +91,14 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // Threads pool (worker_threads) instead of vitest's default forks pool.
+    // Forks-pool hangs locally on machines under memory pressure (each fork
+    // loads ~2 GB heap, ~6 forks compete with dev servers + other tools);
+    // threads-pool runs the full suite cleanly in ~5s. Discovered during
+    // E1 E2E setup (docs/E2E_RESTORATION_PLAN.md commit 3 prep). CI is its
+    // own environment, but this matches what proved reliable locally and
+    // costs nothing on Ubuntu runners.
+    pool: 'threads',
     coverage: {
       reporter: ['text', 'lcov'],
       exclude: ['src/main.tsx', '**/*.d.ts'],

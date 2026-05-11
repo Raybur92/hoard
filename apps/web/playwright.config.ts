@@ -56,7 +56,15 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Force serial workers locally to match CI. With 5 parallel workers
+  // hitting the test API simultaneously, dashboard / game-detail content
+  // tests intermittently fail because the auth chain re-redirects the
+  // page to /login mid-render under contention (root cause not isolated
+  // — vite proxy / tsx watch / cookie-state race all plausible). Serial
+  // runs land cleanly in ~1.7m; the parallelism diagnosis is filed
+  // separately. CI was already serial via the prior conditional; this
+  // collapses to a single value so behavior matches everywhere.
+  workers: 1,
 
   use: {
     baseURL: 'http://localhost:5173',
