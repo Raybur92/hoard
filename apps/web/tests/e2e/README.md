@@ -75,6 +75,8 @@ The ack env var is required — script refuses to wipe without it. Verify counts
 
 Stubbing the IGDB feed is a deferred post-E1 follow-up if this becomes annoying.
 
+**Failing-test forensics.** When a content test fails inexplicably (selector missing, timeout, wrong-content), Playwright writes a per-test `error-context.md` to `apps/web/tests/results/<test-slug>/` containing the page DOM at failure time. This distinguishes empty-state (e.g. `totalGames === 0` rendered the onboarding panel instead of the dashboard) vs misroute (page landed on `/login`) vs real selector bug, without re-running the suite to reproduce.
+
 ## CI runbooks
 
 **`infra:test-db` issue auto-opens.** Daily 04:00 UTC keepalive Action failed 3 attempts. Almost always Supabase free-tier auto-pause after >7d inactivity. Unpause via dashboard, close the issue.
