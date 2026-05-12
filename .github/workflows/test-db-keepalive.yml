@@ -41,9 +41,20 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          # Ensure the canonical label exists — idempotent, succeeds whether
+          # the label was created earlier (manually or by a previous run) or
+          # never existed. `|| true` swallows the "already exists" error so
+          # `set -e` doesn't bail; `2>/dev/null` keeps the log clean when the
+          # label IS already there.
+          echo "→ ensuring infra:test-db label exists (idempotent)"
+          gh label create 'infra:test-db' \
+            --description 'Test database operational issues' \
+            --color FBCA04 \
+            2>/dev/null || true
           # Lookup must match BOTH the label AND the exact title.
           # Label-only could pick a stale historical issue with the same label;
           # title-only could miss when label hygiene drifts.
+          echo "→ checking for existing open canonical issue"
           existing=$(gh issue list \
             --label 'infra:test-db' \
             --state open \
@@ -52,9 +63,11 @@ jobs:
             | head -n 1)
           timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           if [ -n "$existing" ]; then
+            echo "→ existing issue #$existing — commenting"
             gh issue comment "$existing" \
               --body "Keepalive failed at $timestamp. Run: $RUN_URL"
           else
+            echo "→ no existing issue — creating canonical issue"
             gh issue create \
               --title "$CANONICAL_TITLE" \
               --label 'infra:test-db' \
@@ -63,3 +76,4 @@ jobs:
           Check Supabase dashboard; manual unpause may be needed.
           Latest run: $RUN_URL"
           fi
+          echo "✓ issue-opening step complete"
