@@ -37,10 +37,20 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           CANONICAL_TITLE: '[infra] test-db keepalive failing'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          # All gh commands below pass --repo "$GH_REPO" explicitly. This
+          # workflow doesn't checkout the repo (the ping job has no code to
+          # run against), so gh has no git context to infer the target from.
+          # Without --repo, every gh call exits with
+          # "failed to run git: fatal: not a git repository" — the actual
+          # failure mode Andrea hit during Phase C step 2 verification.
+          # GH_REPO env is also honored by gh as a fallback, but the
+          # explicit flag is clearer at each call site.
+          #
           # Ensure the canonical label exists — idempotent, succeeds whether
           # the label was created earlier (manually or by a previous run) or
           # never existed. `|| true` swallows the "already exists" error so
@@ -48,6 +58,7 @@ jobs:
           # label IS already there.
           echo "→ ensuring infra:test-db label exists (idempotent)"
           gh label create 'infra:test-db' \
+            --repo "$GH_REPO" \
             --description 'Test database operational issues' \
             --color FBCA04 \
             2>/dev/null || true
@@ -56,6 +67,7 @@ jobs:
           # title-only could miss when label hygiene drifts.
           echo "→ checking for existing open canonical issue"
           existing=$(gh issue list \
+            --repo "$GH_REPO" \
             --label 'infra:test-db' \
             --state open \
             --json number,title \
@@ -65,10 +77,12 @@ jobs:
           if [ -n "$existing" ]; then
             echo "→ existing issue #$existing — commenting"
             gh issue comment "$existing" \
+              --repo "$GH_REPO" \
               --body "Keepalive failed at $timestamp. Run: $RUN_URL"
           else
             echo "→ no existing issue — creating canonical issue"
             gh issue create \
+              --repo "$GH_REPO" \
               --title "$CANONICAL_TITLE" \
               --label 'infra:test-db' \
               --body "Test DB keepalive Action failed at $timestamp.
