@@ -53,6 +53,12 @@ export default defineConfig({
   snapshotDir: './tests/snapshots',
   outputDir: './tests/results',
 
+  // Ghost-purge for welcome.integration.spec.ts's fresh-user pattern.
+  // Runs ONCE before any test, against the test DB. Deletes orphan
+  // `e2e-welcome-*@hoard.test` users older than 1h (per the cleanup
+  // contract documented in global-setup.ts).
+  globalSetup: './tests/e2e/global-setup.ts',
+
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
