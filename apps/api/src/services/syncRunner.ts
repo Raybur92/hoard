@@ -1,4 +1,5 @@
 import { prisma } from '@hoard/db';
+import { Prisma } from '@prisma/client';
 import type { PlatformCode } from '@hoard/types';
 import { searchGames, getGameBySteamId, getTimeToBeat } from './igdb';
 import { pickBestMatch } from './igdbMatch';
@@ -89,28 +90,50 @@ export async function runSync(
         continue;
       }
 
-      // Upsert the Game record (deduplication by igdbId)
+      // Upsert the Game record (deduplication by igdbId).
+      //
+      // Collision case: the upsert is keyed on igdbId, but Game.steamAppId
+      // is independently @unique. If the smart matcher resolves a Steam app
+      // to a different igdbId than a prior sync stored, the CREATE branch
+      // will try to write a steamAppId that another Game row already owns
+      // (P2002). We reuse the existing row in that case — wrong IGDB matches
+      // are corrected via the in-app [wrong game?] remap UI, not silently
+      // rebound by sync.
       const steamAppId = sg.steamAppId ?? null;
-      const game = await prisma.game.upsert({
-        where: { igdbId: igdbGame.igdbId },
-        update: {
-          title: igdbGame.title,
-          developer: igdbGame.developer,
-          releaseYear: igdbGame.releaseYear,
-          genres: igdbGame.genres,
-          coverUrl: igdbGame.coverUrl,
-          ...(steamAppId ? { steamAppId } : {}),
-        },
-        create: {
-          igdbId: igdbGame.igdbId,
-          title: igdbGame.title,
-          developer: igdbGame.developer,
-          releaseYear: igdbGame.releaseYear,
-          genres: igdbGame.genres,
-          coverUrl: igdbGame.coverUrl,
-          steamAppId,
-        },
-      });
+      let game;
+      try {
+        game = await prisma.game.upsert({
+          where: { igdbId: igdbGame.igdbId },
+          update: {
+            title: igdbGame.title,
+            developer: igdbGame.developer,
+            releaseYear: igdbGame.releaseYear,
+            genres: igdbGame.genres,
+            coverUrl: igdbGame.coverUrl,
+            ...(steamAppId ? { steamAppId } : {}),
+          },
+          create: {
+            igdbId: igdbGame.igdbId,
+            title: igdbGame.title,
+            developer: igdbGame.developer,
+            releaseYear: igdbGame.releaseYear,
+            genres: igdbGame.genres,
+            coverUrl: igdbGame.coverUrl,
+            steamAppId,
+          },
+        });
+      } catch (err) {
+        const isSteamAppIdCollision =
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002' &&
+          Array.isArray(err.meta?.target) &&
+          (err.meta.target as string[]).includes('steamAppId') &&
+          steamAppId !== null;
+        if (!isSteamAppIdCollision) throw err;
+        const existing = await prisma.game.findUnique({ where: { steamAppId } });
+        if (!existing) throw err;
+        game = existing;
+      }
 
       // Merge playtime into the platform slot for this game
       const platformKey = sg.platformCode as PlatformCode;

@@ -1,6 +1,9 @@
 jest.mock('@hoard/db', () => ({
   prisma: {
-    game: { upsert: jest.fn() },
+    game: {
+      upsert: jest.fn(),
+      findUnique: jest.fn(),
+    },
     userGame: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
@@ -24,6 +27,7 @@ jest.mock('./hltb', () => ({
 
 import { runSync } from './syncRunner';
 import { prisma } from '@hoard/db';
+import { Prisma } from '@prisma/client';
 import { searchGames } from './igdb';
 import type { SyncedGame } from './platforms/steam';
 
@@ -142,5 +146,62 @@ describe('runSync', () => {
     const result = await runSync('user-1', [badGame, syncedGame]);
     expect(result.skipped).toBe(1);
     expect(result.imported).toBe(1);
+  });
+
+  it('reuses an existing Game on steamAppId P2002 instead of failing the sync', async () => {
+    const existingGame = { ...mockGame, id: 'game-existing', steamAppId: 12345 };
+    (prisma.game.upsert as jest.Mock).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { modelName: 'Game', target: ['steamAppId'] },
+      }),
+    );
+    (prisma.game.findUnique as jest.Mock).mockResolvedValue(existingGame);
+
+    const result = await runSync('user-1', [{ ...syncedGame, steamAppId: 12345 }]);
+
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(prisma.game.findUnique).toHaveBeenCalledWith({ where: { steamAppId: 12345 } });
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ gameId: 'game-existing' }),
+      }),
+    );
+  });
+
+  it('still throws (and skips the game) on non-steamAppId P2002 collisions', async () => {
+    (prisma.game.upsert as jest.Mock).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { modelName: 'Game', target: ['igdbId'] },
+      }),
+    );
+
+    const result = await runSync('user-1', [{ ...syncedGame, steamAppId: 12345 }]);
+
+    expect(result.skipped).toBe(1);
+    expect(result.imported).toBe(0);
+    expect(prisma.game.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('still throws on steamAppId P2002 when the synced row has no steamAppId', async () => {
+    (prisma.game.upsert as jest.Mock).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { modelName: 'Game', target: ['steamAppId'] },
+      }),
+    );
+
+    // No steamAppId on the synced row → the collision can't be from this game,
+    // so the recovery path must not engage and the error must surface.
+    const result = await runSync('user-1', [syncedGame]);
+
+    expect(result.skipped).toBe(1);
+    expect(result.imported).toBe(0);
+    expect(prisma.game.findUnique).not.toHaveBeenCalled();
   });
 });
