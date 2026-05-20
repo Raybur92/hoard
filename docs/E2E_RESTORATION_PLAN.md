@@ -14,10 +14,10 @@
 
 **What's broken.** Running `npm run test:e2e` on `main` at commit `e8ca975` produces:
 
-| Suite | Result | Root cause |
-|---|---|---|
-| `tests/e2e/a11y.spec.ts` (12 tests, 6 routes × 2 viewports) | **All 12 PASS** — but for the wrong reason. `axe-core` scans whatever DOM is rendered; with the auth chain redirecting to `/login`, the "Dashboard / Library / Releases / Game Detail / Settings" tests are all running axe against the login screen. False positives. |
-| `tests/e2e/screens.spec.ts` (38 tests across 19 specs × 2 viewports) | **All 38 FAIL** with timeouts (`element(s) not found` after 5–6.5 s). Specific assertions: `.bignum`, `Hollow Knight: Silksong`, "all 6 shelves", HLTB hint, etc. — all looking for content that doesn't render because the route redirected to `/login`. |
+| Suite                                                                | Result                                                                                                                                                                                                                                                                 | Root cause |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `tests/e2e/a11y.spec.ts` (12 tests, 6 routes × 2 viewports)          | **All 12 PASS** — but for the wrong reason. `axe-core` scans whatever DOM is rendered; with the auth chain redirecting to `/login`, the "Dashboard / Library / Releases / Game Detail / Settings" tests are all running axe against the login screen. False positives. |
+| `tests/e2e/screens.spec.ts` (38 tests across 19 specs × 2 viewports) | **All 38 FAIL** with timeouts (`element(s) not found` after 5–6.5 s). Specific assertions: `.bignum`, `Hollow Knight: Silksong`, "all 6 shelves", HLTB hint, etc. — all looking for content that doesn't render because the route redirected to `/login`.              |
 
 **Failure-mode trace.** The chain is:
 
@@ -32,6 +32,7 @@
 **Why it didn't surface before I-series.** Pre-I2 there was no `requireActive`. The dev fallback's nonexistent `seed-andrea` userId still caused `requireUser` to set `req.userId`, but downstream routes just queried for that user's data, got empty results, and returned `[]`/`{}`. Tests that asserted on specific seeded games (`Hollow Knight: Silksong`) were already failing — but `a11y.spec.ts` didn't notice because empty-state pages are also accessible. The I2 `requireActive` 401 escalated the failure from "empty content" to "wrong screen entirely."
 
 **Other E2E artifacts also broken in adjacent ways.**
+
 - Visual snapshot baselines (`tests/snapshots/*.png`) were captured against a populated dashboard — they'll never match a `/login` capture.
 - `playwright.offline.config.ts` (the offline-mode E2E) likely has the same auth path and is similarly broken; not verified in this diagnostic but presumed.
 
@@ -47,29 +48,29 @@ Five candidate options, scored across the four dimensions Andrea called out (cos
 
 The minimum-viable fix: set `DEV_USER_ID=cmooks9ey0000ho06z65remze` in `apps/api/.env`. E2E runs against Andrea's actual closed-beta data.
 
-| Dimension | Score |
-|---|---|
-| Cost | $0 |
-| CI complexity | None — env var only |
-| Schema parity | Perfect (same DB) |
-| Secrets management | None new; same `DATABASE_URL` |
-| Local ergonomics | Dev runs hit prod data — already true today |
-| **Risk** | **High.** Tests assert on Andrea's evolving real data ("Hollow Knight: Silksong"). They'll break when she stops playing it. A destructive test (or a refactor that introduces one) could mutate her data. CI runs hit prod DB on every PR. |
+| Dimension          | Score                                                                                                                                                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cost               | $0                                                                                                                                                                                                                                         |
+| CI complexity      | None — env var only                                                                                                                                                                                                                        |
+| Schema parity      | Perfect (same DB)                                                                                                                                                                                                                          |
+| Secrets management | None new; same `DATABASE_URL`                                                                                                                                                                                                              |
+| Local ergonomics   | Dev runs hit prod data — already true today                                                                                                                                                                                                |
+| **Risk**           | **High.** Tests assert on Andrea's evolving real data ("Hollow Knight: Silksong"). They'll break when she stops playing it. A destructive test (or a refactor that introduces one) could mutate her data. CI runs hit prod DB on every PR. |
 
-**Verdict:** Worst of both worlds — fragile *and* prod-coupled. Disqualified.
+**Verdict:** Worst of both worlds — fragile _and_ prod-coupled. Disqualified.
 
 ### Option B — Provision a dedicated `hoard-test` Supabase project.
 
 The "originally planned but proven unnecessary" project mentioned in CLAUDE.md hard rule 7. Un-prove it for E2E specifically: keep unit tests mocking Prisma, but route E2E DATABASE_URL at a separate Supabase project with seeded fixtures.
 
-| Dimension | Score |
-|---|---|
-| Cost | $0 (Supabase free tier) up to 500 MB / 50k rows. Closed-beta E2E far below. Risk: free tier inactivity-pause, kicking in mid-CI run — needs a periodic ping or paid plan. |
-| CI complexity | Moderate — `DATABASE_URL_TEST` secret in GitHub Actions; new env loaded for E2E only; migrations need to apply to both projects on every schema change. |
-| Schema parity | Strong if migrations are applied to both. Drift hazard if test project lags (e.g. someone forgets to run migrations against test). |
-| Secrets management | New: `DATABASE_URL_TEST` in `.env.test` (gitignored), GitHub Actions secret, possibly Vercel preview env. |
-| Local ergonomics | Developer runs E2E against test DB by default. Reset-on-run via `prisma migrate reset --force` with seed re-application. Snapshots stable. |
-| **Risk** | Medium. Migration drift is the main one. Solvable via a CI job that fails if `prisma migrate status` against `DATABASE_URL_TEST` shows pending migrations. |
+| Dimension          | Score                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cost               | $0 (Supabase free tier) up to 500 MB / 50k rows. Closed-beta E2E far below. Risk: free tier inactivity-pause, kicking in mid-CI run — needs a periodic ping or paid plan. |
+| CI complexity      | Moderate — `DATABASE_URL_TEST` secret in GitHub Actions; new env loaded for E2E only; migrations need to apply to both projects on every schema change.                   |
+| Schema parity      | Strong if migrations are applied to both. Drift hazard if test project lags (e.g. someone forgets to run migrations against test).                                        |
+| Secrets management | New: `DATABASE_URL_TEST` in `.env.test` (gitignored), GitHub Actions secret, possibly Vercel preview env.                                                                 |
+| Local ergonomics   | Developer runs E2E against test DB by default. Reset-on-run via `prisma migrate reset --force` with seed re-application. Snapshots stable.                                |
+| **Risk**           | Medium. Migration drift is the main one. Solvable via a CI job that fails if `prisma migrate status` against `DATABASE_URL_TEST` shows pending migrations.                |
 
 **Verdict:** Most robust long-term. Real upfront work (~half-day to provision + seed + wire CI). Pays back forever.
 
@@ -77,14 +78,14 @@ The "originally planned but proven unnecessary" project mentioned in CLAUDE.md h
 
 Hoard's existing Supabase project already has the prod data in the `public` schema. Add a `test` schema, target it for E2E via Prisma's `schema` URL param (`?schema=test`).
 
-| Dimension | Score |
-|---|---|
-| Cost | $0 — same project, same connection pool. |
-| CI complexity | Low — same `DATABASE_URL` with a `?schema=test` suffix variant. |
-| Schema parity | Strong — same physical DB, schema cloned via migration replay. |
-| Secrets management | None new. |
-| Local ergonomics | Developer runs E2E with a different connection string. Reset is `DROP SCHEMA test CASCADE; CREATE SCHEMA test;` + migrate. |
-| **Risk** | Real. (1) Pgbouncer transaction-mode (already a known gotcha) interacts with multi-schema sessions in ways that may or may not be reliable. (2) A test that forgets the `?schema=test` config writes to `public`, contaminating prod. (3) Both schemas share the same connection pool — a test bug could DOS Andrea's normal usage. |
+| Dimension          | Score                                                                                                                                                                                                                                                                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cost               | $0 — same project, same connection pool.                                                                                                                                                                                                                                                                                            |
+| CI complexity      | Low — same `DATABASE_URL` with a `?schema=test` suffix variant.                                                                                                                                                                                                                                                                     |
+| Schema parity      | Strong — same physical DB, schema cloned via migration replay.                                                                                                                                                                                                                                                                      |
+| Secrets management | None new.                                                                                                                                                                                                                                                                                                                           |
+| Local ergonomics   | Developer runs E2E with a different connection string. Reset is `DROP SCHEMA test CASCADE; CREATE SCHEMA test;` + migrate.                                                                                                                                                                                                          |
+| **Risk**           | Real. (1) Pgbouncer transaction-mode (already a known gotcha) interacts with multi-schema sessions in ways that may or may not be reliable. (2) A test that forgets the `?schema=test` config writes to `public`, contaminating prod. (3) Both schemas share the same connection pool — a test bug could DOS Andrea's normal usage. |
 
 **Verdict:** Cheaper than B but the "wrong default schema" failure mode is severe. Blast radius hits prod.
 
@@ -92,14 +93,14 @@ Hoard's existing Supabase project already has the prod data in the `public` sche
 
 Use the prod DB but namespace test rows (`e2e-{timestamp}@hoard.test`, `cuid` prefixed `e2e-...`). Setup creates fixtures; teardown deletes them.
 
-| Dimension | Score |
-|---|---|
-| Cost | $0 |
-| CI complexity | Low |
-| Schema parity | Perfect (same DB) |
-| Secrets management | None new |
-| Local ergonomics | Reasonable when working; brittle when not. |
-| **Risk** | **Andrea explicitly rejected this in the I4 deferral note.** Pollution of prod `User` table on every CI run. If teardown crashes (test panics, CI cancels mid-run, network hiccup), test rows leak. The closed-beta admin panel would show e2e ghosts. |
+| Dimension          | Score                                                                                                                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cost               | $0                                                                                                                                                                                                                                                     |
+| CI complexity      | Low                                                                                                                                                                                                                                                    |
+| Schema parity      | Perfect (same DB)                                                                                                                                                                                                                                      |
+| Secrets management | None new                                                                                                                                                                                                                                               |
+| Local ergonomics   | Reasonable when working; brittle when not.                                                                                                                                                                                                             |
+| **Risk**           | **Andrea explicitly rejected this in the I4 deferral note.** Pollution of prod `User` table on every CI run. If teardown crashes (test panics, CI cancels mid-run, network hiccup), test rows leak. The closed-beta admin panel would show e2e ghosts. |
 
 **Verdict:** Disqualified per Andrea's standing call.
 
@@ -107,31 +108,32 @@ Use the prod DB but namespace test rows (`e2e-{timestamp}@hoard.test`, `cuid` pr
 
 Each test intercepts API calls and serves canned JSON. Zero DB involvement.
 
-| Dimension | Score |
-|---|---|
-| Cost | $0 |
-| CI complexity | Low |
-| Schema parity | N/A (no DB) |
-| Secrets management | N/A |
-| Local ergonomics | Excellent — fully deterministic |
-| **Risk** | E2E becomes "frontend integration tests." Doesn't exercise the actual API code path that production users hit. Maintenance burden: every API endpoint a test touches needs a mock. Defeats much of the point of E2E vs the existing vitest suite. |
+| Dimension          | Score                                                                                                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cost               | $0                                                                                                                                                                                                                                                |
+| CI complexity      | Low                                                                                                                                                                                                                                               |
+| Schema parity      | N/A (no DB)                                                                                                                                                                                                                                       |
+| Secrets management | N/A                                                                                                                                                                                                                                               |
+| Local ergonomics   | Excellent — fully deterministic                                                                                                                                                                                                                   |
+| **Risk**           | E2E becomes "frontend integration tests." Doesn't exercise the actual API code path that production users hit. Maintenance burden: every API endpoint a test touches needs a mock. Defeats much of the point of E2E vs the existing vitest suite. |
 
 **Verdict:** Right tool for some tests (`welcome.spec.ts`'s flow-only assertions), wrong tool for `screens.spec.ts`'s content-rendering assertions.
 
 ### Option F — Hybrid (recommended starting point).
 
 Split the suite by what each test actually proves:
+
 - **Content-asserting tests** (`screens.spec.ts`'s "shows game count," "Hollow Knight: Silksong," visual snapshots) → **Option B** dedicated test DB with deterministic seed (3 fixed users + a dozen fixed games).
 - **Flow / state-machine tests** (`welcome.spec.ts`, navigation tests, redirect tests, open-redirect defense) → **Option E** API mocks via `page.route(...)`.
 
-| Dimension | Score |
-|---|---|
-| Cost | $0 — Option B's free tier. |
-| CI complexity | Moderate — Option B's migration discipline applies; mocks in Option E are per-test config. |
-| Schema parity | Strong (B for content) / N/A (E for flows). |
-| Secrets management | One new secret (`DATABASE_URL_TEST`) for the B portion. |
-| Local ergonomics | Good — devs run `test:e2e` and get both flavors transparently. |
-| **Risk** | Two patterns to maintain. New contributors need to know which to use. Mitigation: test-file naming convention (`*.flow.spec.ts` for mocked, plain `*.spec.ts` for DB-backed) + a one-screen guide in CONTRIBUTING. |
+| Dimension          | Score                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cost               | $0 — Option B's free tier.                                                                                                                                                                                         |
+| CI complexity      | Moderate — Option B's migration discipline applies; mocks in Option E are per-test config.                                                                                                                         |
+| Schema parity      | Strong (B for content) / N/A (E for flows).                                                                                                                                                                        |
+| Secrets management | One new secret (`DATABASE_URL_TEST`) for the B portion.                                                                                                                                                            |
+| Local ergonomics   | Good — devs run `test:e2e` and get both flavors transparently.                                                                                                                                                     |
+| **Risk**           | Two patterns to maintain. New contributors need to know which to use. Mitigation: test-file naming convention (`*.flow.spec.ts` for mocked, plain `*.spec.ts` for DB-backed) + a one-screen guide in CONTRIBUTING. |
 
 **Verdict:** Most flexible. Splits the upfront cost (mocked welcome.spec.ts can ship before B is provisioned) and defers as much DB work as possible to where it's actually needed.
 
@@ -141,12 +143,12 @@ Split the suite by what each test actually proves:
 
 ### 3.1 — The right framing: what does each test uniquely prove?
 
-The "content vs flow" split that originally framed Option F was a reasonable first cut but the wrong axis. The sharper question is what each test *uniquely proves* relative to the layers below it.
+The "content vs flow" split that originally framed Option F was a reasonable first cut but the wrong axis. The sharper question is what each test _uniquely proves_ relative to the layers below it.
 
 - **Mocked tests (Option E flavor)** prove: a React component reacts correctly to API responses. Error rendering, state transitions, form validation. Most of this is essentially component-test territory — vitest + Testing Library can cover it without Playwright at all, and `WelcomeScreen.test.tsx` + `LoginScreen.test.tsx` already do.
 - **Real-test-DB tests (Option B flavor)** prove: the actual end-to-end integration pipeline works. Real backend issues a real JWT, real cookie lands, real `RequireAuth` reads the real session, real `RequireActive` checks real status, real frontend renders against real data. **This is where integration bugs hide** — exactly like the deep-link `?next=` bug shipped in `5024234`, "fixed," and then actually fixed in `9051b36`. Unit tests passed throughout because they injected `?next=` directly into MemoryRouter URLs; the integration gap (RequireAuth's redirect target not actually carrying the param) was invisible until smoke #3 in production.
 
-By that criterion, mocking should be the *exception* in E2E, not the default. Mocking `/api/auth/redeem-invite` and `/api/auth/me` for welcome-flow tests erases the surface where bugs hide. Mocking the pure state-machine logic of "default panel → request-sent panel" is fine; mocking "register → cookie lands → context updates → RequireActive redirects → welcome renders" defeats the purpose of having E2E at all.
+By that criterion, mocking should be the _exception_ in E2E, not the default. Mocking `/api/auth/redeem-invite` and `/api/auth/me` for welcome-flow tests erases the surface where bugs hide. Mocking the pure state-machine logic of "default panel → request-sent panel" is fine; mocking "register → cookie lands → context updates → RequireActive redirects → welcome renders" defeats the purpose of having E2E at all.
 
 ### 3.2 — Refined split: ~30% mocked / ~70% real-DB
 
@@ -169,7 +171,7 @@ Option B's deterministic seed (3 users + a dozen games) gives perfect schema par
 
 ### 3.5 — Naming convention: signal isolation level, not test subject
 
-Test files signal *what isolation level they run at*, not *what feature they cover*. Renaming files later is annoying; getting it right at the start is the cheap move.
+Test files signal _what isolation level they run at_, not _what feature they cover_. Renaming files later is annoying; getting it right at the start is the cheap move.
 
 - `*.integration.spec.ts` — DB-backed; runs against the test Supabase project; exercises the real auth/session/data pipeline. **Default for new E2E tests.** Existing `screens.spec.ts` becomes `screens.integration.spec.ts` in E1.
 - `*.component.spec.ts` — Mocked via `page.route(...)`; no DB; pure UI-reaction assertions. Reach for this only when a real backend adds setup without adding signal.
@@ -182,20 +184,20 @@ Two candidate mechanisms for the global auth fixture that lands the a11y false-p
 
 **Option α — convention-based inference.** The fixture infers the expected URL from the spec file path (e.g. `tests/e2e/library.integration.spec.ts` → `/library`) or from the spec's first `page.goto()` call (intercept it, capture the URL, assert post-navigation matches).
 
-| Pro | Con |
-|---|---|
-| Less repetition — declaration once, by convention | Inference rules are silent — when wrong, the fixture asserts the wrong thing without flagging it |
-| Easier to scaffold a new spec | Couples test files to filesystem layout; rename or restructure breaks the implicit mapping |
-| | Defeats the entire point of the a11y fix (failing loudly on misroute) — if the convention silently maps the wrong URL, the false positive returns under a new mask |
+| Pro                                               | Con                                                                                                                                                                |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Less repetition — declaration once, by convention | Inference rules are silent — when wrong, the fixture asserts the wrong thing without flagging it                                                                   |
+| Easier to scaffold a new spec                     | Couples test files to filesystem layout; rename or restructure breaks the implicit mapping                                                                         |
+|                                                   | Defeats the entire point of the a11y fix (failing loudly on misroute) — if the convention silently maps the wrong URL, the false positive returns under a new mask |
 
 **Option β — per-test expected-URL declaration (recommended).** Each spec explicitly declares the URL it expects to land on via `test.use({ expectedUrl })`. The fixture authenticates the user, the spec calls `page.goto(...)` in its own `beforeEach`, and the fixture's `afterEach` (or an inline `expect(page).toHaveURL(...)`) confirms the post-auth URL matches the declaration. Mismatch → test fails immediately.
 
-| Pro | Con |
-|---|---|
+| Pro                                                              | Con                                               |
+| ---------------------------------------------------------------- | ------------------------------------------------- |
 | Explicit at every test site — contract is visible, hard to drift | Verbose — every spec file carries the declaration |
-| Mismatches fail loudly (the whole point of the fix) | One extra line per spec |
-| Survives file renames and restructures | |
-| Decoupled from filesystem |  |
+| Mismatches fail loudly (the whole point of the fix)              | One extra line per spec                           |
+| Survives file renames and restructures                           |                                                   |
+| Decoupled from filesystem                                        |                                                   |
 
 **Recommendation: Option β (per-test declaration).** The single-line cost per spec is trivial; the explicitness directly protects the property the fixture exists to enforce. Implicit inference is exactly the shape of the original bug ("RequireAuth used router state instead of URL query — silent mismatch between channel and consumer"); we already paid for the lesson, don't repeat it.
 
@@ -215,7 +217,7 @@ test.beforeEach(async ({ page, expectedUrl }, testInfo) => {
   if (!expectedUrl) {
     throw new Error(
       `[${testInfo.title}] expectedUrl is required. Add ` +
-      `test.use({ expectedUrl: '/your-route' }) at the top of the spec.`,
+        `test.use({ expectedUrl: '/your-route' }) at the top of the spec.`,
     );
   }
   // Authenticate against the test backend by issuing a real
@@ -286,10 +288,10 @@ Manual unpause is the only resort if both retry layers fail (the project is genu
 name: test-db-keepalive
 on:
   schedule:
-    - cron: '0 4 * * *'  # daily 04:00 UTC; Supabase free tier pauses after 7d of inactivity
-  workflow_dispatch:      # manual trigger for emergency unpause
+    - cron: '0 4 * * *' # daily 04:00 UTC; Supabase free tier pauses after 7d of inactivity
+  workflow_dispatch: # manual trigger for emergency unpause
 permissions:
-  issues: write           # to open/comment on the canonical issue on failure
+  issues: write # to open/comment on the canonical issue on failure
 jobs:
   ping:
     runs-on: ubuntu-latest
@@ -361,40 +363,40 @@ A single PR review covers all five; merge as a unit.
 
 **New files:**
 
-| Path | Purpose |
-|---|---|
-| `.github/workflows/test-db-keepalive.yml` | Daily 04:00 UTC `SELECT 1`; opens/comments on `infra:test-db` issue on failure (full content in §3.7). |
-| `.github/workflows/test-db-migrate-check.yml` (or new step in existing `ci.yml`) | Runs `prisma migrate status --schema packages/db/prisma/schema.prisma` against `DATABASE_URL_TEST`. Fails the build if any migration in `packages/db/prisma/migrations/` is not yet applied to the test DB. Catches schema drift between prod and test before E2E even runs. |
-| `packages/db/prisma/seed-e2e.ts` | Three users (1 admin matching Andrea's shape, 1 ACTIVE, 1 PENDING_INVITE with `hasRequestedAccess: true`) + 12 games seeded under each ACTIVE user + a handful of platforms with `syncStatus: 'ok'`. Stable IDs (e.g. `e2e-user-admin`, `e2e-game-elden-ring`) so spec assertions can target them by id. Idempotent — runs `prisma migrate reset --force` first via CLI flag; no logic to "skip if exists." |
-| `apps/web/tests/e2e/fixtures.ts` | Global Playwright auth fixture per §3.6. Exports `test`, `expect`. `test.beforeEach` authenticates against the test backend; `test.afterEach` asserts post-nav URL matches `expectedUrl`. Throws helpful error if `expectedUrl` not declared. |
-| `apps/web/tests/e2e/README.md` | Contributor guide (commit 5). Naming convention, fixture usage, seed reset workflow, `infra:test-db` issue runbook. |
+| Path                                                                                  | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/test-db-keepalive.yml`                                             | Daily 04:00 UTC `SELECT 1`; opens/comments on `infra:test-db` issue on failure (full content in §3.7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `.github/workflows/test-db-migrate-check.yml` (or new step in existing `ci.yml`)      | Runs `prisma migrate status --schema packages/db/prisma/schema.prisma` against `DATABASE_URL_TEST`. Fails the build if any migration in `packages/db/prisma/migrations/` is not yet applied to the test DB. Catches schema drift between prod and test before E2E even runs.                                                                                                                                                                                                                                                                                                                                        |
+| `packages/db/prisma/seed-e2e.ts`                                                      | Three users (1 admin matching Andrea's shape, 1 ACTIVE, 1 PENDING_INVITE with `hasRequestedAccess: true`) + 12 games seeded under each ACTIVE user + a handful of platforms with `syncStatus: 'ok'`. Stable IDs (e.g. `e2e-user-admin`, `e2e-game-elden-ring`) so spec assertions can target them by id. Idempotent — runs `prisma migrate reset --force` first via CLI flag; no logic to "skip if exists."                                                                                                                                                                                                         |
+| `apps/web/tests/e2e/fixtures.ts`                                                      | Global Playwright auth fixture per §3.6. Exports `test`, `expect`. `test.beforeEach` authenticates against the test backend; `test.afterEach` asserts post-nav URL matches `expectedUrl`. Throws helpful error if `expectedUrl` not declared.                                                                                                                                                                                                                                                                                                                                                                       |
+| `apps/web/tests/e2e/README.md`                                                        | Contributor guide (commit 5). Naming convention, fixture usage, seed reset workflow, `infra:test-db` issue runbook.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `.env.test.example` (committed; the real `.env.test` is gitignored — see §4.6 step 7) | Template documenting which env vars E2E expects. **Placeholder values only — NO real connection strings, NO real secrets.** Format: `DATABASE_URL_TEST=postgresql://<user>:<password>@<host>:<port>/<db>?pgbouncer=true&connection_limit=5` with literal angle-bracket placeholders. Plus a comment block pointing the developer at where to find the real value (Supabase dashboard → Settings → Database). The example file is what a fresh clone reads to know "this env var is required for E2E"; the rule is that anyone running `git diff` on a commit touching this file should never see a real credential. |
 
 **Renamed files:**
 
-| Old | New |
-|---|---|
+| Old                                  | New                                              |
+| ------------------------------------ | ------------------------------------------------ |
 | `apps/web/tests/e2e/screens.spec.ts` | `apps/web/tests/e2e/screens.integration.spec.ts` |
-| `apps/web/tests/e2e/a11y.spec.ts` | `apps/web/tests/e2e/a11y.integration.spec.ts` |
+| `apps/web/tests/e2e/a11y.spec.ts`    | `apps/web/tests/e2e/a11y.integration.spec.ts`    |
 
 **Modified files:**
 
-| Path | Change |
-|---|---|
-| `apps/web/playwright.config.ts` | `webServer[0]` (the `dev:api` config) gains an `env: { DATABASE_URL: process.env['DATABASE_URL_TEST'] }` block so the API boots against the test DB. `dev:web` unchanged. Local dev reads `DATABASE_URL` from `apps/api/.env` as before. |
-| `apps/web/tests/e2e/screens.integration.spec.ts` (post-rename) | Imports swap from `@playwright/test` to `./fixtures`. Per-describe `test.use({ expectedUrl })` declarations. Content assertions retargeted from `Hollow Knight: Silksong` etc. to seeded titles (`elden ring`-class). Reclassification verdicts applied (§4.3). Seven `test.describe` blocks / specs deleted, with covering vitest tests added in the same commit. |
-| `apps/web/tests/e2e/a11y.integration.spec.ts` (post-rename) | Same import + `test.use` updates. Each route's axe scan now runs against a real authed render (was: false-positive scan against `/login`). |
-| `apps/web/src/__tests__/shell-persistence.test.tsx` | Extended with sidebar + tab-bar active-state assertions, picking up the deletions from §4.3. |
-| `apps/web/src/__tests__/legacy-redirects.test.tsx` (NEW) | Single MemoryRouter test for `/upcoming` → `/releases`. Picks up the deletion from §4.3. |
-| `apps/web/src/components/screens/__tests__/LibraryDesktop.test.tsx` (NEW or extended if exists) | 6-shelf-headers assertion against mocked shelves data. Picks up the deletion from §4.3. |
-| `apps/web/src/components/screens/releases/__tests__/primitives.test.tsx` | Verified to drift-guard "no [mark all owned]"; one-line addition if missing. Picks up the deletion from §4.3. |
-| `tests/snapshots/dashboard*.png` / `library*.png` / `releases*.png` / `releases-recent*.png` / `game-detail*.png` (and mobile variants) | Regenerated against seeded data in commit 4. The current baselines were captured against a populated dashboard pre-I-series and have been broken since. |
-| `.gitignore` | Adds `apps/web/.env.test` if not already covered (verified during E1 — see §4.6 step 5). The existing `.env.*.local` glob does NOT catch `.env.test`. |
+| Path                                                                                                                                    | Change                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/web/playwright.config.ts`                                                                                                         | `webServer[0]` (the `dev:api` config) gains an `env: { DATABASE_URL: process.env['DATABASE_URL_TEST'] }` block so the API boots against the test DB. `dev:web` unchanged. Local dev reads `DATABASE_URL` from `apps/api/.env` as before.                                                                                                                           |
+| `apps/web/tests/e2e/screens.integration.spec.ts` (post-rename)                                                                          | Imports swap from `@playwright/test` to `./fixtures`. Per-describe `test.use({ expectedUrl })` declarations. Content assertions retargeted from `Hollow Knight: Silksong` etc. to seeded titles (`elden ring`-class). Reclassification verdicts applied (§4.3). Seven `test.describe` blocks / specs deleted, with covering vitest tests added in the same commit. |
+| `apps/web/tests/e2e/a11y.integration.spec.ts` (post-rename)                                                                             | Same import + `test.use` updates. Each route's axe scan now runs against a real authed render (was: false-positive scan against `/login`).                                                                                                                                                                                                                         |
+| `apps/web/src/__tests__/shell-persistence.test.tsx`                                                                                     | Extended with sidebar + tab-bar active-state assertions, picking up the deletions from §4.3.                                                                                                                                                                                                                                                                       |
+| `apps/web/src/__tests__/legacy-redirects.test.tsx` (NEW)                                                                                | Single MemoryRouter test for `/upcoming` → `/releases`. Picks up the deletion from §4.3.                                                                                                                                                                                                                                                                           |
+| `apps/web/src/components/screens/__tests__/LibraryDesktop.test.tsx` (NEW or extended if exists)                                         | 6-shelf-headers assertion against mocked shelves data. Picks up the deletion from §4.3.                                                                                                                                                                                                                                                                            |
+| `apps/web/src/components/screens/releases/__tests__/primitives.test.tsx`                                                                | Verified to drift-guard "no [mark all owned]"; one-line addition if missing. Picks up the deletion from §4.3.                                                                                                                                                                                                                                                      |
+| `tests/snapshots/dashboard*.png` / `library*.png` / `releases*.png` / `releases-recent*.png` / `game-detail*.png` (and mobile variants) | Regenerated against seeded data in commit 4. The current baselines were captured against a populated dashboard pre-I-series and have been broken since.                                                                                                                                                                                                            |
+| `.gitignore`                                                                                                                            | Adds `apps/web/.env.test` if not already covered (verified during E1 — see §4.6 step 5). The existing `.env.*.local` glob does NOT catch `.env.test`.                                                                                                                                                                                                              |
 
 **Deleted files:**
 
-| Path | Reason |
-|---|---|
+| Path                                    | Reason                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/web/playwright.offline.config.ts` | Per Andrea's instruction (2026-05-10): offline coverage is OUT of E1's scope. Deleting outright rather than updating-or-deprecating means the file's "yes, we used to have offline E2E" footprint is removed from the tree. If offline coverage is later wanted, it lands in a follow-up workstream with proper scoping. The `test:e2e:offline` script in `apps/web/package.json` is removed in the same commit. |
 
 #### 4.3 — Existing test reclassification verdicts
@@ -403,29 +405,30 @@ Each existing test gets a verdict — **integration**, **component**, or **delet
 
 **Decision rule:** if a visual snapshot already covers the same property (page mounted, headers rendered) AND vitest can prove the structural concern with mocked data, the structural assertion is redundant — delete. Visual snapshots aren't perfect (brittle on CSS changes) but they catch the "did this render at all" property, and vitest catches the wiring-through property; the integration test in the middle doesn't add unique signal.
 
-| Test | Verdict | Reasoning |
-|---|---|---|
-| `Dashboard / shows game count` | **INTEGRATION** | `.bignum` shows a real number from a real DB query through real rendering. Vitest could prove `<Dashboard stats={{totalGames: 42}} />` shows 42, but couldn't prove the real `/api/dashboard` returns the right shape AND the count is non-zero. Integration. |
-| `Dashboard / shows now-playing section` | **INTEGRATION** | Content assertion targeting a specific seeded game title. Vitest with mocked `nowPlaying` proves rendering; integration proves the API actually returns the seeded game. Integration. |
-| `Dashboard / visual snapshot` | **INTEGRATION** | Pixel match against full stack. Integration. |
-| `Library /library shows all 6 shelves` | **DELETE → vitest** | Iterates 6 hardcoded text labels and checks each is visible. Labels are hardcoded in `LibraryDesktop.tsx`; backend can't influence them. Visual snapshot already proves the shelves view mounted with headers. Vitest with `<LibraryDesktop shelves={...} />` and mocked data can prove the 6 labels render. **Redundant with snapshot AND covered by vitest** — delete. New vitest in `apps/web/src/components/screens/__tests__/LibraryDesktop.test.tsx` if not already covered. |
-| `Library /library shows HLTB hint on backlog item` | **INTEGRATION** | The `~12h`-style regex assertion is the giveaway: this proves real HLTB data was fetched, persisted, returned by the API, and rendered by the frontend. Vitest with mocked HLTB data proves rendering only; integration proves the data path. Keep. |
-| `Library /library visual snapshot` | **INTEGRATION** | Pixel match against full stack. Integration. |
-| `Releases /releases renders the page chrome` | **DELETE → vitest** | Asserts mode-toggle tabs exist on desktop / `.m-view-header` on mobile. Pure structural "page mounted" check. Visual snapshot already covers it. Vitest with mocked feed proves the chrome renders. **Redundant** — delete. |
-| `Releases /releases renders either content or an empty-state CTA` | **INTEGRATION** | Asserts the page mounts SOMETHING valid given **live IGDB feed + seed wishlist** behavior. Vitest cannot prove "with a real (fluctuating) IGDB response, the page renders content OR empty state" — that's a flake-resistance property specifically for the integration layer. Keep. |
-| `Releases /releases visual snapshot` | **INTEGRATION** | Pixel match. Integration. |
-| `Releases recent /releases/recent renders the page chrome` | **INTEGRATION (kept)** | Borderline case — same shape as `Releases /releases renders chrome` (which gets deleted) — BUT `/releases/recent` has no visual snapshot fallback. Deleting this test would leave the page with E2E coverage of zero. Keeping as the page's only integration smoke. If a `/releases/recent` snapshot is later added, this can be deleted then. |
-| `Releases recent /releases/recent drift-guard: no [mark all owned]` | **DELETE → vitest** | Asserts a UI element is _not_ rendered. Pure component property; doesn't need real backend. Assertion is already implicitly covered by `releases/__tests__/primitives.test.tsx` drift-guard tests (per CLAUDE.md mentions of removed-mock-button assertions); E1 confirms coverage exists or adds a one-liner there. |
-| `Legacy redirects /upcoming redirects to /releases` | **DELETE → vitest** | Pure client-side router behavior. Zero integration value. `MemoryRouter` test in vitest can prove it exhaustively without booting the API. Add a new test in `apps/web/src/__tests__/legacy-redirects.test.tsx` (or extend `auth-deeplink.test.tsx`) — single `expect(getPath()).toBe('/releases')` assertion. |
-| `Game Detail /game/:id shows game title` | **INTEGRATION** | Content from seeded game retrieved via real `/api/games/:id` query. Integration. |
-| `Game Detail /game/:id shows receipt` | **INTEGRATION** | Asserts `.receipt` mounts AND "thank u for hoarding" text is present. Real-render structural plus content assertion. Vitest with mocked `UserGameDetail` proves rendering; integration proves the real game data flows through the receipt block. Keep — the receipt is design-system-heavy enough that pixel-stable rendering through a real data path adds signal. |
-| `Game Detail /game/:id visual snapshot` | **INTEGRATION** | Pixel match. Integration. |
-| `Navigation sidebar active state follows route (desktop)` | **DELETE → vitest** | Asserts `.sidebar .item.active` contains "Library" after `goto('/library')`. Pure route-to-DOM wiring. Vitest with `MemoryRouter initialEntries={['/library']}` can prove this exhaustively; `shell-persistence.test.tsx` already does similar route-driven assertions. Add a sibling test there (one extra `expect`). **Redundant.** |
-| `Navigation tab bar active state follows route (mobile)` | **DELETE → vitest** | Same shape as sidebar, mobile variant. Vitest with `useBreakpoint()` mocked to mobile + MemoryRouter covers it. Delete; extend shell-persistence.test.tsx. |
-| `Navigation navigating from dashboard to library works` | **INTEGRATION** | Click → real navigation → real fetch (`/api/games/shelves` or similar fires) → real content render. Three integration concerns at once that vitest can't prove together: vitest-with-mocks can do click-to-navigate, but the `/api/games/shelves` fetch is the integration property — it triggers when the route mounts. Keep. |
-| `a11y.integration.spec.ts` (12 tests across 6 routes × 2 viewports) | **INTEGRATION** | Currently false-positive (scans `/login` for every authed route). After E1's fixture lands, axe-core scans the actual authed routes. Integration. |
+| Test                                                                | Verdict                | Reasoning                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dashboard / shows game count`                                      | **INTEGRATION**        | `.bignum` shows a real number from a real DB query through real rendering. Vitest could prove `<Dashboard stats={{totalGames: 42}} />` shows 42, but couldn't prove the real `/api/dashboard` returns the right shape AND the count is non-zero. Integration.                                                                                                                                                                                                                      |
+| `Dashboard / shows now-playing section`                             | **INTEGRATION**        | Content assertion targeting a specific seeded game title. Vitest with mocked `nowPlaying` proves rendering; integration proves the API actually returns the seeded game. Integration.                                                                                                                                                                                                                                                                                              |
+| `Dashboard / visual snapshot`                                       | **INTEGRATION**        | Pixel match against full stack. Integration.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `Library /library shows all 6 shelves`                              | **DELETE → vitest**    | Iterates 6 hardcoded text labels and checks each is visible. Labels are hardcoded in `LibraryDesktop.tsx`; backend can't influence them. Visual snapshot already proves the shelves view mounted with headers. Vitest with `<LibraryDesktop shelves={...} />` and mocked data can prove the 6 labels render. **Redundant with snapshot AND covered by vitest** — delete. New vitest in `apps/web/src/components/screens/__tests__/LibraryDesktop.test.tsx` if not already covered. |
+| `Library /library shows HLTB hint on backlog item`                  | **INTEGRATION**        | The `~12h`-style regex assertion is the giveaway: this proves real HLTB data was fetched, persisted, returned by the API, and rendered by the frontend. Vitest with mocked HLTB data proves rendering only; integration proves the data path. Keep.                                                                                                                                                                                                                                |
+| `Library /library visual snapshot`                                  | **INTEGRATION**        | Pixel match against full stack. Integration.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `Releases /releases renders the page chrome`                        | **DELETE → vitest**    | Asserts mode-toggle tabs exist on desktop / `.m-view-header` on mobile. Pure structural "page mounted" check. Visual snapshot already covers it. Vitest with mocked feed proves the chrome renders. **Redundant** — delete.                                                                                                                                                                                                                                                        |
+| `Releases /releases renders either content or an empty-state CTA`   | **INTEGRATION**        | Asserts the page mounts SOMETHING valid given **live IGDB feed + seed wishlist** behavior. Vitest cannot prove "with a real (fluctuating) IGDB response, the page renders content OR empty state" — that's a flake-resistance property specifically for the integration layer. Keep.                                                                                                                                                                                               |
+| `Releases /releases visual snapshot`                                | **INTEGRATION**        | Pixel match. Integration.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `Releases recent /releases/recent renders the page chrome`          | **INTEGRATION (kept)** | Borderline case — same shape as `Releases /releases renders chrome` (which gets deleted) — BUT `/releases/recent` has no visual snapshot fallback. Deleting this test would leave the page with E2E coverage of zero. Keeping as the page's only integration smoke. If a `/releases/recent` snapshot is later added, this can be deleted then.                                                                                                                                     |
+| `Releases recent /releases/recent drift-guard: no [mark all owned]` | **DELETE → vitest**    | Asserts a UI element is _not_ rendered. Pure component property; doesn't need real backend. Assertion is already implicitly covered by `releases/__tests__/primitives.test.tsx` drift-guard tests (per CLAUDE.md mentions of removed-mock-button assertions); E1 confirms coverage exists or adds a one-liner there.                                                                                                                                                               |
+| `Legacy redirects /upcoming redirects to /releases`                 | **DELETE → vitest**    | Pure client-side router behavior. Zero integration value. `MemoryRouter` test in vitest can prove it exhaustively without booting the API. Add a new test in `apps/web/src/__tests__/legacy-redirects.test.tsx` (or extend `auth-deeplink.test.tsx`) — single `expect(getPath()).toBe('/releases')` assertion.                                                                                                                                                                     |
+| `Game Detail /game/:id shows game title`                            | **INTEGRATION**        | Content from seeded game retrieved via real `/api/games/:id` query. Integration.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `Game Detail /game/:id shows receipt`                               | **INTEGRATION**        | Asserts `.receipt` mounts AND "thank u for hoarding" text is present. Real-render structural plus content assertion. Vitest with mocked `UserGameDetail` proves rendering; integration proves the real game data flows through the receipt block. Keep — the receipt is design-system-heavy enough that pixel-stable rendering through a real data path adds signal.                                                                                                               |
+| `Game Detail /game/:id visual snapshot`                             | **INTEGRATION**        | Pixel match. Integration.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `Navigation sidebar active state follows route (desktop)`           | **DELETE → vitest**    | Asserts `.sidebar .item.active` contains "Library" after `goto('/library')`. Pure route-to-DOM wiring. Vitest with `MemoryRouter initialEntries={['/library']}` can prove this exhaustively; `shell-persistence.test.tsx` already does similar route-driven assertions. Add a sibling test there (one extra `expect`). **Redundant.**                                                                                                                                              |
+| `Navigation tab bar active state follows route (mobile)`            | **DELETE → vitest**    | Same shape as sidebar, mobile variant. Vitest with `useBreakpoint()` mocked to mobile + MemoryRouter covers it. Delete; extend shell-persistence.test.tsx.                                                                                                                                                                                                                                                                                                                         |
+| `Navigation navigating from dashboard to library works`             | **INTEGRATION**        | Click → real navigation → real fetch (`/api/games/shelves` or similar fires) → real content render. Three integration concerns at once that vitest can't prove together: vitest-with-mocks can do click-to-navigate, but the `/api/games/shelves` fetch is the integration property — it triggers when the route mounts. Keep.                                                                                                                                                     |
+| `a11y.integration.spec.ts` (12 tests across 6 routes × 2 viewports) | **INTEGRATION**        | Currently false-positive (scans `/login` for every authed route). After E1's fixture lands, axe-core scans the actual authed routes. Integration.                                                                                                                                                                                                                                                                                                                                  |
 
 **Net change:**
+
 - **Before:** 18 unique screens.spec.ts tests (×2 viewports for visual snapshots + most others where viewport-aware = ~38 test instances) + 12 a11y tests.
 - **After E1:**
   - `screens.integration.spec.ts`: 11 unique tests kept (×2 viewports where applicable) — Dashboard 3, Library 2 (HLTB + visual), Releases 2 (content-or-empty + visual), Releases recent 1 (chrome only), Game Detail 3, Navigation 1 (click-to-navigate). **7 deletions** moved to vitest or covered by visual snapshots.
@@ -471,14 +474,14 @@ The `🟢` markers below indicate where Andrea's green-light is required to proc
 
 2. **Apply prod migration history to the test project.** Use the documented pgbouncer workaround per `CLAUDE.md` operational gotchas:
 
-    ```bash
-    DATABASE_URL=<test-db-url-without-pgbouncer-params> \
-    npx prisma db execute \
-      --file packages/db/prisma/migrations/<each-migration>/migration.sql \
-      --schema packages/db/prisma/schema.prisma
-    ```
+   ```bash
+   DATABASE_URL=<test-db-url-without-pgbouncer-params> \
+   npx prisma db execute \
+     --file packages/db/prisma/migrations/<each-migration>/migration.sql \
+     --schema packages/db/prisma/schema.prisma
+   ```
 
-    Then `npx prisma migrate resolve --applied <name>` for each. Do this in chronological order. Verify end-state by checking `_prisma_migrations` row count matches prod.
+   Then `npx prisma migrate resolve --applied <name>` for each. Do this in chronological order. Verify end-state by checking `_prisma_migrations` row count matches prod.
 
 3. **Enable RLS on the new project's public tables** (per AGENT.md key decision #10). Re-run the SQL from `20260504100000_enable_rls_on_public_tables/migration.sql` against the test DB.
 
@@ -512,12 +515,12 @@ Agent stops + summarizes — **and inlines the seed contents in the summary mess
 
 7. **Andrea runs `seed-e2e.ts` once locally** against the test DB:
 
-    ```bash
-    DATABASE_URL=<test-db-url-as-above> \
-    npx tsx packages/db/prisma/seed-e2e.ts
-    ```
+   ```bash
+   DATABASE_URL=<test-db-url-as-above> \
+   npx tsx packages/db/prisma/seed-e2e.ts
+   ```
 
-    Verify via Prisma Studio or `SELECT count(*) FROM "User"` (expect 3) and `SELECT count(*) FROM "Game"` (expect 12). Wipe-and-reseed should be idempotent — running twice produces the same state.
+   Verify via Prisma Studio or `SELECT count(*) FROM "User"` (expect 3) and `SELECT count(*) FROM "Game"` (expect 12). Wipe-and-reseed should be idempotent — running twice produces the same state.
 
 🟢 **Andrea green-lights commit 3.** Hold here longest; the seed shape determines what every integration test in commit 3 asserts against.
 
@@ -568,23 +571,174 @@ Agent stops + summarizes. **Last commit of E1.**
 14. **Watch for the canonical issue** in the days following merge. It should NOT auto-open under healthy operation. If it appears in the first week, that's the failure path doing its job — investigate per the §3.7 recovery flow.
 
 **Sanity check on cost:**
+
 - **Phase A + B (before commit 1):** ~20 minutes (provisioning + migration replay + RLS + secret + local .env.test).
 - **Between commits 2 and 3:** ~10 minutes (review seed contents in summary, run seed locally, verify counts).
 - **Phase C (after commit 5):** ~30 minutes (workflow trigger + sad-path + migration drift + corrupted-RequireAuth + revert), spread across the day after merge for the cron-runs check.
 
 Total Andrea time: ~60 minutes split across three sittings.
 
-### E2 — Reinstate `welcome.spec.ts`
+### E2 — Reinstate `welcome.integration.spec.ts`
 
-Mostly an integration spec under the new convention; one targeted component spec for the pure UI states.
+Single integration spec covering the welcome / redemption flow. Scoped 2026-05-12 against the locked decisions D1–D5 (5 decisions surfaced + acked; see commit messages on the §4 expansion for the per-decision rationale). The original plan also proposed `welcome-error-states.component.spec.ts`; that file was dropped per D4 — `WelcomeScreen.test.tsx` (vitest) already covers the UI-reaction assertions, and the error-copy renderings are pure DOM where jsdom and Chromium agree. The one integration-unique signal — proving the real `/api/auth/redeem-invite` returns the expected error code shape AND the component maps it to the right error copy — is folded into the single integration spec as test 6 (API error-mapping smoke).
 
-- **`welcome.integration.spec.ts`** — backed by the test DB, four cases per `INVITE_CODES_PLAN.md` I4:
-  - fresh signup → `/welcome` (no `next` and with `next=/library`)
-  - successful redemption navigates to `next`
-  - redemption with `next=//evil.com` → `/` (open-redirect defense end-to-end against the real `safeNext` + real `RequireActive`)
-  - request-access → received-code-immediately → redeem flow (friction-free)
-  - Each test registers a fresh user via `POST /api/auth/register` against the test API, exercises the real welcome flow, asserts URL transitions, cleans up via `DELETE /api/auth/me` in an `afterEach`. Cleanup runs against the test DB, never prod.
-- **`welcome-error-states.component.spec.ts`** (smaller) — pure UI-reaction assertions where a real backend adds setup without adding signal: distinct error copy per `RedeemInviteError` code (INVALID_FORMAT vs CODE_NOT_FOUND vs CODE_ALREADY_REDEEMED vs RATE_LIMITED), the textarea's 500-char silent truncation, the request-sent state's persistence across reloads. `page.route(...)` mocks the API; the test verifies the UI's reaction. The unit-level coverage in `WelcomeScreen.test.tsx` already gets most of this; this spec is the integration-level companion that proves the same assertions hold when the UI is mounted in a real browser, not jsdom.
+**Test list (6 total, all integration):**
+
+1. `fresh signup with no next param lands on /welcome` — register → assert URL is `/welcome`
+2. `fresh signup with ?next=/library lands on /welcome?next=/library` — proves the `next` param propagates from `/login?next=…` through register and into the welcome screen's URL
+3. `successful redemption navigates to ?next destination` — uses `e2e-invite-code-1`; PENDING user goes to `/welcome?next=/library`, submits code, expects post-redeem URL = `/library`
+4. `redemption with ?next=//evil.com defaults to / (open-redirect defense)` — uses `e2e-invite-code-2`; PENDING user goes to `/welcome?next=//evil.com`, submits code, expects post-redeem URL = `/` (the `safeNext` filter fires AFTER successful redemption — code IS consumed, the open-redirect check runs on the navigate destination)
+5. `request-access → admin generates code → user redeems → ACTIVE` — friction-free path. Register fresh user → submit access-request message → `page.request` posts to `/api/admin/invite-codes` with the seeded admin user's session → switch back to fresh-user page context → submit the generated code → assert URL leaves `/welcome` and user.status is ACTIVE
+6. `API error-mapping smoke — 3 error codes against real backend` — exercises `INVALID_FORMAT` (client-side regex catches, no API call) / `CODE_NOT_FOUND` (well-formed but unused code → server 409) / `CODE_ALREADY_REDEEMED` (submits `e2e-invite-code-3` which the seed marks as redeemed by `e2e-user-active` → server 409 with the right code). All three assertions verify the rendered error copy matches the expected `RedeemInviteError` mapping. `RATE_LIMITED` deliberately not covered here — see "Scope notes" below.
+
+**Scope notes (folded into the spec's file-level docstring per D4 ack):**
+
+`RATE_LIMITED` is verified via vitest mock in `apps/web/src/components/screens/__tests__/WelcomeScreen.test.tsx`, not via real backend. Both rate limiters in `apps/api/src/routes/auth.ts` (`redeemInviteIpLimiter`, `redeemInviteUserLimiter`) carry `skip: skipInDev` — they don't fire unless `NODE_ENV === 'production'`. Forcing prod NODE_ENV for the test API process would also flip `secure: true` on the session cookie → cookies become HTTPS-only → Playwright connects over HTTP → cookies silently rejected → fixture's beforeAll precheck fails → entire suite dies before any assertion runs. Working around either requires HTTPS-localhost cert setup (CI complexity for one assertion) or a new env var that decouples rate-limit-skip from cookie-secure (additional code surface + drift potential). Both costs are disproportionate to the assertion's signal — the rate-limit response shape is well-defined and stable; integration coverage adds disproportionate setup cost for marginal signal. Acceptable tradeoff documented inline in the spec file so future-reader doesn't wonder why RATE_LIMITED is missing and try to add it.
+
+#### E2.1 — Commit grouping (3 commits, 1 Andrea-touchpoint)
+
+Order matters — commit 2's tests need the seeded codes from commit 1. Per hard rule 10, agent stops + summarizes after each commit and holds for Andrea's green-light to proceed.
+
+1. **`feat(e2e): seed-e2e.ts adds 5 InviteCode rows for welcome flow tests`** — extends `seed-e2e.ts` with 5 stable-ID `InviteCode` rows under a new `// Invite codes (welcome flow tests)` section. Header comment maps each code to its consumer test. `e2e-invite-code-3` pre-marked as redeemed (usedById + usedAt). Reseed required before commit 2 can run.
+2. **`feat(e2e): welcome.integration.spec.ts + globalSetup ghost-purge + fixtures admin helper`** — new spec file with all 6 tests, new `apps/web/tests/e2e/global-setup.ts` for the >1h ghost-purge, minor `fixtures.ts` extension if test 5 needs a shared helper (decision TBD when implementing — see E2.2 file-by-file). `playwright.config.ts` gets `globalSetup` directive.
+3. **`docs(e2e): close out E2 — PLAN status + CLAUDE.md mention + §6 status table`** — doc closeouts only (no code). PLAN.md row updated to Done, CLAUDE.md gets a Recent-fixes entry, E2E_RESTORATION_PLAN.md §6 step 5 marked Done. **Runs AFTER §E2.4 verification passes** — if verification surfaces a problem with commit 2, the "E2 done" doc state shouldn't be on disk. Same shape as E1's Phase C verification preceding the closeout commit (`b8ff5d6`).
+
+🟢 **Andrea touchpoint between commits 1 and 2:** reseed the test DB so the 5 new InviteCode rows land. ~30 seconds:
+
+```bash
+DATABASE_URL=<test-db-url> I_KNOW_THIS_IS_THE_TEST_DB=1 \
+  npm run db:seed:e2e -w @hoard/db
+```
+
+Verify post-reseed counts via psql (test DB URL with `?…` stripped):
+
+```sql
+SELECT count(*) FROM "User";       -- expect 3
+SELECT count(*) FROM "Game";       -- expect 12
+SELECT count(*) FROM "UserGame";   -- expect 24
+SELECT count(*) FROM "Platform";   -- expect 4
+SELECT count(*) FROM "InviteCode"; -- expect 5  ← new
+```
+
+#### E2.2 — File-by-file changes
+
+**New files:**
+
+| Path                                             | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/tests/e2e/welcome.integration.spec.ts` | The 6-test integration spec. File-level docstring explains the test list + the RATE_LIMITED inline scope note. Uses the existing `fixtures.ts` for `test` + `expect` exports (fresh-user tests need their own `expectedUrl` per describe block; the fixture's `afterEach` URL assertion still applies).                                                                                                                                               |
+| `apps/web/tests/e2e/global-setup.ts`             | Connects to test DB via `new PrismaClient({ datasources: { db: { url: process.env['DATABASE_URL_TEST']! } } })` (NOT via the default env-var path — globalSetup runs before webServer env-block applies, so the URL has to be passed explicitly). Runs `DELETE FROM "User" WHERE email LIKE 'e2e-welcome-%@hoard.test' AND "createdAt" < NOW() - INTERVAL '1 hour';`. Logs purged-row count. Cleanup-contract grep-friendly comment block lives here. |
+
+**Modified files:**
+
+| Path                             | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/db/prisma/seed-e2e.ts` | Adds 5 `InviteCode` rows with stable IDs and a mapping comment block. `e2e-invite-code-3` pre-marked redeemed (`usedById: 'e2e-user-active'` + `usedAt: <past-timestamp>`). Other 4 unused.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `apps/web/playwright.config.ts`  | Adds `globalSetup: './tests/e2e/global-setup.ts'`. Single-line addition.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `apps/web/tests/e2e/fixtures.ts` | Possibly extended with a small helper for test 5's admin-context-switch — decision deferred to implementation time. The cleaner pattern (per Andrea's note) is `page.request.post('/api/admin/invite-codes', ...)` with an admin session set up via a parallel `page.request.post('/api/auth/login', { data: { email: 'e2e-admin@hoard.test', ... } })` against a fresh `request` context — no separate `browser.newContext()` needed. If that pattern fits cleanly inline in test 5, no fixture extension. If it grows into a reused helper (other tests later need admin actions), promote to `fixtures.ts` then. **Default: keep it inline in test 5, don't pre-extract.** **REQUIRED at commit-2 time**: a comment above test 5's admin-context-switch block carrying this rule verbatim, so a future test author copying the pattern reads "this is a deferred decision, not the convention" before they propagate the inline-shape to a second test. Suggested comment: `// Admin auth is inline here per the E2.2 deferred-extraction rule:` `// keep inline UNTIL a second test needs admin actions, then promote to fixtures.ts.` |
+
+**File-level docstring for `welcome.integration.spec.ts` — committed VERBATIM at commit-2 time** (not a "shape" or "template" — this is the literal text that lands in the file. The spec must be self-contained when opened from a failing CI link without cross-referencing this plan. The RATE_LIMITED paragraph specifically is the load-bearing reason for verbatim-inline; future-reader needs to see the cascade explanation right there, not 4 clicks away):
+
+```ts
+/**
+ * Welcome flow integration tests — register → redeem → ACTIVE transitions.
+ *
+ * Plan: docs/E2E_RESTORATION_PLAN.md §E2 (decisions D1–D5 locked 2026-05-12).
+ *
+ * Tests in this file cover the I4 welcome flow (see docs/INVITE_CODES_PLAN.md
+ * I4) end-to-end through real /api/auth/register, /api/auth/redeem-invite,
+ * /api/auth/request-access, and /api/admin/invite-codes. The vitest suite at
+ * apps/web/src/components/screens/__tests__/WelcomeScreen.test.tsx covers the
+ * pure UI assertions (render correctness with mocked responses); this spec
+ * proves the wire — that real backend returns the expected error code shape
+ * AND the component maps it to the right copy.
+ *
+ * RATE_LIMITED is intentionally not covered here. Both rate limiters in
+ * apps/api/src/routes/auth.ts carry `skip: skipInDev` and only fire when
+ * NODE_ENV === 'production'. Forcing prod NODE_ENV for the test API would
+ * also flip `secure: true` on session cookies → HTTPS-only → Playwright
+ * cookies silently rejected → fixture's beforeAll precheck fails → entire
+ * suite dies. The vitest mock coverage (WelcomeScreen.test.tsx) proves the
+ * UI render correctly handles a 429; the rate-limit response shape is
+ * well-defined and stable; integration coverage adds disproportionate
+ * setup cost for marginal signal.
+ *
+ * Fresh-user emails follow `e2e-welcome-{testSlug}-{Date.now()}@hoard.test`
+ * — the `e2e-welcome-` prefix is LOAD-BEARING for the global-setup.ts
+ * ghost-purge query. Do not change without updating that query in lockstep.
+ */
+```
+
+**Cleanup-contract comment block (in `global-setup.ts`):**
+
+```ts
+// CLEANUP CONTRACT — three layers, ordered by precedence:
+//
+//   1. PRIMARY: afterEach inside welcome.integration.spec.ts deletes the
+//      fresh user via DELETE /api/auth/me. Per-test cleanup.
+//
+//   2. SAFETY NET (this file): globalSetup deletes any User WHERE
+//      email LIKE 'e2e-welcome-%@hoard.test' AND createdAt > 1h ago.
+//      Catches ghosts from crashed tests, killed runs, or aborted CI jobs
+//      where afterEach didn't get a chance to run. The 1-hour window
+//      preserves recent ghosts during active debug — anyone inspecting a
+//      previous-test's User row in psql before the next run keeps that
+//      access.
+//
+//   3. ESCAPE HATCH (manual): if a really old ghost survives both layers
+//      (e.g., the seed prefix changed and the LIKE query no longer
+//      matches), nuke directly:
+//        DELETE FROM "User" WHERE email LIKE 'e2e-welcome-%@hoard.test';
+//      Use sparingly; >1h preservation exists for a reason.
+//
+// PSQL GOTCHA (for contributors running the manual layers via psql):
+//   This file uses Prisma — Prisma handles the pgbouncer=true URL param
+//   correctly. But psql/libpq rejects `?pgbouncer=true&connection_limit=5`
+//   with "invalid URI query parameter pgbouncer". Strip the query string
+//   from the test DB URL before passing to psql:
+//     PSQL_URL="${DATABASE_URL_TEST%%\?*}"
+//   CLAUDE.md operational gotcha + verification recipe in §E2.4.
+```
+
+#### E2.3 — Reclassification (N/A)
+
+No existing tests to reclassify. E2 adds a new spec file and reuses E1's fixture, seed, and infrastructure unchanged.
+
+#### E2.4 — Manual verification checklist
+
+**Run BEFORE commit 3 lands** — commit 3 is doc closeouts (PLAN.md "E2 Done" + CLAUDE.md mention + §6 status table). If verification surfaces a problem with the spec or globalSetup from commit 2, the "E2 done" state shouldn't have been written to disk. Same shape as E1's Phase C — verify first, doc-closeout second.
+
+**psql gotcha**: every `psql "<test-url>" …` command below requires the URL with `?pgbouncer=true&connection_limit=5` STRIPPED from the end. libpq rejects Prisma-only query params with `invalid URI query parameter pgbouncer`. CLAUDE.md operational gotcha — bit E1's diagnosis. Recipe: `PSQL_URL="${TEST_URL%%\?*}"` (bash parameter expansion truncates everything from the first `?` onward). The keepalive workflow uses this same recipe; copy from there if unsure.
+
+- [ ] **All 6 new tests pass** via `npm run test:e2e -w apps/web -- welcome.integration.spec.ts`. Total E2E suite goes from 38 → 44 passing serial.
+- [ ] **Ghost-purge fires on >1h ghosts but spares <1h ghosts.** Manual test:
+  1. Insert a fake old ghost: `psql "<test-url>" -c "INSERT INTO \"User\" (id, email, status, \"createdAt\", \"updatedAt\") VALUES ('test-ghost-old', 'e2e-welcome-fake-old@hoard.test', 'PENDING_INVITE', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours');"`
+  2. Insert a fake recent ghost: same but with `NOW() - INTERVAL '10 minutes'`.
+  3. Run any single welcome integration test (triggers globalSetup): `npx playwright test welcome.integration.spec.ts -g "fresh signup"`.
+  4. Verify old ghost gone, recent ghost still there: `psql "<test-url>" -c "SELECT email FROM \"User\" WHERE email LIKE 'e2e-welcome-fake%';"` — expect 1 row only (the recent one).
+  5. Manually clean the recent ghost: `psql "<test-url>" -c "DELETE FROM \"User\" WHERE email='e2e-welcome-fake-recent@hoard.test';"`.
+- [ ] **Ghost-accumulation sanity check.** Run the full welcome spec back-to-back (2x via `npm run test:e2e -w apps/web -- welcome.integration.spec.ts`), then query `SELECT count(*) FROM "User" WHERE email LIKE 'e2e-welcome-%@hoard.test';` — expect 0 (afterEach handled all per-run cleanup; nothing accumulated for globalSetup to purge later).
+- [ ] **`InviteCode` pool intact after a full run.** Query `SELECT id, code, "usedById" FROM "InviteCode" ORDER BY id;` — expect 5 rows. Codes 1, 2, 3 remain in their post-test state (code-1 redeemed by some `e2e-welcome-*` ghost if cleanup raced, otherwise unused; code-2 same; code-3 still redeemed by e2e-user-active per seed). Codes 4, 5 untouched.
+- [ ] **Re-run twice, expect zero diffs.** Same E1 step 6 property: snapshot stability and deterministic test outcomes.
+
+#### E2.5 — Success criteria
+
+- 6 new integration tests pass against the deterministic seed + 5-code pool.
+- Total E2E suite: **38 → 44 tests passing** (serial mode, `workers: 1` per E1's `cffdacb`).
+- `RATE_LIMITED` coverage standing in `WelcomeScreen.test.tsx` (vitest) acknowledged in the integration spec's file-level docstring + the §4 plan above.
+- Ghost-purge fires correctly: >1h ghosts deleted, <1h ghosts preserved.
+- No ghost accumulation after multiple consecutive suite runs.
+- Doc closeouts complete: §6 status table marks step 5 Done; PLAN.md row updated; CLAUDE.md Current Phase + Recent fixes prepended.
+
+#### E2.6 — Out-of-band setup checklist
+
+Phase A/B/C (test DB provisioning, secrets, keepalive) all done in E1. E2 reuses everything. Only one new Andrea touchpoint:
+
+🟢 **Between commits 1 and 2: reseed the test DB so the 5 new InviteCode rows land** (recipe under E2.1 above). Other commits self-contained — agent proceeds in standard hard-rule-10 cadence (commit → summarize → green-light → next).
+
+Total Andrea time: ~1 minute (reseed + count verification).
+
+---
 
 ---
 
@@ -602,10 +756,10 @@ Mostly an integration spec under the new convention; one targeted component spec
 
 ## 6. Status
 
-| Step | State | Notes |
-|---|---|---|
-| 1 — Diagnose | Done | Captured in §1. |
-| 2 — Strategy decision | **Done (2026-05-09)** — Andrea confirmed Option F + 5 refinements | See §3.1–§3.5 for the locked rationale and §3.4 for secondary decisions (free tier + keepalive, secret locations, a11y fix in E1). |
-| 3 — E1 PR plan drafts (concrete deliverables) | **Locked (2026-05-10)** — Andrea confirmed all 4 scrutiny items + 3 review adjustments | §3.6 (auth fixture: per-test expected-URL declaration, Option β, recommendation locked) + §3.7 (keepalive Action: daily 04:00 UTC cron, canonical-issue with explicit label-AND-exact-title dedup, two-layer recovery). §4 expanded into PR-shaped specifics: 5-commit grouping (§4.1), file-by-file changes (§4.2, includes outright deletion of `playwright.offline.config.ts`), 18 existing-test reclassification verdicts incl. **7 deletions** moved to vitest (§4.3 — stricter pass after Andrea's review), 8-item manual verification checklist (§4.4), success criteria (§4.5), 10-step out-of-band setup checklist with Phase A/B/C annotations (§4.6). |
-| 4 — E1 implementation | **Done (2026-05-11)** | 9 commits total — 5 planned + 4 unplanned (config / data discoveries surfaced during implementation). Planned: `f40ca30` (commit 1, infra), `440b76c` (commit 2, seed), `b088771` (commit 3, fixtures + reclassification), `76512ec` (commit 4b, snapshot baselines), `1b61c36` (commit 5, README). Unplanned: `edc19bb` (ESM compat for `__dirname` in playwright.config.ts), `334a159` (.env.test parser generalized to all keys after `E2E_TEST_PASSWORD` was added), `919a1ab` (`Game.steamAppId` schema-drift migration — prod had the column via `prisma db push`, no migration file recorded it), `cffdacb` (commit 4a, `pool: 'threads'` + `workers: 1` for resource-contention stability). Plus two Phase C follow-up fixes: `6a80842` + `33bb5ac` on the keepalive workflow (inline label create + explicit `--repo` to gh commands; surfaced by Phase C step 2 diagnosis). Phase C verification done: step 4 (missing-`expectedUrl` guard fires with named-paths error) and step 5 (load-bearing misroute detection — corrupting `RequireAuth` makes 12/14 a11y tests fail with explicit URL-mismatch errors instead of false-positive scanning `/login`). Step 7 (next-day cron confirmation) Andrea's followup. End state: `screens.integration.spec.ts` 24/24 + `a11y.integration.spec.ts` 14/14 = 38/38 passing serial. |
-| 5 — E2 (welcome.integration.spec.ts + welcome-error-states.component.spec.ts) | Pending | After E1 lands. |
+| Step                                                           | State                                                                                  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — Diagnose                                                   | Done                                                                                   | Captured in §1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 2 — Strategy decision                                          | **Done (2026-05-09)** — Andrea confirmed Option F + 5 refinements                      | See §3.1–§3.5 for the locked rationale and §3.4 for secondary decisions (free tier + keepalive, secret locations, a11y fix in E1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 3 — E1 PR plan drafts (concrete deliverables)                  | **Locked (2026-05-10)** — Andrea confirmed all 4 scrutiny items + 3 review adjustments | §3.6 (auth fixture: per-test expected-URL declaration, Option β, recommendation locked) + §3.7 (keepalive Action: daily 04:00 UTC cron, canonical-issue with explicit label-AND-exact-title dedup, two-layer recovery). §4 expanded into PR-shaped specifics: 5-commit grouping (§4.1), file-by-file changes (§4.2, includes outright deletion of `playwright.offline.config.ts`), 18 existing-test reclassification verdicts incl. **7 deletions** moved to vitest (§4.3 — stricter pass after Andrea's review), 8-item manual verification checklist (§4.4), success criteria (§4.5), 10-step out-of-band setup checklist with Phase A/B/C annotations (§4.6).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 4 — E1 implementation                                          | **Done (2026-05-11)**                                                                  | 9 commits total — 5 planned + 4 unplanned (config / data discoveries surfaced during implementation). Planned: `f40ca30` (commit 1, infra), `440b76c` (commit 2, seed), `b088771` (commit 3, fixtures + reclassification), `76512ec` (commit 4b, snapshot baselines), `1b61c36` (commit 5, README). Unplanned: `edc19bb` (ESM compat for `__dirname` in playwright.config.ts), `334a159` (.env.test parser generalized to all keys after `E2E_TEST_PASSWORD` was added), `919a1ab` (`Game.steamAppId` schema-drift migration — prod had the column via `prisma db push`, no migration file recorded it), `cffdacb` (commit 4a, `pool: 'threads'` + `workers: 1` for resource-contention stability). Plus two Phase C follow-up fixes: `6a80842` + `33bb5ac` on the keepalive workflow (inline label create + explicit `--repo` to gh commands; surfaced by Phase C step 2 diagnosis). Phase C verification done: step 4 (missing-`expectedUrl` guard fires with named-paths error) and step 5 (load-bearing misroute detection — corrupting `RequireAuth` makes 12/14 a11y tests fail with explicit URL-mismatch errors instead of false-positive scanning `/login`). Step 7 (next-day cron confirmation) Andrea's followup. End state: `screens.integration.spec.ts` 24/24 + `a11y.integration.spec.ts` 14/14 = 38/38 passing serial. |
+| 5 — E2 (welcome.integration.spec.ts — single integration spec) | **Scoped 2026-05-12** — implementation pending Andrea's review of §E2 expansion        | D4 dropped the originally-planned `welcome-error-states.component.spec.ts` — `WelcomeScreen.test.tsx` (vitest) covers the UI-reaction assertions; the integration-unique signal (API↔UI error-code mapping) folded into the single integration spec as test 6. 6 tests total (register-flow × 2, redeem-flow × 2 incl. open-redirect defense, friction-free admin-generates-code path, API error-mapping smoke). RATE_LIMITED stays in vitest — NODE_ENV-flip would cascade to cookie-secure breakage. See §E2 for PR-shaped detail (3-commit grouping, file-by-file, manual verification, success criteria).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
