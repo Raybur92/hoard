@@ -386,14 +386,61 @@ async function main() {
     ],
   });
 
-  const [users, games, userGames, platforms] = await Promise.all([
+  // InviteCodes — 5-row pool for welcome.integration.spec.ts (plan §E2.1).
+  //
+  // Test ↔ code assignment (do not rebalance without updating the spec):
+  //   e2e-invite-code-1 → test 3 (deep-link redemption: ?next=/library)
+  //   e2e-invite-code-2 → test 4 (open-redirect defense: ?next=//evil.com)
+  //   e2e-invite-code-3 → test 6 (CODE_ALREADY_REDEEMED — pre-marked
+  //                                redeemed by e2e-user-active so the test
+  //                                can submit it and assert the 409 path
+  //                                fires for the right reason: "code
+  //                                already consumed by SOMEONE ELSE",
+  //                                not "your own redemption history")
+  //   e2e-invite-code-4 → reserved spare (retry / debug headroom)
+  //   e2e-invite-code-5 → reserved spare
+  //
+  // Two spares because E1 taught us "exactly what we need" plans bite when
+  // a single test has a flake retry — the retry consumes a second code
+  // before the test's afterEach can replace the first.
+  //
+  // Code format: HOARD-XXXX-YYYY where each chunk is 4 chars from the
+  // 32-char alphabet ABCDEFGHJKLMNPQRSTUVWXYZ23456789 (no 0/O/1/I per
+  // I-D8 in docs/INVITE_CODES_PLAN.md). The HOARD-E2E* prefix makes these
+  // codes scannable in psql queries against the test DB.
+  await prisma.inviteCode.createMany({
+    data: [
+      {
+        id: 'e2e-invite-code-1',
+        code: 'HOARD-E2EA-AAAA',
+        note: 'E2 test 3 — deep-link redemption',
+      },
+      {
+        id: 'e2e-invite-code-2',
+        code: 'HOARD-E2EB-BBBB',
+        note: 'E2 test 4 — open-redirect defense',
+      },
+      {
+        id: 'e2e-invite-code-3',
+        code: 'HOARD-E2EC-CCCC',
+        note: 'E2 test 6 — CODE_ALREADY_REDEEMED (pre-consumed by e2e-user-active)',
+        usedById: USER_IDS.active,
+        usedAt: daysAgo(30),
+      },
+      { id: 'e2e-invite-code-4', code: 'HOARD-E2ED-DDDD', note: 'E2 spare — retry/debug headroom' },
+      { id: 'e2e-invite-code-5', code: 'HOARD-E2EE-EEEE', note: 'E2 spare — retry/debug headroom' },
+    ],
+  });
+
+  const [users, games, userGames, platforms, inviteCodes] = await Promise.all([
     prisma.user.count(),
     prisma.game.count(),
     prisma.userGame.count(),
     prisma.platform.count(),
+    prisma.inviteCode.count(),
   ]);
   console.log(
-    `[seed-e2e] users=${users} games=${games} userGames=${userGames} platforms=${platforms}`,
+    `[seed-e2e] users=${users} games=${games} userGames=${userGames} platforms=${platforms} inviteCodes=${inviteCodes}`,
   );
 }
 
