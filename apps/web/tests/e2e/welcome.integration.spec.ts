@@ -99,19 +99,6 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.beforeEach(async ({ page, expectedUrl }, testInfo) => {
-  // Welcome tests are viewport-invariant — they exercise URL transitions
-  // and form submits, neither of which behaves differently between
-  // desktop and mobile breakpoints. Skipping the mobile project keeps
-  // the suite count honest (6 new tests / 38 → 44 total per plan §E2.5)
-  // without spending ~1m on dup mobile runs that add zero signal.
-  // Visual responsive behavior of the welcome screen IS covered by the
-  // vitest tests in apps/web/src/components/screens/__tests__/
-  // WelcomeScreen.test.tsx.
-  testInfo.skip(
-    testInfo.project.name === 'mobile',
-    'Welcome flow tests are viewport-invariant — mobile adds no unique signal',
-  );
-
   if (!expectedUrl) {
     throw new Error(
       `[${testInfo.titlePath.join(' > ')}] expectedUrl is required.\n` +

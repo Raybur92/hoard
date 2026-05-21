@@ -87,6 +87,17 @@ export default defineConfig({
     },
     {
       name: 'mobile',
+      // Skip welcome.integration.spec.ts on mobile — it exercises URL
+      // transitions + form submits that are viewport-invariant. Mobile
+      // adds zero integration-unique signal (no responsive-layout
+      // assertions; pure DOM/URL behavior). Visual responsive coverage
+      // for the welcome screen lives in vitest at
+      // apps/web/src/components/screens/__tests__/WelcomeScreen.test.tsx.
+      // Eliminates the "6 skipped" noise in test output that the prior
+      // runtime testInfo.skip pattern produced. Project-level filter is
+      // the right surface — it never enumerates the spec for this
+      // project, vs the runtime skip that listed-then-skipped.
+      testIgnore: ['welcome.integration.spec.ts'],
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
