@@ -11,7 +11,7 @@ export type SettingsSection =
   | 'Appearance'
   | 'Privacy'
   | 'Data export'
-  | 'About'
+  | 'Feedback'
   | 'Danger zone';
 
 const SECTION_PATHS: Record<SettingsSection, string> = {
@@ -22,7 +22,7 @@ const SECTION_PATHS: Record<SettingsSection, string> = {
   'Appearance':   '/settings/appearance',
   'Privacy':      '/settings/privacy',
   'Data export':  '/settings/export',
-  'About':        '/settings/about',
+  'Feedback':     '/settings/feedback',
   'Danger zone':  '/settings/danger',
 };
 
@@ -34,7 +34,7 @@ const ITEMS: [SettingsSection, IconName][] = [
   ['Appearance',  'cog'],
   ['Privacy',     'shield'],
   ['Data export', 'download'],
-  ['About',       'info'],
+  ['Feedback',    'info'],
   ['Danger zone', 'warn'],
 ];
 

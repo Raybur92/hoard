@@ -24,7 +24,7 @@ const SECTION_LABELS: Record<string, string> = {
   appearance:   'appearance',
   privacy:      'privacy',
   export:       'data export',
-  about:        'about',
+  feedback:     'feedback',
   danger:       'danger zone',
 };
 
@@ -36,7 +36,7 @@ const SECTION_TO_NAV: Record<string, SettingsSection> = {
   appearance:   'Appearance',
   privacy:      'Privacy',
   export:       'Data export',
-  about:        'About',
+  feedback:     'Feedback',
   danger:       'Danger zone',
 };
 
@@ -77,7 +77,7 @@ export function SettingsDesktop() {
           {section === 'account'       && <AccountSection user={user} />}
           {section === 'platforms'     && <PlatformsSection platforms={platforms} refetch={refetchPlatforms} />}
           {section === 'appearance'    && <AppearanceSection />}
-          {section === 'about'         && <AboutSection />}
+          {section === 'feedback'      && <FeedbackSettingsSection />}
           {section === 'danger'        && <DangerSection user={user} />}
           {section === 'library'       && <StubSection title="library" />}
           {section === 'notifications' && <StubSection title="notifications" />}
@@ -600,14 +600,18 @@ const STUB_DESCRIPTIONS: Record<string, string> = {
   'data export': 'one-click export of your library, wishlist, and notes as JSON or CSV. import lives here too.',
 };
 
-/* ── About section (F1.3 of docs/FEEDBACK_PLAN.md) ── */
+/* ── Feedback section (F1.3 of docs/FEEDBACK_PLAN.md; renamed from
+   "About" → "Feedback" 2026-05-21 post-deploy polish per Andrea — the
+   section was always about sending feedback; "About" was vestigial copy.
+   Function name is `FeedbackSettingsSection` to disambiguate from the
+   admin-side `FeedbackSection` in AdminScreen.tsx. ── */
 
-function AboutSection() {
+function FeedbackSettingsSection() {
   return (
     <>
-      <Marker>// about</Marker>
+      <Marker>// feedback</Marker>
       <div className="t-display" style={{ fontSize: "var(--text-xl)", marginTop: 8, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
-        about
+        feedback
       </div>
       <div className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>
         hoard is a personal project. report bugs, share ideas, or just say hi.

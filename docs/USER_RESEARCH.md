@@ -495,7 +495,7 @@ Three needs the §4 candidates didn't name but the corpus suggests:
 **N12. Frictionless way to flag what's broken or wished-for** *(new — surfaced by Andrea's same question 2026-05-21; was implicit in F-series channel design but not enumerated in §4)*
 > *When I notice something wrong, weird, or wish for an improvement, I want to send it to the developer without bouncing out of the app or filing a formal ticket, because friction at the report-moment means the report never happens.*
 
-- **Functional:** in-app inline-textarea feedback form persisted server-side (DB row); admin reads in `/admin` EVENTS-adjacent section
+- **Functional:** in-app inline-textarea feedback form persisted server-side (DB row); admin reads in `/admin` FEEDBACK section. **Settings entry renamed "About" → "Feedback" 2026-05-21** in post-deploy polish — "About" was vestigial copy from when the section was a placeholder.
 - **Emotional:** **being heard without making it a project** — the difference between "I'll mention it next time we talk" (which never happens) and "5-second form, done"
 - **Social:** (mild) **collaborator, not consumer** — the feeling of being part of the tool's development, especially relevant for the friendly-fire cohort where Hoard is "Andrea's thing they're helping with"
 - **Confidence:** **Inferred** — this is precisely what F-series shipped; the need was implicit in the channel-design decision (D3, D5–D9) but never enumerated as a job story in §4

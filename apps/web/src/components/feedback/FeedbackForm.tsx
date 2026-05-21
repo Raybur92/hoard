@@ -133,6 +133,13 @@ export function FeedbackForm() {
           resize: 'vertical',
           fontFamily: 'var(--mono)',
           fontSize: 'var(--text-xs)',
+          // .field sets padding sized for single-line inputs; textareas
+          // need explicit padding so the placeholder/first-line don't
+          // touch the top edge of the box. Andrea noticed this 2026-05-21
+          // post-deploy. lineHeight pairs with the padding to give breathable
+          // multi-line typing.
+          padding: '10px 12px',
+          lineHeight: 'var(--lh-normal)',
         }}
       />
       <div style={{ marginTop: 10, display: 'flex', gap: 12, alignItems: 'center' }}>

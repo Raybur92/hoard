@@ -419,7 +419,12 @@ function AdminScreenImpl() {
       ) : codes.length === 0 ? (
         <EmptyLine text="// no invite codes yet" />
       ) : (
-        <div>
+        // marginBottom matches the other sections' wrappers (USERS,
+        // FEEDBACK) so the next SectionHeader (EVENTS) has breathing
+        // room. Without this the EVENTS header sat directly under the
+        // last invite-code row. Symptom-fix; the full structural
+        // solution is in the deferred admin IA-redesign workstream.
+        <div style={{ marginBottom: 32 }}>
           {codes.map((c) => <CodeRow key={c.id} code={c} />)}
         </div>
       )}

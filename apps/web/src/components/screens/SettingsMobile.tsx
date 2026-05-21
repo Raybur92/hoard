@@ -30,7 +30,7 @@ const TOP_SECTIONS = [
   { key: 'appearance',   label: 'appearance',     sub: 'dark · standard density',      icon: 'cog'      },
   { key: 'privacy',      label: 'privacy',        sub: 'unlisted',                     icon: 'shield'   },
   { key: 'export',       label: 'data export',    sub: '',                             icon: 'download' },
-  { key: 'about',        label: 'about',          sub: 'report bugs · share ideas',    icon: 'info'     },
+  { key: 'feedback',     label: 'feedback',       sub: 'report bugs · share ideas',    icon: 'info'     },
   { key: 'danger',       label: 'danger zone',    sub: 'wipe library · delete account',icon: 'warn'     },
 ] as const;
 
@@ -328,10 +328,10 @@ export function SettingsMobile() {
     );
   }
 
-  if (section === 'about') {
+  if (section === 'feedback') {
     return (
       <>
-        {backHeader('about', '// feedback')}
+        {backHeader('feedback', '// notes & ideas')}
         <div style={{ padding: 16 }}>
           <div style={{ marginBottom: 16, color: 'var(--paper-dim)', fontSize: 'var(--text-xs)', lineHeight: 1.55 }}>
             hoard is a personal project. report bugs, share ideas, or just say hi.
