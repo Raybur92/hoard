@@ -1,11 +1,14 @@
 import { Outlet } from 'react-router-dom';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useAutoSync } from '../../hooks/useAutoSync';
-import { SearchModalProvider } from '../../hooks/useSearchModal';
 import { Sidebar } from './Sidebar';
 import { MobileFrame } from './MobileFrame';
 import { MobileTabBar } from './MobileTabBar';
 
+// `SearchModalProvider` was previously mounted here. Lifted to `App.tsx`
+// in R2 (2026-05-21) so it wraps full-bleed routes that mount outside
+// AppShell (the `/connect` guided flows). See the App.tsx comment for
+// the full rationale.
 export function AppShell() {
   const bp = useBreakpoint();
   // Background polling — triggers POST /api/platforms/:code/sync on any
@@ -14,7 +17,7 @@ export function AppShell() {
   useAutoSync();
 
   return (
-    <SearchModalProvider>
+    <>
       <a className="skip-link" href="#main-content">Skip to content</a>
       {bp === 'desktop' ? (
         <div className="app-shell hoard-noise">
@@ -31,6 +34,6 @@ export function AppShell() {
           <MobileTabBar />
         </MobileFrame>
       )}
-    </SearchModalProvider>
+    </>
   );
 }

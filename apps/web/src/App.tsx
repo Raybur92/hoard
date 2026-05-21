@@ -8,6 +8,7 @@ import { RequireActive } from './components/RequireActive';
 import { AppShell } from './components/layout/AppShell';
 import { UserProvider } from './contexts/UserContext';
 import { PreferencesProvider } from './contexts/PreferencesContext';
+import { SearchModalProvider } from './hooks/useSearchModal';
 
 // Lazy-load each screen so the initial JS bundle ships only the shell + the
 // first visible route. Suspense falls back to the same noise placeholder
@@ -48,6 +49,14 @@ export default function App() {
   return (
     <UserProvider>
       <PreferencesProvider>
+        {/* R2 (PSN mobile guided-flow fix, 2026-05-21): SearchModalProvider
+            lives here, NOT inside AppShell, so it wraps full-bleed routes
+            (the /connect guided flows) that intentionally mount outside
+            AppShell. The provider is pure context with no rendering output
+            — zero cost when no consumer mounts. Closes the
+            "useSearchModal must be used inside <SearchModalProvider>"
+            render error that blocked Gaetano on mobile PSN connect (O12). */}
+        <SearchModalProvider>
         <OfflineBanner />
         <ErrorBoundary>
           <Suspense fallback={<SuspenseFallback />}>
@@ -95,6 +104,7 @@ export default function App() {
             </Routes>
           </Suspense>
         </ErrorBoundary>
+        </SearchModalProvider>
       </PreferencesProvider>
     </UserProvider>
   );
