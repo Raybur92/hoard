@@ -7,6 +7,7 @@ import type { PlatConnectStatus } from '../settings';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Plat } from '../primitives/Plat';
+import { FeedbackForm } from '../feedback/FeedbackForm';
 import { api } from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -29,6 +30,7 @@ const TOP_SECTIONS = [
   { key: 'appearance',   label: 'appearance',     sub: 'dark · standard density',      icon: 'cog'      },
   { key: 'privacy',      label: 'privacy',        sub: 'unlisted',                     icon: 'shield'   },
   { key: 'export',       label: 'data export',    sub: '',                             icon: 'download' },
+  { key: 'about',        label: 'about',          sub: 'report bugs · share ideas',    icon: 'info'     },
   { key: 'danger',       label: 'danger zone',    sub: 'wipe library · delete account',icon: 'warn'     },
 ] as const;
 
@@ -321,6 +323,20 @@ export function SettingsMobile() {
               <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>0 = no filter</span>
             </div>
           </div>
+        </div>
+      </>
+    );
+  }
+
+  if (section === 'about') {
+    return (
+      <>
+        {backHeader('about', '// feedback')}
+        <div style={{ padding: 16 }}>
+          <div style={{ marginBottom: 16, color: 'var(--paper-dim)', fontSize: 'var(--text-xs)', lineHeight: 1.55 }}>
+            hoard is a personal project. report bugs, share ideas, or just say hi.
+          </div>
+          <FeedbackForm />
         </div>
       </>
     );

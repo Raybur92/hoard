@@ -21,6 +21,10 @@ import type {
   ShelvesResponse,
   AdminUser,
   AdminInviteCode,
+  FeedbackListResponse,
+  FeedbackWithUser,
+  PostFeedbackBody,
+  UserEventListResponse,
 } from '@hoard/types';
 import * as cache from './cache';
 
@@ -314,6 +318,47 @@ export const api = {
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       cache.invalidate('admin:');
+    },
+
+    // F1.4 of docs/FEEDBACK_PLAN.md. Cursor-paginated. The cache key
+    // `admin:feedback` is shared across pages — invalidation flushes
+    // all of them; loadMore in `useAdminFeedback` re-walks pages.
+    listFeedback: (cursor?: string) =>
+      get<FeedbackListResponse>(
+        `/api/admin/feedback${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+      ),
+
+    markFeedbackRead: async (id: string, read: boolean): Promise<FeedbackWithUser> => {
+      const r = await patch<FeedbackWithUser>(`/api/admin/feedback/${id}`, { read });
+      cache.invalidate('admin:feedback');
+      return r;
+    },
+
+    // TL1.4 of docs/TELEMETRY_PLAN.md. Cursor-paginated; optional userId
+    // and event filters. Events are immutable per TL-D10 so there's no
+    // companion mutation method that invalidates the cache — the hook
+    // refetches on mount and via explicit refetch() only.
+    listEvents: (filters: { cursor?: string; userId?: string; event?: string } = {}) => {
+      const qs = new URLSearchParams();
+      if (filters.cursor) qs.set('cursor', filters.cursor);
+      if (filters.userId) qs.set('userId', filters.userId);
+      if (filters.event) qs.set('event', filters.event);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return get<UserEventListResponse>(`/api/admin/events${suffix}`);
+    },
+  },
+
+  // F1.2 → F1.3 of docs/FEEDBACK_PLAN.md. The L2 layer of the user-research
+  // observation system (docs/USER_RESEARCH.md §6.2). POST persists a row;
+  // invalidating admin:feedback ensures the admin section picks up the new
+  // entry on next open. Targeted to `admin:feedback` only — NOT `admin:` —
+  // because a new feedback row can't orphan an InviteCode or change the
+  // users list.
+  feedback: {
+    submit: async (body: PostFeedbackBody): Promise<{ id: string }> => {
+      const r = await post<{ id: string }>('/api/feedback', body);
+      cache.invalidate('admin:feedback');
+      return r;
     },
   },
 

@@ -87,6 +87,8 @@ model User {
   userGames          UserGame[]
   wishlists          WishlistRelease[]
   redeemedInviteCode InviteCode?
+  feedback           Feedback[]
+  events             UserEvent[]
 }
 
 // Closed-beta access codes (docs/INVITE_CODES_PLAN.md). Format
@@ -251,4 +253,64 @@ model WishlistRelease {
 
   @@unique([userId, igdbId])
   @@index([userId, releaseDate])
+}
+
+// F1 of the feedback-channel workstream (docs/FEEDBACK_PLAN.md). The L2
+// layer of the user-research observation system (docs/USER_RESEARCH.md §6.2):
+// in-app feedback form persisted as rows here, surfaced in /admin. No push
+// channel in v1 (webhook / email-out deferred — see F-D6). Cascade-delete
+// with user per F-D1: if the user is deleted, their feedback goes with
+// them. Read state is a single boolean per F-D5; promotion path is adding
+// `processedAt: DateTime?` (additive, no destructive change) when volume
+// justifies a triage workflow.
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  // Optional context auto-captured client-side at submit time. UA falls
+  // back to req.headers['user-agent'] when omitted; viewport stays null
+  // if the client doesn't send it (can't be inferred server-side).
+  message   String
+  viewport  String?
+  ua        String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Primary index powers the admin chronological list. The compound
+  // (read, createdAt) index powers the unread chip's COUNT(*) lookup
+  // and the optional ?unreadOnly=true filter.
+  @@index([createdAt(sort: Desc)])
+  @@index([read, createdAt(sort: Desc)])
+}
+
+// TL1 of the telemetry workstream (docs/TELEMETRY_PLAN.md). L1 layer of
+// the user-research observation system (docs/USER_RESEARCH.md §6.2):
+// per-user event log surfaced via a new admin section. Promoted to active
+// per D10 (no calendar chats; telemetry is the primary behavioural-gap
+// instrument).
+//
+// Cascade-delete with user per TL-D1 (same GDPR-shaped reasoning as F-D1).
+// `event` is a free-form string per TL-D4 — new event tags land without
+// a migration; constraints live in code at the call site, not in the
+// schema. `details` is `Json?` per TL-D5 for per-event structured payload.
+// Events are immutable per TL-D10 (no `read` flag, no `processedAt`,
+// no admin curation — events are facts, not triage rows).
+model UserEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  event     String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Three indexes:
+  //   createdAt-desc → default chronological feed
+  //   (userId, createdAt-desc) → per-user filter slice
+  //   (event, createdAt-desc) → per-event-class filter (e.g. show me
+  //                              every sync.first across all users)
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([event, createdAt(sort: Desc)])
 }

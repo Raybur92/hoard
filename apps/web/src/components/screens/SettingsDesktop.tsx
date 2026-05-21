@@ -10,6 +10,7 @@ import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { Plat } from '../primitives/Plat';
 import { Hr } from '../primitives/Hr';
+import { FeedbackForm } from '../feedback/FeedbackForm';
 import { api } from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -23,6 +24,7 @@ const SECTION_LABELS: Record<string, string> = {
   appearance:   'appearance',
   privacy:      'privacy',
   export:       'data export',
+  about:        'about',
   danger:       'danger zone',
 };
 
@@ -34,6 +36,7 @@ const SECTION_TO_NAV: Record<string, SettingsSection> = {
   appearance:   'Appearance',
   privacy:      'Privacy',
   export:       'Data export',
+  about:        'About',
   danger:       'Danger zone',
 };
 
@@ -74,6 +77,7 @@ export function SettingsDesktop() {
           {section === 'account'       && <AccountSection user={user} />}
           {section === 'platforms'     && <PlatformsSection platforms={platforms} refetch={refetchPlatforms} />}
           {section === 'appearance'    && <AppearanceSection />}
+          {section === 'about'         && <AboutSection />}
           {section === 'danger'        && <DangerSection user={user} />}
           {section === 'library'       && <StubSection title="library" />}
           {section === 'notifications' && <StubSection title="notifications" />}
@@ -595,6 +599,25 @@ const STUB_DESCRIPTIONS: Record<string, string> = {
   privacy: 'profile visibility, data sharing, anonymized usage telemetry. account deletion lives under danger zone today.',
   'data export': 'one-click export of your library, wishlist, and notes as JSON or CSV. import lives here too.',
 };
+
+/* ── About section (F1.3 of docs/FEEDBACK_PLAN.md) ── */
+
+function AboutSection() {
+  return (
+    <>
+      <Marker>// about</Marker>
+      <div className="t-display" style={{ fontSize: "var(--text-xl)", marginTop: 8, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
+        about
+      </div>
+      <div className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>
+        hoard is a personal project. report bugs, share ideas, or just say hi.
+      </div>
+      <div style={{ marginTop: 28, maxWidth: 540 }}>
+        <FeedbackForm />
+      </div>
+    </>
+  );
+}
 
 function StubSection({ title }: { title: string }) {
   return (

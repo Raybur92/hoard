@@ -437,3 +437,101 @@ export interface IgdbUpcomingRelease {
    */
   userGameId: string | null;
 }
+
+/* ── Feedback (F-series, docs/FEEDBACK_PLAN.md) ── */
+
+/**
+ * Basic feedback shape returned from POST /api/feedback. The L2 layer of
+ * the user-research observation system (docs/USER_RESEARCH.md §6.2).
+ * Cascade-deletes with user per F-D1. Read state is a single boolean per
+ * F-D5 — promotion path is adding `processedAt: DateTime?` when volume
+ * justifies a triage workflow.
+ */
+export interface Feedback {
+  id: string;
+  userId: string;
+  message: string;
+  viewport: string | null;
+  ua: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+/**
+ * Admin-facing feedback row returned from GET /api/admin/feedback.
+ * Mirrors the AdminUser / AdminInviteCode pattern — joined user identity
+ * surfaced inline so the admin row can render `displayIdentity(user)`
+ * without a second lookup.
+ */
+export interface FeedbackWithUser extends Feedback {
+  user: { id: string; email: string; name: string | null; displayIdentity: string };
+}
+
+/**
+ * Cursor-paginated response from GET /api/admin/feedback. unreadCount is
+ * total-across-all-pages (not page-scoped) so the admin section header
+ * chip stays accurate while the user paginates — see the route-handler
+ * comment in F1.2 for why this is deliberate.
+ */
+export interface FeedbackListResponse {
+  items: FeedbackWithUser[];
+  nextCursor: string | null;
+  unreadCount: number;
+}
+
+export interface PostFeedbackBody {
+  message: string;
+  viewport?: string;
+  ua?: string;
+}
+
+export interface PatchFeedbackBody {
+  read: boolean;
+}
+
+/* ── Telemetry / UserEvent (TL-series, docs/TELEMETRY_PLAN.md) ── */
+
+/**
+ * Per-user event log entry. L1 layer of the user-research observation
+ * system (docs/USER_RESEARCH.md §6.2). Cascade-deletes with user per
+ * TL-D1. `event` is a free-form string per TL-D4 — new event tags can
+ * land without a migration. `details` is an optional structured payload
+ * (TL-D5) — shape varies per event class:
+ *   - wishlist.toggled → { igdbId, action: 'add'|'remove' }
+ *   - error.surfaced   → { route, errorClass, status, message, requestId? }
+ *   - session.opened   → { userAgent }
+ *   - signup.pending   → { provider }
+ *   - signup.completed → { code } (4-4 suffix, no PII)
+ *   - platform.connected → { code }
+ *   - sync.first       → { code, gamesImported }
+ *   - remap.used       → { fromIgdbId, toIgdbId, merged }
+ *
+ * Immutable per TL-D10 — no read flag, no processedAt, no PATCH route.
+ */
+export interface UserEvent {
+  id: string;
+  userId: string;
+  event: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/**
+ * Admin-facing event row returned from GET /api/admin/events. Joined
+ * user identity surfaced inline so the admin row can render
+ * displayIdentity(user) without a second lookup. Same pattern as
+ * FeedbackWithUser / AdminInviteCode.
+ */
+export interface UserEventWithUser extends UserEvent {
+  user: { id: string; email: string; name: string | null; displayIdentity: string };
+}
+
+/**
+ * Cursor-paginated response from GET /api/admin/events. No unreadCount
+ * analogue — events are immutable per TL-D10 so there's no read-state
+ * to count.
+ */
+export interface UserEventListResponse {
+  items: UserEventWithUser[];
+  nextCursor: string | null;
+}

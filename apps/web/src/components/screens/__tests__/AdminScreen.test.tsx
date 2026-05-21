@@ -14,6 +14,17 @@ vi.mock('../../../lib/api', async () => {
         createInviteCode: vi.fn(),
         deleteInviteCode: vi.fn(),
         deleteUser: vi.fn(),
+        // F1.4 of docs/FEEDBACK_PLAN.md — AdminScreen now also renders a
+        // FEEDBACK section between PENDING and ALL USERS, so its hooks
+        // expect these methods. Default to an empty list so the existing
+        // I-series tests stay isolated from feedback-specific behaviour.
+        listFeedback: vi.fn(),
+        markFeedbackRead: vi.fn(),
+        // TL1.4 of docs/TELEMETRY_PLAN.md — AdminScreen now also renders
+        // an EVENTS section at the bottom, so its hooks expect this
+        // method. Default to an empty list so existing tests stay
+        // isolated from telemetry-specific behaviour.
+        listEvents: vi.fn(),
       },
     },
   };
@@ -93,6 +104,12 @@ beforeEach(() => {
   mockBp.mockReturnValue('desktop');
   (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   (api.admin.listInviteCodes as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+  (api.admin.listFeedback as ReturnType<typeof vi.fn>).mockResolvedValue({
+    items: [], nextCursor: null, unreadCount: 0,
+  });
+  (api.admin.listEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
+    items: [], nextCursor: null,
+  });
 });
 
 /* ── Defense-in-depth gating ── */

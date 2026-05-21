@@ -10,6 +10,7 @@ import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
 import { requireActive } from '../middleware/active';
 import { getReleaseDetails } from '../services/igdb';
+import { logEvent } from '../services/userEvents';
 import type { WishlistRelease } from '@hoard/types';
 
 const router = Router();
@@ -98,6 +99,8 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
       });
     }
     await prisma.wishlistRelease.delete({ where: { id: existing.id } });
+    // TL1.2 wishlist.toggled — un-star branch.
+    await logEvent(userId, 'wishlist.toggled', { igdbId, action: 'remove' });
     res.json({ tracked: false });
     return;
   }
@@ -172,6 +175,10 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
       },
     });
   });
+
+  // TL1.2 wishlist.toggled — star branch. Fired after the $transaction
+  // succeeds so we don't log a star that didn't actually persist.
+  await logEvent(userId, 'wishlist.toggled', { igdbId, action: 'add' });
 
   res.json({ tracked: true, release: mapRelease(release) });
 });

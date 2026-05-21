@@ -1,3 +1,17 @@
+// `requireUser` now imports `../services/userEvents` (TL1.2) which in turn
+// imports `@hoard/db`. Loading @hoard/db runs Prisma's dotenv init and
+// pulls JWT_SECRET from apps/api/.env (the prod value), which breaks
+// the test's assumption that JWT_SECRET defaults to 'dev-secret'.
+// Mocking dotenv/config to a no-op keeps the test environment clean —
+// same pattern auth.test.ts uses.
+jest.mock('dotenv/config', () => ({}));
+
+// And mock the userEvents helper so the middleware's fire-and-forget
+// session.opened write doesn't try to hit a real database in unit tests.
+jest.mock('../services/userEvents', () => ({
+  logEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
 import express from 'express';
 import type { Request, Response } from 'express';
 import cookieParser from 'cookie-parser';

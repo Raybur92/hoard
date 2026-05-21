@@ -5,13 +5,15 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useUser } from '../../contexts/UserContext';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
 import { useAdminInviteCodes } from '../../hooks/useAdminInviteCodes';
+import { useAdminFeedback } from '../../hooks/useAdminFeedback';
+import { useAdminEvents } from '../../hooks/useAdminEvents';
 import { Btn } from '../primitives/Btn';
 import { Chip } from '../primitives/Chip';
 import { ConfirmModal } from '../modals/ConfirmModal';
 import { api } from '../../lib/api';
 import * as cache from '../../lib/cache';
 import { GenerateCodeModal } from './GenerateCodeModal';
-import type { AdminUser, AdminInviteCode } from '@hoard/types';
+import type { AdminUser, AdminInviteCode, FeedbackWithUser, UserEventWithUser } from '@hoard/types';
 
 type FilterKey = 'all' | 'active' | 'pending' | 'admin';
 type SortKey = 'joined' | 'status' | 'platforms';
@@ -292,6 +294,9 @@ function AdminScreenImpl() {
         </div>
       )}
 
+      {/* ─── Feedback (F1.4 of docs/FEEDBACK_PLAN.md) ────────── */}
+      <FeedbackSection />
+
       {/* ─── All users ────────────────────────────────────────── */}
       <SectionHeader label="all users" count={users.length} />
 
@@ -419,6 +424,9 @@ function AdminScreenImpl() {
         </div>
       )}
 
+      {/* ─── Events (TL1.4 of docs/TELEMETRY_PLAN.md) ───────────── */}
+      <EventsSection />
+
         {generateOpen && (
           <GenerateCodeModal
             initialNote={generateNote}
@@ -449,7 +457,7 @@ function AdminScreenImpl() {
 
 /* ── sub-components ────────────────────────────────────────── */
 
-function SectionHeader({ label, count }: { label: string; count: number }) {
+function SectionHeader({ label, count, chip }: { label: string; count: number; chip?: string | null }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <span
@@ -462,9 +470,343 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
         }}
       >
         // {label} ({count})
+        {chip && (
+          <span
+            style={{
+              marginLeft: 12,
+              color: 'var(--green)',
+              textTransform: 'lowercase',
+              letterSpacing: '0.08em',
+            }}
+          >
+            · {chip}
+          </span>
+        )}
       </span>
       <div style={{ height: 1, background: 'var(--rule)', marginTop: 6 }} />
     </div>
+  );
+}
+
+/* ── Feedback section (F1.4 of docs/FEEDBACK_PLAN.md) ────────── */
+
+function FeedbackSection() {
+  const { items, nextCursor, unreadCount, loading, error, loadMore } = useAdminFeedback();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  async function handleToggleRead(id: string, read: boolean) {
+    setBusyId(id);
+    try {
+      await api.admin.markFeedbackRead(id, read);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    try {
+      await loadMore();
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  return (
+    <>
+      <SectionHeader
+        label="feedback"
+        count={items.length}
+        chip={unreadCount > 0 ? `${unreadCount} unread` : null}
+      />
+      {loading && items.length === 0 ? (
+        <div className="t-mono t-faint" style={{ fontSize: 'var(--text-xs)', padding: '8px 0' }}>// loading…</div>
+      ) : error ? (
+        <ErrorBlock message={error} />
+      ) : items.length === 0 ? (
+        <EmptyLine text="// no feedback yet" />
+      ) : (
+        <div style={{ marginBottom: 32 }}>
+          {items.map((entry) => (
+            <FeedbackRow
+              key={entry.id}
+              entry={entry}
+              working={busyId === entry.id}
+              onToggleRead={handleToggleRead}
+            />
+          ))}
+          {nextCursor !== null && (
+            <button
+              type="button"
+              onClick={() => void handleLoadMore()}
+              disabled={loadingMore}
+              className="t-mono"
+              style={{
+                marginTop: 14,
+                background: 'transparent',
+                border: '1px solid var(--rule)',
+                color: 'var(--paper-dim)',
+                cursor: loadingMore ? 'default' : 'pointer',
+                fontSize: 'var(--text-xs)',
+                padding: '6px 14px',
+                letterSpacing: '0.12em',
+              }}
+            >
+              {loadingMore ? '[loading…]' : '[load more]'}
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function FeedbackRow({
+  entry,
+  working,
+  onToggleRead,
+}: {
+  entry: FeedbackWithUser;
+  working: boolean;
+  onToggleRead: (id: string, read: boolean) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={`Feedback from ${entry.user.displayIdentity} — toggle full message`}
+        onClick={() => setExpanded((e) => !e)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded((x) => !x);
+          }
+        }}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '80px 1fr 180px 110px',
+          alignItems: 'center',
+          padding: '10px 0',
+          borderBottom: '1px solid var(--rule)',
+          opacity: entry.read ? 0.6 : 1,
+          cursor: 'pointer',
+          fontSize: 'var(--text-xs)',
+          fontFamily: 'var(--mono)',
+        }}
+      >
+        <div className="t-faint">{relativeTime(entry.createdAt)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          {!entry.read && (
+            <span
+              aria-hidden="true"
+              className="status-sigil"
+              style={{
+                display: 'inline-block',
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'var(--green)',
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {entry.user.displayIdentity}
+          </span>
+        </div>
+        <div className="t-faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {entry.viewport ?? '—'}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <button
+            type="button"
+            disabled={working}
+            onClick={(e) => {
+              // Andrea's F1.4 reminder: stopPropagation is essential —
+              // otherwise the row's onClick fires too and the action
+              // button accidentally toggles row expansion alongside the
+              // mark-read mutation.
+              e.stopPropagation();
+              void onToggleRead(entry.id, !entry.read);
+            }}
+            onKeyDown={(e) => {
+              // Same protection on keyboard activation.
+              if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+            }}
+            className="t-mono"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--rule)',
+              color: 'var(--paper-dim)',
+              cursor: working ? 'default' : 'pointer',
+              fontSize: 'var(--text-3xs)',
+              padding: '4px 8px',
+              letterSpacing: '0.08em',
+            }}
+          >
+            {working ? '…' : entry.read ? '[mark unread]' : '[mark read]'}
+          </button>
+        </div>
+      </div>
+      {expanded && (
+        <div
+          style={{
+            padding: '10px 12px 14px',
+            background: 'var(--ink)',
+            borderBottom: '1px solid var(--rule)',
+            color: 'var(--paper)',
+            fontFamily: 'var(--mono)',
+            fontSize: 'var(--text-xs)',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.6,
+            opacity: entry.read ? 0.7 : 1,
+          }}
+        >
+          {entry.message}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ── Events section (TL1.4 of docs/TELEMETRY_PLAN.md) ────────── */
+
+function EventsSection() {
+  const { items, nextCursor, loading, error, loadMore } = useAdminEvents();
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    try {
+      await loadMore();
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  return (
+    <>
+      {/* SectionHeader chip prop intentionally omitted — events are
+          immutable per TL-D10, so no read-state count to surface. */}
+      <SectionHeader label="events" count={items.length} />
+      {loading && items.length === 0 ? (
+        <div className="t-mono t-faint" style={{ fontSize: 'var(--text-xs)', padding: '8px 0' }}>// loading…</div>
+      ) : error ? (
+        <ErrorBlock message={error} />
+      ) : items.length === 0 ? (
+        <EmptyLine text="// no events yet" />
+      ) : (
+        <div style={{ marginBottom: 32 }}>
+          {items.map((entry) => <EventRow key={entry.id} entry={entry} />)}
+          {/* nextCursor === null is the termination signal per the
+              useAdminEvents contract — hide the button when there's
+              nothing more to fetch. */}
+          {nextCursor !== null && (
+            <button
+              type="button"
+              onClick={() => void handleLoadMore()}
+              disabled={loadingMore}
+              className="t-mono"
+              style={{
+                marginTop: 14,
+                background: 'transparent',
+                border: '1px solid var(--rule)',
+                color: 'var(--paper-dim)',
+                cursor: loadingMore ? 'default' : 'pointer',
+                fontSize: 'var(--text-xs)',
+                padding: '6px 14px',
+                letterSpacing: '0.12em',
+              }}
+            >
+              {loadingMore ? '[loading…]' : '[load more]'}
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function EventRow({ entry }: { entry: UserEventWithUser }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Short, scannable preview of the details payload. Empty/null → '—'.
+  const detailsPreview = (() => {
+    if (!entry.details) return '—';
+    const keys = Object.keys(entry.details);
+    if (keys.length === 0) return '—';
+    return keys
+      .slice(0, 3)
+      .map((k) => {
+        const v = entry.details?.[k];
+        const vs = typeof v === 'string' ? v : JSON.stringify(v);
+        return `${k}=${(vs ?? '').slice(0, 24)}`;
+      })
+      .join(' · ');
+  })();
+
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={`Event ${entry.event} from ${entry.user.displayIdentity} — toggle raw details`}
+        onClick={() => setExpanded((e) => !e)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded((x) => !x);
+          }
+        }}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '80px 1fr 120px 100px',
+          alignItems: 'center',
+          gap: 12,
+          padding: '8px 0',
+          borderBottom: '1px solid var(--rule)',
+          cursor: 'pointer',
+          fontSize: 'var(--text-xs)',
+          fontFamily: 'var(--mono)',
+        }}
+      >
+        <div className="t-faint">{relativeTime(entry.createdAt)}</div>
+        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {entry.user.displayIdentity}
+        </div>
+        <div className="t-mono" style={{ color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {entry.event}
+        </div>
+        <div className="t-faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {detailsPreview}
+        </div>
+      </div>
+      {expanded && (
+        <pre
+          className="ascii"
+          style={{
+            margin: 0,
+            padding: '10px 12px',
+            background: 'var(--ink)',
+            borderBottom: '1px solid var(--rule)',
+            color: 'var(--paper)',
+            fontFamily: 'var(--mono)',
+            fontSize: 'var(--text-xs)',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.6,
+            overflowX: 'auto',
+          }}
+        >
+          {entry.details ? JSON.stringify(entry.details, null, 2) : '// no details'}
+        </pre>
+      )}
+    </>
   );
 }
 

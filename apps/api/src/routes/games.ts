@@ -9,6 +9,7 @@ import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } fro
 import { fetchHltbWithFallback } from '../services/hltb';
 import { getGame, getTimeToBeat } from '../services/igdb';
 import { mapUserGame } from '../lib/mappers';
+import { logEvent } from '../services/userEvents';
 
 function triggerHltbBackground(gameId: string, title: string, steamAppId: number | null | undefined, igdbId: number): void {
   void (async () => {
@@ -382,6 +383,14 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
         return updated;
       });
 
+      // TL1.2 remap.used — merged collision path. `merged: true` records
+      // the user took the merge offer; from + to IGDB ids identify the
+      // rebinding for review.
+      await logEvent(userId, 'remap.used', {
+        fromIgdbId: existing.game.igdbId,
+        toIgdbId: igdb.igdbId,
+        merged: true,
+      });
       res.json(mapUserGame(merged));
       return;
     }
@@ -406,6 +415,14 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
   if (!updated.game.hltbData) {
     triggerHltbBackground(updated.game.id, updated.game.title, updated.game.steamAppId, updated.game.igdbId);
   }
+
+  // TL1.2 remap.used — non-collision happy path. `merged: false`
+  // distinguishes from the merge branch above.
+  await logEvent(userId, 'remap.used', {
+    fromIgdbId: existing.game.igdbId,
+    toIgdbId: igdb.igdbId,
+    merged: false,
+  });
 
   res.json(mapUserGame(updated));
 });

@@ -14,15 +14,26 @@ import { requireActive } from '../middleware/active';
 import { requireAdmin } from '../middleware/admin';
 import { generateCode } from '../lib/inviteCodes';
 import { displayIdentity } from '../lib/displayIdentity';
+import { mapFeedbackWithUser, mapUserEventWithUser } from '../lib/mappers';
 import type {
   AdminUser,
   AdminInviteCode,
+  FeedbackListResponse,
   PlatformCode,
+  UserEventListResponse,
 } from '@hoard/types';
 
 const router = Router();
 
-router.use(requireUser, requireActive, requireAdmin);
+// Scope the admin gating to /admin/* paths only. Without the path prefix,
+// router-level middleware runs on every request that enters this router
+// — including ones that don't match any of its routes — which means the
+// requireAdmin 404 would intercept unrelated non-admin requests that
+// happen to fall through to this router before hitting a sibling
+// router mounted at the same `/api` prefix. F1.2 of the feedback
+// workstream surfaced this when POST /api/feedback (a non-admin route)
+// was 404'd here before reaching feedbackRouter.
+router.use('/admin', requireUser, requireActive, requireAdmin);
 
 // GET /api/admin/users
 //
@@ -257,6 +268,149 @@ router.delete('/admin/users/:id', async (req: Request, res: Response): Promise<v
 
   await prisma.user.delete({ where: { id } });
   res.status(204).send();
+});
+
+/* ── Feedback (F1.2 of docs/FEEDBACK_PLAN.md) ── */
+
+// GET /api/admin/feedback
+//
+// Cursor-paginated chronological feed of user feedback. No server-side
+// `unreadOnly` filter in v1 per Andrea 2026-05-13 — client-side filter
+// is sufficient at cohort size, and paginating + filtering on a mutable
+// field (read) opens a skip-rows edge case not worth defending against
+// for a feature with no demand. Index [read, createdAt(sort:Desc)]
+// stays — already paid for; v2 reintroduction is route-handler-only.
+// See docs/FEEDBACK_PLAN.md §4 deferred.
+const FEEDBACK_PAGE_SIZE = 50;
+
+router.get('/admin/feedback', async (req: Request, res: Response): Promise<void> => {
+  const cursor = typeof req.query['cursor'] === 'string' ? req.query['cursor'] : undefined;
+
+  const rows = await prisma.feedback.findMany({
+    take: FEEDBACK_PAGE_SIZE + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    // Secondary sort by id stabilises the cursor when multiple rows
+    // share the same createdAt (same-millisecond writes). Matches the
+    // platformLog precedent — don't drop it thinking it's redundant;
+    // the cursor would skip rows on boundaries.
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: {
+      user: { select: { id: true, email: true, name: true, steamId: true } },
+    },
+  });
+
+  const hasMore = rows.length > FEEDBACK_PAGE_SIZE;
+  const pageRows = hasMore ? rows.slice(0, FEEDBACK_PAGE_SIZE) : rows;
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor = hasMore && last ? last.id : null;
+
+  // unreadCount is total-across-all-pages, not page-scoped.
+  // Cheap at cohort size; lets the admin chip stay accurate
+  // while paginating. Don't fold it into the page query under
+  // perf pressure — the chip would silently drift.
+  const unreadCount = await prisma.feedback.count({ where: { read: false } });
+
+  const body: FeedbackListResponse = {
+    items: pageRows.map((f) => mapFeedbackWithUser(f)),
+    nextCursor,
+    unreadCount,
+  };
+  res.json(body);
+});
+
+// PATCH /api/admin/feedback/:id
+//
+// Toggles the `read` flag. Returns 200 + the updated FeedbackWithUser
+// so the admin UI can swap the row in place without re-fetching. 404
+// with the canonical body if the row is gone.
+const patchFeedbackSchema = z.object({
+  read: z.boolean(),
+});
+
+router.patch('/admin/feedback/:id', async (req: Request, res: Response): Promise<void> => {
+  const parsed = patchFeedbackSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+    return;
+  }
+  const { id } = req.params as { id: string };
+
+  const existing = await prisma.feedback.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!existing) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  const updated = await prisma.feedback.update({
+    where: { id },
+    data: { read: parsed.data.read },
+    include: {
+      user: { select: { id: true, email: true, name: true, steamId: true } },
+    },
+  });
+
+  res.json(mapFeedbackWithUser(updated));
+});
+
+/* ── Events / Telemetry (TL1.3 of docs/TELEMETRY_PLAN.md) ────── */
+
+// GET /api/admin/events
+//
+// Cursor-paginated chronological feed of user-events. Optional
+// `?userId=` and `?event=` filters slice per user or per event-class
+// (e.g. `?event=sync.first` to see every first-sync across all users).
+// No mutation surface, no read-state — events are immutable per TL-D10.
+//
+// Mounts under the admin router's existing `/admin`-prefix middleware
+// (F1.2 router-prefix fix), so no new auth wiring needed here.
+const EVENT_PAGE_SIZE = 50;
+
+const eventsQuerySchema = z.object({
+  cursor: z.string().optional(),
+  userId: z.string().optional(),
+  event: z.string().optional(),
+});
+
+router.get('/admin/events', async (req: Request, res: Response): Promise<void> => {
+  const parsed = eventsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid query' });
+    return;
+  }
+  const { cursor, userId, event } = parsed.data;
+
+  const where = {
+    ...(userId ? { userId } : {}),
+    ...(event ? { event } : {}),
+  };
+
+  const rows = await prisma.userEvent.findMany({
+    take: EVENT_PAGE_SIZE + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    where,
+    // Secondary sort by id stabilises the cursor when multiple rows
+    // share the same createdAt (same-millisecond writes). Matches the
+    // platformLog precedent + F1.4's feedback list — don't drop it
+    // thinking it's redundant; the cursor would skip rows on boundaries.
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: {
+      user: { select: { id: true, email: true, name: true, steamId: true } },
+    },
+  });
+
+  const hasMore = rows.length > EVENT_PAGE_SIZE;
+  const pageRows = hasMore ? rows.slice(0, EVENT_PAGE_SIZE) : rows;
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor = hasMore && last ? last.id : null;
+
+  const body: UserEventListResponse = {
+    items: pageRows.map((e) => mapUserEventWithUser(e)),
+    nextCursor,
+  };
+  res.json(body);
 });
 
 export default router;

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
 import { requireActive } from '../middleware/active';
+import { logEvent } from '../services/userEvents';
 import type { AuthResponse, AuthUser, UserStatus } from '@hoard/types';
 
 type DbUser = {
@@ -105,6 +106,10 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
     data: { email, password: hashed, ...(name ? { name } : {}) },
     select: { ...USER_SELECT, password: false },
   });
+
+  // TL1.2 signup.pending — every new email-register user lands in
+  // PENDING_INVITE by schema default, so this fires on first creation.
+  await logEvent(user.id, 'signup.pending', { provider: 'email' });
 
   setAuthCookie(res, user.id);
   const body: AuthResponse = { user: toAuthUser(user) };
@@ -292,6 +297,10 @@ router.get('/auth/google/callback', async (req: Request, res: Response): Promise
         user = await prisma.user.create({
           data: { email: googleUser.email, name: googleUser.name, googleId: googleUser.id },
         });
+        // TL1.2 signup.pending — new Google OAuth user lands in
+        // PENDING_INVITE by schema default. Only on fresh creation;
+        // existing-user-attaches-Google path above is not a signup.
+        await logEvent(user.id, 'signup.pending', { provider: 'google' });
       }
     }
 
@@ -395,6 +404,10 @@ router.get('/auth/steam/callback', async (req: Request, res: Response): Promise<
           lastSyncAt: new Date(),
         },
       });
+      // TL1.2 platform.connected — fires for both fresh-attach and
+      // re-attach. Plan §3.4 doesn't distinguish; we want every connect
+      // intent captured.
+      await logEvent(currentUserId, 'platform.connected', { code: 'ST' });
       res.redirect(`${WEB_URL}/settings/platforms/st`);
       return;
     }
@@ -409,6 +422,10 @@ router.get('/auth/steam/callback', async (req: Request, res: Response): Promise<
           steamId,
         },
       });
+      // TL1.2 signup.pending — new Steam OpenID user lands in
+      // PENDING_INVITE by schema default. Only on fresh creation;
+      // existing-user path above is not a signup.
+      await logEvent(user.id, 'signup.pending', { provider: 'steam' });
     }
 
     setAuthCookie(res, user.id);
@@ -521,6 +538,12 @@ router.post(
       }
       throw e;
     }
+
+    // TL1.2 signup.completed — fires once per user, only on the path
+    // that flips status PENDING → ACTIVE. The 4-4 suffix (after the
+    // "HOARD-" prefix) is the only identifier; the full code is in
+    // InviteCode.code and can be cross-referenced via usedById.
+    await logEvent(req.userId, 'signup.completed', { code: code.slice('HOARD-'.length) });
 
     const user = await prisma.user.findUnique({
       where: { id: req.userId },

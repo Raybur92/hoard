@@ -13,6 +13,7 @@ import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
 import { applySteamWishlistImport } from '../services/wishlistImport';
 import { logPlatform } from '../services/platformLog';
+import { logEvent } from '../services/userEvents';
 
 const router = Router();
 
@@ -233,6 +234,14 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
     return;
   }
 
+  // TL1.2 sync.first detection — capture pre-sync state into a local
+  // variable BEFORE we touch Platform.lastSyncAt. The natural mistake
+  // would be reading platform.lastSyncAt later in the handler, by which
+  // point the post-sync `prisma.platform.update({ lastSyncAt: new Date() })`
+  // has already nulled the null. Local capture pins the "was this the
+  // first sync?" answer at the right moment.
+  const wasFirstSync = platform.lastSyncAt === null;
+
   // Mark as syncing
   await prisma.platform.update({
     where: { id: platform.id },
@@ -245,6 +254,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
     // the Log tab. Logging failures never fail the sync (logPlatform
     // swallows its own errors).
     const startedAt = Date.now();
+    let gamesImported = 0;
     await logPlatform(platform.id, platform.userId, 'info', 'sync.started', `// ${code} sync started`);
 
     try {
@@ -269,6 +279,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
 
       if (syncedGames.length > 0) {
         const r = await runSync(platform.userId, syncedGames);
+        gamesImported = r.imported;
         await logPlatform(
           platform.id, platform.userId, 'info',
           'library.imported',
@@ -320,6 +331,16 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         `sync ok in ${durationS}s`,
         { durationMs: Date.now() - startedAt },
       );
+
+      // TL1.2 sync.first — write only on the first successful sync per
+      // user+platform. `wasFirstSync` was captured before the platform
+      // update above flipped lastSyncAt from null to NOW(). Race-prone
+      // (two concurrent sync requests could both observe null and both
+      // write) per the §3.4 note — not a correctness problem; dedupe
+      // in admin view if it ever happens.
+      if (wasFirstSync) {
+        await logEvent(platform.userId, 'sync.first', { code, gamesImported });
+      }
 
       // T3 — background pass over every Steam-platformed UserGame to fetch
       // achievement aggregates. Throttled at ~3 req/s, so a 1000-game
@@ -407,6 +428,9 @@ router.post('/platforms/psn/connect', requireUser, requireActive, async (req: Re
         lastSyncAt: new Date(),
       },
     });
+    // TL1.2 platform.connected — fires for both fresh-attach and
+    // re-attach (token refresh). Plan §3.4 doesn't distinguish.
+    await logEvent(req.userId, 'platform.connected', { code: 'PS' });
     res.json({ ok: true, platformId: upserted.id });
   } catch (err) {
     console.error('[psn/connect] db error:', err);
@@ -435,6 +459,8 @@ router.post('/platforms/xbox/connect', requireUser, requireActive, async (req: R
         syncStatus: 'ok',
       },
     });
+    // TL1.2 platform.connected — fires for both fresh-attach and re-attach.
+    await logEvent(req.userId, 'platform.connected', { code: 'XB' });
     res.json({ ok: true, platformId: upserted.id });
   } catch (err) {
     console.error('[xbox/connect] db error:', err);

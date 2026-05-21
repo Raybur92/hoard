@@ -1,4 +1,11 @@
-import type { UserGameDetail } from '@hoard/types';
+import type {
+  Feedback,
+  FeedbackWithUser,
+  UserEvent,
+  UserEventWithUser,
+  UserGameDetail,
+} from '@hoard/types';
+import { displayIdentity } from './displayIdentity';
 
 export interface UserGameRow {
   id: string;
@@ -39,6 +46,105 @@ export interface UserGameRow {
 
 export function fromPrismaStatus(s: string): UserGameDetail['status'] {
   return (s === 'OnHold' ? 'On Hold' : s) as UserGameDetail['status'];
+}
+
+/* ── Feedback (F-series, docs/FEEDBACK_PLAN.md) ── */
+
+export interface FeedbackRow {
+  id: string;
+  userId: string;
+  message: string;
+  viewport: string | null;
+  ua: string | null;
+  read: boolean;
+  createdAt: Date;
+}
+
+export interface FeedbackRowWithUser extends FeedbackRow {
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    steamId: string | null;
+  };
+}
+
+export function mapFeedback(f: FeedbackRow): Feedback {
+  return {
+    id: f.id,
+    userId: f.userId,
+    message: f.message,
+    viewport: f.viewport,
+    ua: f.ua,
+    read: f.read,
+    createdAt: f.createdAt.toISOString(),
+  };
+}
+
+export function mapFeedbackWithUser(f: FeedbackRowWithUser): FeedbackWithUser {
+  return {
+    ...mapFeedback(f),
+    user: {
+      id: f.user.id,
+      email: f.user.email,
+      name: f.user.name,
+      displayIdentity: displayIdentity(f.user),
+    },
+  };
+}
+
+/* ── UserEvent (TL-series, docs/TELEMETRY_PLAN.md) ── */
+
+export interface UserEventRow {
+  id: string;
+  userId: string;
+  event: string;
+  // Prisma surfaces JSONB columns as `unknown`-ish JsonValue; we narrow
+  // to Record<string, unknown> | null at the mapper boundary so the
+  // API-facing type stays clean. Non-object JSON (arrays, primitives)
+  // is not produced by our write paths and is treated as null.
+  details: unknown;
+  createdAt: Date;
+}
+
+export interface UserEventRowWithUser extends UserEventRow {
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    steamId: string | null;
+  };
+}
+
+// Non-object JSON values are normalised to null; all touchpoints MUST
+// pass object-shape `details` payloads (or omit the arg entirely — let
+// the `details?` default kick in). No JSON.stringify'd strings, no
+// explicit null. See TL-D5 in docs/TELEMETRY_PLAN.md. The normalisation
+// is a safety net, not a license to drift — a scalar landing in the
+// column means a write-site bug.
+export function mapUserEvent(e: UserEventRow): UserEvent {
+  return {
+    id: e.id,
+    userId: e.userId,
+    event: e.event,
+    details:
+      e.details && typeof e.details === 'object' && !Array.isArray(e.details)
+        ? (e.details as Record<string, unknown>)
+        : null,
+    createdAt: e.createdAt.toISOString(),
+  };
+}
+
+export function mapUserEventWithUser(e: UserEventRowWithUser): UserEventWithUser {
+  return {
+    ...mapUserEvent(e),
+    user: {
+      id: e.user.id,
+      email: e.user.email,
+      name: e.user.name,
+      displayIdentity: displayIdentity(e.user),
+    },
+  };
 }
 
 export function mapUserGame(ug: UserGameRow): UserGameDetail {
