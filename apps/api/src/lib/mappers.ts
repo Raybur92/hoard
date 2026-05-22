@@ -20,6 +20,12 @@ export interface UserGameRow {
   achievementsTotal: number | null;
   achievementsPercent: number | null;
   achievementsUpdatedAt: Date | null;
+  // F1-PR2 collector-metadata fields per CM2 + CM12. Null on sync-
+  // imported rows; populated by manual-add and per-row affordances.
+  mediaType: 'DIGITAL' | 'PHYSICAL' | null;
+  condition: 'LOOSE' | 'CIB' | 'SEALED' | 'REPLICA' | 'GRADED' | null;
+  region: 'NTSC_U' | 'NTSC_J' | 'PAL' | 'OTHER' | null;
+  wishlistedPlatforms: string[];
   addedAt: Date;
   updatedAt: Date;
   game: {
@@ -173,6 +179,10 @@ export function mapUserGame(ug: UserGameRow): UserGameDetail {
     achievementsTotal: ug.achievementsTotal,
     achievementsPercent: ug.achievementsPercent,
     achievementsUpdatedAt: ug.achievementsUpdatedAt?.toISOString() ?? null,
+    mediaType: ug.mediaType,
+    condition: ug.condition,
+    region: ug.region,
+    wishlistedPlatforms: ug.wishlistedPlatforms,
     addedAt: ug.addedAt.toISOString(),
     updatedAt: ug.updatedAt.toISOString(),
     hltb: ug.game.hltbData

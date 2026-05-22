@@ -53,6 +53,41 @@ enum UserStatus {
   ACTIVE
 }
 
+// F1-PR2 collector-metadata enums per CONCEPTUAL_MODEL CM2 + the
+// simplification locked 2026-05-22.
+//
+// MediaType — UserGame.mediaType. DIGITAL = bought/downloaded digitally;
+// PHYSICAL = have a physical copy (disc/cart/cardboard — the specific form
+// is inferable from the platform code: PS5 = disc, SNES = cart, etc.).
+// Simplified from a 4-value enum (PHYSICAL_DISC/PHYSICAL_CART/ROM/DIGITAL_KEY)
+// because the platform tells you the physical form; mediaType only needs
+// to differentiate digital from physical.
+enum MediaType {
+  DIGITAL
+  PHYSICAL
+}
+
+// Condition — UserGame.condition (and shared with MarketplaceListing.condition
+// per CONCEPTUAL_MODEL §3.19 + §6.3). Optional on UserGame for physical
+// collection metadata.
+enum Condition {
+  LOOSE
+  CIB
+  SEALED
+  REPLICA
+  GRADED
+}
+
+// Region — UserGame.region (and shared with MarketplaceListing.region). Optional
+// for physical/retro entries where region matters (PAL SNES carts won't
+// accept NTSC carts unmodded, etc.).
+enum Region {
+  NTSC_U
+  NTSC_J
+  PAL
+  OTHER
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -206,6 +241,19 @@ model UserGame {
   achievementsTotal     Int?
   achievementsPercent   Int?
   achievementsUpdatedAt DateTime?
+  // F1-PR2 collector metadata per CONCEPTUAL_MODEL CM2 + CM12. All four
+  // nullable so existing rows remain unaffected. Populated by the new
+  // manual-add flow + GameDetail per-platform-wishlist affordance.
+  mediaType             MediaType? // DIGITAL | PHYSICAL — sync rows leave null; manual-add sets it
+  condition             Condition? // LOOSE | CIB | SEALED | REPLICA | GRADED — only meaningful when mediaType=PHYSICAL
+  region                Region? // NTSC_U | NTSC_J | PAL | OTHER — only meaningful when mediaType=PHYSICAL
+  // Per-platform wishlist intent per CM12. Empty by default (most users
+  // wishlist generically: "I want this game" not "I want it on PC"). Per
+  // CM13 it stays empty when wishlisting from the Releases-page toggle.
+  // Populated only via the explicit GameDetail per-row affordance for the
+  // collector use case (own GTA on PS5, also wishlist the PC version).
+  // Postgres TEXT[]; mirrors Game.genres + WishlistRelease.platforms shape.
+  wishlistedPlatforms   String[]   @default([])
   addedAt               DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 

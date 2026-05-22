@@ -149,9 +149,37 @@ export interface UserGame {
   achievementsTotal: number | null;
   achievementsPercent: number | null;
   achievementsUpdatedAt: string | null;
+  // F1-PR2 collector metadata per CONCEPTUAL_MODEL CM2 + CM12. All
+  // nullable / default-empty so existing sync-imported rows remain
+  // unaffected. Populated by the manual-add flow + GameDetail per-row
+  // affordances.
+  mediaType: MediaType | null;
+  condition: Condition | null;
+  region: Region | null;
+  // Per CM12 + CM13: empty by default. The collector affordance to
+  // wishlist a specific platform variant of an owned game writes into
+  // this array. The Releases-page toggle does NOT auto-populate it.
+  wishlistedPlatforms: string[];
   addedAt: string;
   updatedAt: string;
 }
+
+// F1-PR2 collector-metadata enums per CONCEPTUAL_MODEL §6.3.
+//
+// MediaType — DIGITAL = bought/downloaded digitally; PHYSICAL = have a
+// physical copy. Simplified from a 4-value enum 2026-05-22 because the
+// platform code already tells you the physical form (PS5 = disc,
+// SNES = cart, emulator = ROM).
+export type MediaType = 'DIGITAL' | 'PHYSICAL';
+
+// Condition — collector metadata for physical / retro entries. Only
+// meaningful when mediaType=PHYSICAL.
+export type Condition = 'LOOSE' | 'CIB' | 'SEALED' | 'REPLICA' | 'GRADED';
+
+// Region — collector metadata for physical / retro entries. Critical for
+// retro (PAL SNES carts won't accept NTSC carts unmodded). Only
+// meaningful when mediaType=PHYSICAL.
+export type Region = 'NTSC_U' | 'NTSC_J' | 'PAL' | 'OTHER';
 
 export interface UserGameDetail extends UserGame {
   hltb: HltbData | null;
@@ -369,6 +397,21 @@ export interface ManualAddBody {
   title: string;
   developer?: string;
   coverUrl?: string;
+  // F1-PR2 collector metadata per CM2 + CM13. All optional — the
+  // backend writes them through to UserGame when present.
+  // mediaType: DIGITAL | PHYSICAL (simplified 2026-05-22). When omitted,
+  // UserGame.mediaType stays null (consistent with sync-imported rows).
+  mediaType?: MediaType;
+  // Only meaningful when mediaType=PHYSICAL. The frontend hides the
+  // pickers otherwise so this stays undefined for DIGITAL adds.
+  condition?: Condition;
+  region?: Region;
+  // Per CM13: even when status=Wishlist on a manual-add, wishlistedPlatforms
+  // stays empty by default. The dedicated GameDetail per-row affordance
+  // (PR6+) writes to it. Accepting it here for future-compatibility +
+  // the rare case where the manual-add flow itself supports per-platform
+  // wishlist entry (not in PR1 P2 UI).
+  wishlistedPlatforms?: string[];
 }
 
 /* ── IGDB ── */

@@ -58,6 +58,11 @@ function makeUpdated(igdbId: number, title: string): UserGameDetail {
     achievementsTotal: null,
     achievementsPercent: null,
     achievementsUpdatedAt: null,
+    // F1-PR2 fields — null/empty defaults match sync-imported row shape
+    mediaType: null,
+    condition: null,
+    region: null,
+    wishlistedPlatforms: [],
     addedAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
     hltb: null,
