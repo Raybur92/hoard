@@ -30,10 +30,15 @@ interface Props {
   disabled?: boolean;
 }
 
+// Bucket display order matches the locked design (PC first since it's the
+// no-IGDB-data default, then sorted-by-current-relevance manufacturers).
 const BUCKET_LABELS: Record<PlatformBucket, string> = {
-  digital: 'digital',
-  physical: 'physical',
-  retro: 'retro',
+  pc:          'PC',
+  playstation: 'PlayStation',
+  xbox:        'Xbox',
+  nintendo:    'Nintendo',
+  sega:        'Sega',
+  other:       'Other',
 };
 
 export function PlatformPicker({ value, onChange, igdbPlatforms, disabled }: Props) {

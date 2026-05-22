@@ -1,25 +1,40 @@
 // F1-PR1 platform picker — bucket classification.
 //
-// Per CM12 + F1 surface §4: the picker has three Stage-1 buckets
-// (Digital / Physical / Retro). Each platform belongs to exactly one
-// bucket. The Stage-2 list within a bucket shows the enumerated entries
-// plus a freeform "Other" escape hatch (per OQ-F1-8).
+// Restructured 2026-05-22 (Andrea's pushback): the original Digital /
+// Physical / Retro bucketing conflated two different concepts. Digital
+// listed STORES (Steam, PSN, Xbox Live, eShop) while Physical/Retro
+// listed CONSOLES (PS5, Switch, SNES). Stores and consoles are not the
+// same kind of thing — a game is published on consoles; stores are
+// sync metadata that Hoard handles automatically. Andrea's correction:
+// "Why would I select PSN instead of PS5?"
+//
+// New structure: bucket by manufacturer / ecosystem, contents are
+// CONSOLES ONLY. Stores aren't picker entries at all — for digital
+// games on PC, the user picks "PC" and mediaType=DIGITAL (PR2); the
+// specific storefront (Steam/GOG/Epic/etc.) becomes optional metadata
+// in PR3+. For sync-capable platforms (Steam/PSN/Xbox/GOG via Hoard's
+// sync flow) the games never reach manual-add anyway — sync handles
+// them.
+//
+// IGDB's `platforms[]` field returns consoles, not stores ("PlayStation 5",
+// "Xbox Series X|S", "PC (Microsoft Windows)", "Nintendo Switch") —
+// confirming this is the right shape for IGDB-driven pre-opening +
+// suggested pins.
 //
 // `inferBucketFromIgdb` maps an IGDB platform name string to a bucket.
-// IGDB names are not always identical to Hoard's labels (e.g. IGDB says
-// "PlayStation 5", Hoard's label is "PS5"); the function normalises both
-// for matching and returns the canonical Hoard label when found.
+// Aliases handle IGDB's verbose naming (e.g. IGDB says "Nintendo Switch",
+// Hoard's label is "Switch").
 //
 // For PR1 the backend still receives `platformLabel: string`. The bucket
-// is metadata for the picker only — used to pre-open the right Stage-1
+// is metadata for the picker only — used to pre-open the right bucket
 // tab when IGDB has platform data (OQ-F1-9) and to group Stage-2 entries.
 // PR2+ will bind to Platform.code or RetroPlatform.id; the structure
 // here is forward-compatible with that schema work.
 
-export type PlatformBucket = 'digital' | 'physical' | 'retro';
+export type PlatformBucket = 'pc' | 'playstation' | 'xbox' | 'nintendo' | 'sega' | 'other';
 
 export interface PlatformOption {
-  /** Bucket the platform lives in. */
+  /** Bucket the platform lives in (manufacturer / ecosystem). */
   bucket: PlatformBucket;
   /** Hoard's canonical label — what the user sees + what gets saved as platformLabel. */
   label: string;
@@ -29,63 +44,67 @@ export interface PlatformOption {
   igdbAliases: string[];
 }
 
-// Curated v1 enumeration. Not exhaustive — the freeform "Other" escape
-// hatch (per OQ-F1-8) covers everything not listed here. Order within
-// each bucket is roughly "most-common first" for the default scroll
-// position, but the picker re-sorts to alphabetical in the "// all"
+// Curated v1 enumeration — CONSOLES across modern + retro generations.
+// Stores (Steam, PSN, Xbox Live, eShop, GOG, Epic, Itch, Humble) are
+// deliberately NOT included; the user records consoles, not purchase
+// venues. Niche storefronts that ARE hardware-agnostic (Itch, Humble)
+// fold into "PC" + the future store-metadata field.
+//
+// Order within each bucket is roughly "newest first" then chronologically
+// back for that family. The picker re-sorts to alphabetical in the "// all"
 // pin section.
 export const PLATFORM_OPTIONS: PlatformOption[] = [
-  // ── digital ──
-  { bucket: 'digital', label: 'Steam',             code: 'ST',  igdbAliases: ['PC (Microsoft Windows)', 'Steam'] },
-  { bucket: 'digital', label: 'PlayStation Store', code: 'PS',  igdbAliases: ['PlayStation Network'] },
-  { bucket: 'digital', label: 'Xbox Live',         code: 'XB',  igdbAliases: ['Xbox Network', 'Xbox Live'] },
-  { bucket: 'digital', label: 'GOG',               code: 'GG',  igdbAliases: ['GOG.com', 'GOG'] },
-  { bucket: 'digital', label: 'Nintendo eShop',    code: 'NS',  igdbAliases: ['Nintendo eShop'] },
-  { bucket: 'digital', label: 'Epic Games',        code: 'EP',  igdbAliases: ['Epic Games Store'] },
-  { bucket: 'digital', label: 'Itch.io',           code: 'IT',  igdbAliases: ['itch.io'] },
-  { bucket: 'digital', label: 'Humble Bundle',     code: 'HB',  igdbAliases: [] },
-  { bucket: 'digital', label: 'Twitch / Prime',    code: 'TW',  igdbAliases: [] },
-  { bucket: 'digital', label: 'Microsoft Store',   code: 'MS',  igdbAliases: [] },
+  // ── PC ──
+  // PC is one entry that covers all PC storefronts. The user picks PC; the
+  // storefront (Steam/GOG/Epic/Itch/Humble/MS Store/Prime) becomes optional
+  // metadata in PR3+. mediaType (PR2) differentiates physical PC discs
+  // (rare collector items) from digital downloads.
+  { bucket: 'pc',         label: 'PC',                 code: 'PC',   igdbAliases: ['PC (Microsoft Windows)', 'PC DOS', 'Windows', 'Linux', 'Mac', 'macOS', 'Steam'] },
+  { bucket: 'pc',         label: 'Steam Deck',         code: 'SDK',  igdbAliases: [] },
 
-  // ── physical (current + recent gen) ──
-  { bucket: 'physical', label: 'PS5',               code: 'PS5', igdbAliases: ['PlayStation 5'] },
-  { bucket: 'physical', label: 'PS4',               code: 'PS4', igdbAliases: ['PlayStation 4'] },
-  { bucket: 'physical', label: 'Xbox Series X|S',   code: 'XSX', igdbAliases: ['Xbox Series X', 'Xbox Series X|S', 'Xbox Series S'] },
-  { bucket: 'physical', label: 'Xbox One',          code: 'XB1', igdbAliases: ['Xbox One'] },
-  { bucket: 'physical', label: 'Switch',            code: 'NT',  igdbAliases: ['Nintendo Switch'] },
-  { bucket: 'physical', label: 'Steam Deck',        code: 'SDK', igdbAliases: [] },
+  // ── PlayStation ──
+  { bucket: 'playstation', label: 'PS5',               code: 'PS5',  igdbAliases: ['PlayStation 5'] },
+  { bucket: 'playstation', label: 'PS4',               code: 'PS4',  igdbAliases: ['PlayStation 4'] },
+  { bucket: 'playstation', label: 'PS3',               code: 'PS3',  igdbAliases: ['PlayStation 3'] },
+  { bucket: 'playstation', label: 'PS2',               code: 'PS2',  igdbAliases: ['PlayStation 2'] },
+  { bucket: 'playstation', label: 'PS1',               code: 'PS1',  igdbAliases: ['PlayStation', 'PlayStation 1'] },
+  { bucket: 'playstation', label: 'PSP',               code: 'PSP',  igdbAliases: ['PlayStation Portable'] },
+  { bucket: 'playstation', label: 'PS Vita',           code: 'VITA', igdbAliases: ['PlayStation Vita'] },
 
-  // ── retro ──
-  { bucket: 'retro', label: 'NES',                 code: 'NES',   igdbAliases: ['Nintendo Entertainment System', 'NES', 'Famicom'] },
-  { bucket: 'retro', label: 'SNES',                code: 'SNES',  igdbAliases: ['Super Nintendo Entertainment System', 'Super Famicom', 'SNES'] },
-  { bucket: 'retro', label: 'N64',                 code: 'N64',   igdbAliases: ['Nintendo 64'] },
-  { bucket: 'retro', label: 'GameCube',            code: 'GCN',   igdbAliases: ['Nintendo GameCube'] },
-  { bucket: 'retro', label: 'Wii',                 code: 'WII',   igdbAliases: ['Wii'] },
-  { bucket: 'retro', label: 'Wii U',               code: 'WIU',   igdbAliases: ['Wii U'] },
-  { bucket: 'retro', label: 'Game Boy',            code: 'GB',    igdbAliases: ['Game Boy'] },
-  { bucket: 'retro', label: 'Game Boy Color',      code: 'GBC',   igdbAliases: ['Game Boy Color'] },
-  { bucket: 'retro', label: 'Game Boy Advance',    code: 'GBA',   igdbAliases: ['Game Boy Advance'] },
-  { bucket: 'retro', label: 'DS',                  code: 'NDS',   igdbAliases: ['Nintendo DS'] },
-  { bucket: 'retro', label: '3DS',                 code: '3DS',   igdbAliases: ['Nintendo 3DS', 'New Nintendo 3DS'] },
-  { bucket: 'retro', label: 'PS1',                 code: 'PS1',   igdbAliases: ['PlayStation', 'PlayStation 1'] },
-  { bucket: 'retro', label: 'PS2',                 code: 'PS2',   igdbAliases: ['PlayStation 2'] },
-  { bucket: 'retro', label: 'PS3',                 code: 'PS3',   igdbAliases: ['PlayStation 3'] },
-  { bucket: 'retro', label: 'PSP',                 code: 'PSP',   igdbAliases: ['PlayStation Portable'] },
-  { bucket: 'retro', label: 'PS Vita',             code: 'VITA',  igdbAliases: ['PlayStation Vita'] },
-  { bucket: 'retro', label: 'Xbox 360',            code: 'X360',  igdbAliases: ['Xbox 360'] },
-  { bucket: 'retro', label: 'Xbox (classic)',      code: 'XBOX',  igdbAliases: ['Xbox'] },
-  { bucket: 'retro', label: 'Genesis',             code: 'GEN',   igdbAliases: ['Sega Mega Drive/Genesis', 'Sega Genesis', 'Mega Drive'] },
-  { bucket: 'retro', label: 'Saturn',              code: 'SAT',   igdbAliases: ['Sega Saturn'] },
-  { bucket: 'retro', label: 'Dreamcast',           code: 'DC',    igdbAliases: ['Dreamcast'] },
-  { bucket: 'retro', label: 'Master System',       code: 'SMS',   igdbAliases: ['Sega Master System'] },
-  { bucket: 'retro', label: 'Game Gear',           code: 'GG',    igdbAliases: ['Sega Game Gear'] },
-  { bucket: 'retro', label: 'Atari 2600',          code: 'A26',   igdbAliases: ['Atari 2600'] },
-  { bucket: 'retro', label: 'NeoGeo',              code: 'NEO',   igdbAliases: ['Neo Geo AES', 'Neo Geo MVS', 'Neo Geo Pocket'] },
-  { bucket: 'retro', label: 'TurboGrafx-16',       code: 'TG16',  igdbAliases: ['TurboGrafx-16/PC Engine', 'PC Engine'] },
-  { bucket: 'retro', label: 'Commodore 64',        code: 'C64',   igdbAliases: ['Commodore C64/128/MAX'] },
-  { bucket: 'retro', label: 'Amiga',               code: 'AMI',   igdbAliases: ['Amiga'] },
-  { bucket: 'retro', label: 'ZX Spectrum',         code: 'ZX',    igdbAliases: ['ZX Spectrum', 'Sinclair ZX Spectrum'] },
-  { bucket: 'retro', label: 'Wii VC',              code: 'VC',    igdbAliases: ['Wii Virtual Console'] },
+  // ── Xbox ──
+  { bucket: 'xbox',        label: 'Xbox Series X|S',   code: 'XSX',  igdbAliases: ['Xbox Series X', 'Xbox Series X|S', 'Xbox Series S'] },
+  { bucket: 'xbox',        label: 'Xbox One',          code: 'XB1',  igdbAliases: ['Xbox One'] },
+  { bucket: 'xbox',        label: 'Xbox 360',          code: 'X360', igdbAliases: ['Xbox 360'] },
+  { bucket: 'xbox',        label: 'Xbox (classic)',    code: 'XBOX', igdbAliases: ['Xbox'] },
+
+  // ── Nintendo (modern + retro) ──
+  { bucket: 'nintendo',    label: 'Switch',            code: 'NS',   igdbAliases: ['Nintendo Switch'] },
+  { bucket: 'nintendo',    label: 'Wii U',             code: 'WIU',  igdbAliases: ['Wii U'] },
+  { bucket: 'nintendo',    label: 'Wii',               code: 'WII',  igdbAliases: ['Wii'] },
+  { bucket: 'nintendo',    label: 'GameCube',          code: 'GCN',  igdbAliases: ['Nintendo GameCube'] },
+  { bucket: 'nintendo',    label: 'N64',               code: 'N64',  igdbAliases: ['Nintendo 64'] },
+  { bucket: 'nintendo',    label: 'SNES',              code: 'SNES', igdbAliases: ['Super Nintendo Entertainment System', 'Super Famicom', 'SNES'] },
+  { bucket: 'nintendo',    label: 'NES',               code: 'NES',  igdbAliases: ['Nintendo Entertainment System', 'NES', 'Famicom'] },
+  { bucket: 'nintendo',    label: '3DS',               code: '3DS',  igdbAliases: ['Nintendo 3DS', 'New Nintendo 3DS'] },
+  { bucket: 'nintendo',    label: 'DS',                code: 'NDS',  igdbAliases: ['Nintendo DS'] },
+  { bucket: 'nintendo',    label: 'Game Boy Advance',  code: 'GBA',  igdbAliases: ['Game Boy Advance'] },
+  { bucket: 'nintendo',    label: 'Game Boy Color',    code: 'GBC',  igdbAliases: ['Game Boy Color'] },
+  { bucket: 'nintendo',    label: 'Game Boy',          code: 'GB',   igdbAliases: ['Game Boy'] },
+
+  // ── Sega ──
+  { bucket: 'sega',        label: 'Dreamcast',         code: 'DC',   igdbAliases: ['Dreamcast'] },
+  { bucket: 'sega',        label: 'Saturn',            code: 'SAT',  igdbAliases: ['Sega Saturn'] },
+  { bucket: 'sega',        label: 'Genesis',           code: 'GEN',  igdbAliases: ['Sega Mega Drive/Genesis', 'Sega Genesis', 'Mega Drive'] },
+  { bucket: 'sega',        label: 'Game Gear',         code: 'GG',   igdbAliases: ['Sega Game Gear'] },
+  { bucket: 'sega',        label: 'Master System',     code: 'SMS',  igdbAliases: ['Sega Master System'] },
+
+  // ── Other / retro ──
+  { bucket: 'other',       label: 'Atari 2600',        code: 'A26',  igdbAliases: ['Atari 2600'] },
+  { bucket: 'other',       label: 'NeoGeo',            code: 'NEO',  igdbAliases: ['Neo Geo AES', 'Neo Geo MVS', 'Neo Geo Pocket'] },
+  { bucket: 'other',       label: 'TurboGrafx-16',     code: 'TG16', igdbAliases: ['TurboGrafx-16/PC Engine', 'PC Engine'] },
+  { bucket: 'other',       label: 'Commodore 64',      code: 'C64',  igdbAliases: ['Commodore C64/128/MAX'] },
+  { bucket: 'other',       label: 'Amiga',             code: 'AMI',  igdbAliases: ['Amiga'] },
+  { bucket: 'other',       label: 'ZX Spectrum',       code: 'ZX',   igdbAliases: ['ZX Spectrum', 'Sinclair ZX Spectrum'] },
 ];
 
 /**
@@ -141,13 +160,14 @@ export function suggestedFromIgdbPlatforms(igdbNames: string[]): PlatformOption[
  * Decide which Stage-1 bucket to pre-open when the user lands in P2 with
  * an IGDB-resolved game. Returns the bucket of the FIRST suggested platform
  * (IGDB's reported platform order is roughly release-order — typically the
- * original platform comes first). Falls back to `digital` when there's no
- * IGDB platform data or no suggestion matches — most-common default per
- * OQ-S-2.
+ * original platform comes first). Falls back to `pc` when there's no
+ * IGDB platform data or no suggestion matches — most-common default for
+ * the F1 use case (the user adding a manual PC game, e.g. Itch/Humble,
+ * is the most plausible no-IGDB-platforms scenario).
  */
 export function preferredBucketFromIgdb(igdbNames: string[]): PlatformBucket {
   const suggested = suggestedFromIgdbPlatforms(igdbNames);
-  return suggested.length > 0 ? suggested[0]!.bucket : 'digital';
+  return suggested.length > 0 ? suggested[0]!.bucket : 'pc';
 }
 
 /**

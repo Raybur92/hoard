@@ -259,7 +259,9 @@ Chip strip wraps to 2 rows if needed (6 chips on a narrow viewport may not fit s
 
 ## 4. Platform picker visual structure (two-stage, inline)
 
-The platform picker is the densest single piece of UI in P2. ~50 entries across three buckets requires explicit visual structure.
+The platform picker is the densest single piece of UI in P2. ~40 entries across six manufacturer buckets requires explicit visual structure.
+
+**Restructure 2026-05-22 (Andrea's smoke-test pushback):** originally three buckets (Digital · Physical · Retro). That structure conflated stores with consoles (Digital listed Steam/PSN/eShop, Physical/Retro listed PS5/Switch/SNES) — different kinds of thing under the same picker. Corrected mental model: a game is published on consoles; stores are sync metadata Hoard handles automatically. Picker now shows consoles only, bucketed by manufacturer / ecosystem (the way collectors actually think — "my Nintendo collection / my Sony collection").
 
 ### 4.1 Concept
 
@@ -274,41 +276,45 @@ When the user picks, the picker collapses back to a field showing the selected p
 [ Game Boy ▾ ]
 ```
 
-### 4.3 ASCII mock — expanded state (picker open, IGDB pre-opened to Retro)
+### 4.3 ASCII mock — expanded state (picker open, IGDB pre-opened to Nintendo)
 
 ```
 // platform — picking...
 
-[ digital ]  [ physical ]  [ RETRO ]                ← bucket tabs; RETRO pre-opened (amber)
-─────────────────────────────────────────────────────
+[ PC ]  [ PlayStation ]  [ Xbox ]  [ NINTENDO ]  [ Sega ]  [ Other ]
+                                       ▲ active (2px amber underline)
+─────────────────────────────────────────────────────────────────────
 
 $ filter platforms…                                  ← type-to-filter field, $ prefix
 
 // suggested for this game
   [GB]   Game Boy                                   ← from IGDB metadata, top
   [GBC]  Game Boy Color
-  [VC]   Wii Virtual Console
 
 // recently used
-  [SNES] Super NES
+  [SNES] SNES
   [NES]  NES
 
 // all (alphabetical)
-  [ATARI] Atari 2600
-  [DC]    Dreamcast
-  [GG]    Game Gear
-  [N64]   Nintendo 64
+  [3DS]  3DS
+  [DS]   DS
+  [GBA]  Game Boy Advance
+  [GCN]  GameCube
+  [N64]  N64
+  [NS]   Switch
+  [WII]  Wii
+  [WIU]  Wii U
   ...
 
-──────────────────────────────────────────────────────
-[ + other / freeform platform ]                       ← escape hatch
+────────────────────────────────────────────────────────────────────
+[ + other / freeform platform ]                      ← escape hatch
 ```
 
 ### 4.4 Bucket-tab visual treatment
 
 Bucket tabs use the existing `.chip` utility with one extension: the active bucket gets a 2px `--amber` underline (matching the mobile-tab-bar active-state pattern from Phase 8 PR 2). Pre-opened bucket = active bucket on first render.
 
-If no IGDB suggestion exists (freeform-fallback game), default to **Digital** (most common case).
+If no IGDB suggestion exists (freeform-fallback game, or IGDB returns no platforms), default to **PC** (most-common no-IGDB-data scenario — manual-add of an Itch/Humble/non-IGDB PC indie).
 
 ### 4.5 Pin section dividers
 
@@ -540,7 +546,7 @@ All surface decisions still to make. Each labeled with a lean if I have one.
 | Code | Decision | Lean |
 |---|---|---|
 | **OQ-S-1** | `[+ more details]` panel open/close state — always collapsed on fresh modal open, OR remember per-user-session state? | **Always collapsed.** Power users get one extra click; casual users get the lean default. Per-session memory is consumer-app polish for marginal benefit. |
-| **OQ-S-2** | Bucket tab default when no IGDB suggestion (freeform-fallback game, or IGDB returns zero platforms) | **Digital.** Most common case for a game with no specific platform metadata; user can switch to Physical/Retro if needed. |
+| **OQ-S-2** | Bucket tab default when no IGDB suggestion (freeform-fallback game, or IGDB returns zero platforms) | **PC.** Restructured 2026-05-22 — most common no-IGDB-data scenario is manual-adding a PC indie from Itch / Humble / similar. User can switch to any other bucket if needed. |
 | **OQ-S-3** | Auto-close timer visual — progress bar at modal bottom, OR countdown text ("closing in 2s")? | **Progress bar.** Terminal-aesthetic alignment; less visually noisy than countdown text; respects reduced-motion via instant snap. |
 | **OQ-S-4** | Freeform-platform badge display (when user typed e.g. "Steam Deck") — first 2–4 chars of name in `.plat` badge, OR a generic `[?]` / `[*]` icon, OR no badge (just the name)? | **First 2–4 chars uppercased** ("STEA" for "Steam Deck"). Terminal aesthetic absorbs unusual badges naturally. Generic icon would feel like a placeholder; no badge would break the row's visual rhythm. |
 | **OQ-S-5** | Status chip strip on mobile — wrap to 2 rows when narrow, OR horizontal scroll? | **Wrap to 2 rows.** Horizontal scroll hides options off-screen; the strip needs all 6 visible for low cognitive load. |

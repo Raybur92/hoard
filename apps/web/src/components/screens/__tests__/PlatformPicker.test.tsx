@@ -24,7 +24,7 @@ describe('PlatformPicker', () => {
       render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={[]} disabled />);
       fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
       // No bucket tabs visible — still collapsed
-      expect(screen.queryByRole('tab', { name: 'retro' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Nintendo' })).not.toBeInTheDocument();
     });
   });
 
@@ -33,27 +33,36 @@ describe('PlatformPicker', () => {
       fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
     }
 
-    it('renders bucket tabs when expanded', () => {
+    it('renders all six manufacturer bucket tabs when expanded', () => {
       render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={[]} />);
       expand();
-      expect(screen.getByRole('tab', { name: 'digital' })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: 'physical' })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: 'retro' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'PC' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'PlayStation' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Xbox' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Nintendo' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Sega' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Other' })).toBeInTheDocument();
     });
 
-    it('pre-opens to the bucket of the first IGDB-reported platform', () => {
-      // Pokemon Red — IGDB reports Game Boy first → Retro bucket pre-opens
+    it('pre-opens to Nintendo bucket when IGDB suggests Game Boy first (Pokemon Red)', () => {
       render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={['Game Boy', 'Game Boy Color']} />);
       expand();
-      const retroTab = screen.getByRole('tab', { name: 'retro' });
-      expect(retroTab).toHaveAttribute('aria-selected', 'true');
+      const nintendoTab = screen.getByRole('tab', { name: 'Nintendo' });
+      expect(nintendoTab).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('defaults to Digital bucket when no IGDB platforms (per OQ-S-2)', () => {
+    it('pre-opens to PlayStation bucket when IGDB suggests PS5 first (GTA V case)', () => {
+      render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={['PlayStation 5', 'Xbox Series X|S', 'PC (Microsoft Windows)']} />);
+      expand();
+      const psTab = screen.getByRole('tab', { name: 'PlayStation' });
+      expect(psTab).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('defaults to PC bucket when no IGDB platforms (per OQ-S-2 post-restructure)', () => {
       render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={[]} />);
       expand();
-      const digitalTab = screen.getByRole('tab', { name: 'digital' });
-      expect(digitalTab).toHaveAttribute('aria-selected', 'true');
+      const pcTab = screen.getByRole('tab', { name: 'PC' });
+      expect(pcTab).toHaveAttribute('aria-selected', 'true');
     });
 
     it('shows "// suggested for this game" section when IGDB platforms match active bucket', () => {
@@ -68,32 +77,34 @@ describe('PlatformPicker', () => {
       render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={[]} />);
       expand();
       expect(screen.getByText('// all')).toBeInTheDocument();
-      // Digital bucket should have Steam, GOG, etc.
-      expect(screen.getByRole('option', { name: /Steam/ })).toBeInTheDocument();
+      // PC bucket should have PC + Steam Deck
+      expect(screen.getByRole('option', { name: /^PC PC$/ })).toBeInTheDocument();
     });
 
     it('switches buckets when a tab is clicked', () => {
       render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={[]} />);
       expand();
-      // Initially Digital — Steam visible (only Digital option containing "Steam")
-      expect(screen.getByRole('option', { name: /Steam/ })).toBeInTheDocument();
-      // Switch to Retro
-      fireEvent.click(screen.getByRole('tab', { name: 'retro' }));
-      expect(screen.getByRole('tab', { name: 'retro' })).toHaveAttribute('aria-selected', 'true');
+      // Initially PC — "PC PC" visible
+      expect(screen.getByRole('option', { name: /^PC PC$/ })).toBeInTheDocument();
+      // Switch to Nintendo
+      fireEvent.click(screen.getByRole('tab', { name: 'Nintendo' }));
+      expect(screen.getByRole('tab', { name: 'Nintendo' })).toHaveAttribute('aria-selected', 'true');
       // NES should now be visible — exact accessible name "NES NES" (badge + label)
       // because regex /NES/ would also match SNES which is in the same bucket.
       expect(screen.getByRole('option', { name: 'NES NES' })).toBeInTheDocument();
     });
 
-    it('filter input narrows the visible list', () => {
+    it('filter input narrows the visible list within the active bucket', () => {
       render(<PlatformPicker value={null} onChange={vi.fn()} igdbPlatforms={[]} />);
       expand();
+      // Switch to PlayStation first so we have multiple options to narrow
+      fireEvent.click(screen.getByRole('tab', { name: 'PlayStation' }));
       const filter = screen.getByLabelText('Filter platforms');
-      fireEvent.change(filter, { target: { value: 'gog' } });
-      // GOG should match
-      expect(screen.getByRole('option', { name: /GOG/ })).toBeInTheDocument();
-      // Steam should not
-      expect(screen.queryByRole('option', { name: /Steam/ })).not.toBeInTheDocument();
+      fireEvent.change(filter, { target: { value: 'vita' } });
+      // PS Vita matches
+      expect(screen.getByRole('option', { name: /Vita/ })).toBeInTheDocument();
+      // PS5 doesn't
+      expect(screen.queryByRole('option', { name: /^PS5 PS5$/ })).not.toBeInTheDocument();
     });
 
     it('shows "no platforms match" when filter excludes everything in the bucket', () => {
@@ -110,11 +121,11 @@ describe('PlatformPicker', () => {
       const onChange = vi.fn();
       render(<PlatformPicker value={null} onChange={onChange} igdbPlatforms={[]} />);
       fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
-      // Pick Steam from the digital bucket
-      fireEvent.click(screen.getByRole('option', { name: /Steam/ }));
-      expect(onChange).toHaveBeenCalledWith('Steam');
+      // Pick PC from the pc bucket (default active)
+      fireEvent.click(screen.getByRole('option', { name: /^PC PC$/ }));
+      expect(onChange).toHaveBeenCalledWith('PC');
       // Picker is now collapsed — no bucket tabs
-      expect(screen.queryByRole('tab', { name: 'retro' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Nintendo' })).not.toBeInTheDocument();
     });
   });
 
