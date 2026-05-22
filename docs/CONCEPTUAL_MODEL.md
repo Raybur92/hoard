@@ -161,8 +161,9 @@ For PC + current-gen consoles these collapse to the same concept because owning 
 
 **Attributes:**
 - `id`, `userId`, `gameId`
-- `status` (`GameStatus` enum: `Playing | Backlog | Completed | OnHold | Dropped | Wishlist`)
-- `playtimeByPlatform` (JSON map: `PlatformCode → minutes`; nullable per-platform)
+- `status` (`GameStatus` enum: `Playing | Backlog | Completed | OnHold | Dropped | Wishlist`) — **global / per-game** state per CM12
+- `playtimeByPlatform` (JSON map: `PlatformCode → minutes`; nullable per-platform) — keys = "platforms owned-on (with playtime)" per CM12
+- `wishlistedPlatforms` (string[] — array of `PlatformCode` / `RetroPlatform.shortName`) — **NEW per CM12** — keys = "platforms the user wants this game on." Decoupled from `playtimeByPlatform` because *wishlist intent is per-platform while ownership status is per-game*. Resolves the GTA case (own on PS5, wishlist on PC) — see CM12 + §3.4.2 below.
 - `lastPlayedAt` (nullable)
 - `notes` (free-form text), `rating` (1–10, nullable)
 - `achievementsEarned`, `achievementsTotal`, `achievementsPercent`, `achievementsUpdatedAt` — aggregate achievement progress (all nullable for games without achievement data)
@@ -211,6 +212,31 @@ A UserGame's *display state* is derived from `status` + `sourceType` + the prese
 Display state is computed at render-time, not stored. UI variant routing in `/layers-interaction-flow` and `/layers-surface`.
 
 **Hardware listings live elsewhere.** The table above covers Game display variants. Listings of consoles / controllers / accessories (per §3.19 with `targetType = HARDWARE`) render on **RetroPlatform detail surfaces** (per §3.17 Actions) and on the Collection page (per S11), NOT as a Game detail variant. A "find a SNES" CTA from anywhere in the app deep-links to the SNES RetroPlatform detail page's hardware-listings feed.
+
+#### 3.4.2 The "PLATFORMS" section — owned + wishlisted unified per CM12
+
+A game can simultaneously be **owned on some platforms** and **wishlisted on others** ("GTA case" — Andrea 2026-05-22: user owns GTA V on PS5 because Rockstar released console-first, then wishlists the eventual PC version for a better experience).
+
+The model honors this asymmetry by keeping two distinct collections on UserGame:
+
+- `playtimeByPlatform` — keys = platforms owned-on (with optional playtime data)
+- `wishlistedPlatforms` — keys = platforms wanted-on (no playtime, by definition)
+
+The GameDetail surface renders both under a unified **"PLATFORMS"** section (renamed from "OWNED ON" per CM12). Each row shows the platform code + its state — playtime hours for owned platforms, the marker `wishlisted` for wishlisted platforms:
+
+```
+// PLATFORMS
+PS5 · 42h
+ST  · wishlisted
+```
+
+**Why the rename matters semantically:** "OWNED ON" claimed ownership across every row in the section. The GTA case can't fit that frame without lying about the PC row. "PLATFORMS" is honest about what's actually displayed — the user's per-platform relationships with this game, owned or wished.
+
+**Shelf logic:** A game appears on the Wishlist shelf if either `status = 'Wishlist'` (global) OR `wishlistedPlatforms.length > 0` (per-platform). GTA V in the GTA case appears on Backlog (via PS5 ownership reflecting global status) AND Wishlist (via PC entry in wishlistedPlatforms) — both intents are legitimate, both shelves surface it. No dedupe.
+
+**Un-wishlist UX per CM12 + S8 alignment:**
+- Global `[+ wishlist]` / `[- un-wishlist]` toggle: shortcut that clears ALL of `wishlistedPlatforms` and sets `status` away from `Wishlist` if global
+- Per-row `[× un-wishlist]` affordance in the PLATFORMS section row: removes that specific platform from `wishlistedPlatforms`. Collectors editing per-platform get this control; most users use the global toggle.
 
 ### 3.5 WishlistRelease
 
@@ -688,6 +714,7 @@ erDiagram
         string gameId FK
         GameStatus status
         json playtimeByPlatform
+        json wishlistedPlatforms
         SourceType sourceType
         MediaType mediaType
         string retroPlatformId FK
@@ -936,6 +963,7 @@ One name per concept, one concept per name. Inconsistency between this list and 
 |---|---|---|
 | **Library** | Collection, Inventory | The set of all UserGames for a user. "Collection" is reserved for the retro/physical surface per S11 to avoid double-meaning. |
 | **Shelf** | Section, List, View | A filtered view of the Library by status. "Backlog shelf," "Wishlist shelf," etc. |
+| **PLATFORMS section** *(GameDetail surface, per CM12)* | OWNED ON (rejected — claims ownership across all rows; can't represent the GTA case honestly), Availability (rejected — too passive, doesn't reflect user-relationship), Versions (rejected — implies game edition variants) | The unified GameDetail section that lists every per-platform relationship a user has with this game. Each row shows platform code + state — playtime hours for owned platforms, the marker `wishlisted` for wishlisted platforms. Replaces the prior "OWNED ON" heading 2026-05-22. The rename is what makes the asymmetric model (per-game status + per-platform wishlist + per-platform ownership) honest at the surface level — see §3.4.2 + CM12. |
 | **Game** | Title, Release | The canonical game identity (one row per real game). "Title" was rejected because "title" is also the game's name field. "Release" was rejected because it implies a specific release event (the `WishlistRelease` concept). |
 | **UserGame** | LibraryEntry, OwnedGame | The user's relationship to a Game — status, playtime, notes. Internal term; users don't see "UserGame" in UI, they see "game" or "shelf entry." |
 | **Platform** | Storefront, Service, Account | A user's connected account on a sync-capable storefront (Steam, PSN, etc.). Reserved for sync-capable digital platforms; retro platforms use `RetroPlatform`. |
@@ -1070,7 +1098,7 @@ Decisions deliberately deferred — surfaced here so they don't get lost.
 
 1. **`Platform` vs. `Store` unification** — these are currently two entities (one is the user's *connected account*, the other is a *purchase venue*). For Steam they're the same real-world thing; for third-party deal-resellers (Kinguin) Store exists but no Platform. **Decision deferred to the deals workstream (B8a-E sketch)** — likely they stay separate but with cross-references.
 
-2. **Multi-platform UserGame uniqueness** — `@@unique([userId, gameId, retroPlatformId])` works when retroPlatformId is set, but the existing constraint `@@unique([userId, gameId])` doesn't accommodate "I own this on PS5 AND on Switch." Currently `playtimeByPlatform` JSON handles this for digital sync (one UserGame row with playtime split per code). For retro/physical the "I own this on two retro platforms" case needs the multi-row pattern. **Decision deferred to B10a (retro platform enumeration) workstream.**
+2. ~~**Multi-platform UserGame uniqueness**~~ — **RESOLVED 2026-05-22 via CM12.** Owned + wishlisted per-platform asymmetry handled within a single UserGame row by keeping ownership in `playtimeByPlatform` (multi-key JSON) and wishlist intent in `wishlistedPlatforms` (string array). The `@@unique([userId, gameId])` constraint stays as-is. The GTA case (own on PS5 + wishlist on PC) is the canonical motivating example. Full per-platform statuses (e.g., Completed-on-PS5 + Dropped-on-PC) intentionally NOT supported — over-engineering for use cases that don't exist; per-game status with per-platform wishlist covers the real-world cases. See §3.4.2 + CM12.
 
 3. **Deal history vs. current-only** — `Deal` as currently modeled stores only the latest snapshot per `(Game, Store, currency)`. A "price drop alert" needs *comparison* with prior price, which means either (a) keeping rolling history in a `DealHistory` table, OR (b) snapshotting on every fetch and querying the last-N. Affects deal-alert UX significantly. **Decision deferred to B8d (deal-alert notifications) workstream.**
 
@@ -1120,6 +1148,16 @@ Decisions deliberately deferred — surfaced here so they don't get lost.
 - **CM8 — `Marketplace` is a separate entity from `Store`.** 2026-05-22. Reason: digital storefronts have a single canonical price per (Game, Store, currency); secondhand marketplaces have many concurrent listings per (Game, Marketplace), each with condition / seller / region / etc. Different data shapes, different user mental models (price comparison vs. listings feed), different intents (bargain-hunting vs. collector-completionism). Unifying them under one entity would force one of: lossy aggregation of marketplace listings into a single Deal-shaped row, or letting Store's `Deal` rows lose the unique constraint and become listings-shaped. Neither is clean. The Kinguin-overlaps-both edge case (OQ-16) is real but small and worth solving at integration time rather than at the model layer.
 - **CM9 — `MarketplaceListing` target is polymorphic (Game OR Hardware).** 2026-05-22. The same listing entity covers both a SNES cartridge on eBay and a SNES console on eBay because the listing IS the same kind of thing — a marketplace post with the same lifecycle, attributes, sync flow, and query patterns. Implemented via `targetType` discriminator + nullable FKs (`gameId` XOR `retroPlatformId`) + optional hardware-specific fields (`hardwareKind`, `hardwareCompleteness`). Rejected alternatives: (a) separate `HardwareListing` entity — would duplicate marketplace + price + condition + region attributes + a parallel sync flow; (b) a `Collectible` supertype unifying Game and Hardware — over-engineered for v1 with no concrete payoff. The polymorphic pattern echoes how `UserEvent` is one entity with a `kind` discriminator covering wildly different event shapes. The `CONSOLE_BUNDLE` escape hatch handles ambiguous eBay listings ("SNES + 7 games + 2 controllers") that resist clean disambiguation at sync time.
 - **CM10 — Hardware ownership is modeled as a parallel `UserHardware` entity (§3.20), NOT polymorphism on `UserGame`.** 2026-05-22 (Andrea's scope pushback). Hardware ownership and software ownership are conceptually parallel — both are User-to-something joins with status, condition, region, acquisition metadata — but they reference different things (Game vs. RetroPlatform), have different completeness semantics (CIB game = manual + cart + box; CIB console = manual + system + box + original cables + inserts), and serve different collector mental models (catalog completion across software titles vs. setup completion across console-eras). Forcing them into a single `UserCollectible` entity would either (a) bloat UserGame with hardware-irrelevant fields like `playtimeByPlatform` / `achievementsPercent` / `mediaType=PHYSICAL_CART`, or (b) bloat a generic entity with game-irrelevant fields like `modded` / `hardwareKind`. Parallel entities with shared enums (`Condition`, `Region`, `HardwareKind`, `HardwareCompleteness`) keep both clean. Free-text `displayName` defers the HardwareItem reference-catalog question (OQ-17) — users describe "Super Game Boy" in their own words for v1, structured matching can come later.
+- **CM12 — Status is per-game; wishlist intent is per-platform. UserGame carries both as distinct collections.** 2026-05-22 (Andrea's proposal during F1 interaction-flow design, motivated by the GTA case: own on PS5, wishlist on PC). The two concepts have genuinely different shapes:
+  - **Ownership status** (`Playing | Backlog | Completed | OnHold | Dropped`) applies to "the game" globally — you're playing GTA, doesn't matter which disc is in the tray. Modeled as `UserGame.status: GameStatus`.
+  - **Wishlist intent** is inherently platform-specific for collectors — wanting GTA on PC because of better graphics is genuinely different from wanting GTA on Switch for portability. Modeled as `UserGame.wishlistedPlatforms: string[]`.
+  - **Ownership platforms** are also per-platform (you can own GTA on both PS5 and Switch). Modeled as `UserGame.playtimeByPlatform` JSON keys.
+
+  The GameDetail surface unifies both per-platform collections under a **"PLATFORMS"** section (renamed from "OWNED ON") that lists owned platforms with playtime AND wishlisted platforms with a "wishlisted" marker per row. The vocabulary fix ("Platforms" not "Owned on") is what makes the asymmetric model honest — see §3.4.2 + §6.1 ubiquitous language entry.
+
+  Rejected alternatives: (a) refuse-with-info on the GTA case — honest but solves nothing; the user's intent goes unrepresented; (b) full per-platform statuses on every state (Completed-on-PS5 + Dropped-on-PC etc.) — substantial schema refactor for use cases that don't really exist; status is genuinely a per-game concern for non-wishlist states; (c) parallel per-platform wishlist as a side-channel without renaming the section — same schema, but "OWNED ON" heading would claim ownership across wishlisted rows, contradicting reality. CM12's vocabulary lock is what unblocks the cleanest implementation.
+
+  Resolves OQ-2 (multi-platform UserGame uniqueness — no longer needs the multi-row pattern; one row per game still works with per-platform collections living inside it).
 - **CM11 — AI-cost-bearing features use BYO API key, not a Hoard-side credit balance.** 2026-05-22. Per S14, Hoard does not process payments. The user's own API key is stored encrypted-at-rest in `UserApiKey` (§3.22); Hoard's server uses it to make calls on the user's behalf to the third-party provider (Anthropic at v1); the provider bills the user directly. Rejected alternatives: (a) `UserCredits` entity with Stripe top-up flow — would require Hoard to operate as a payments processor (Stripe Customer per User, financial reporting, tax compliance, refund handling) which is inconsistent with "free indie tool" identity; (b) BYO key as a per-request paste-in (no storage) — every AI interaction would require pasting a key again, terrible UX. The encryption / never-return-plaintext / `keyFingerprint`-only-display pattern matches industry baseline credential-handling (Anthropic, Stripe, GitHub PATs all behave this way). The tip jar uses an external venue (Buy Me a Coffee) so Hoard still touches zero payment infrastructure.
 
 ---

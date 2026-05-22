@@ -87,6 +87,8 @@ Many sources will never have a sync API — physical media, retro ROM collection
   - UI question: do we visually distinguish, or are they all just "games on the wishlist"? Probably the latter for the shelf; the upcoming-specific affordances stay on the Releases page only.
 - **Released-wishlist detail page** (per S9) — shows cover, gallery, store deals (S10), HLTB, "where to buy" — not a countdown, the game's already out.
 
+**Per-platform wishlist intent — added 2026-05-22 per CM12 ([CONCEPTUAL_MODEL §3.4.2](CONCEPTUAL_MODEL.md)):** Wishlist is genuinely platform-specific for collectors. Real case: user owns GTA V on PS5 (because Rockstar releases console-first), wishlists the eventual PC version because PC offers better graphics + mods. The model now honors this asymmetry: `UserGame.status` stays per-game (Backlog / Playing / Completed etc.), while `UserGame.wishlistedPlatforms` is a per-platform array. The GameDetail surface unifies both under a renamed **"PLATFORMS"** section (was "OWNED ON") that displays each platform's state — playtime hours for owned platforms, `wishlisted` marker for wishlisted platforms. Wishlist shelf logic: `status='Wishlist' OR wishlistedPlatforms.length > 0`. The GTA case appears on Backlog shelf (via PS5 ownership) AND Wishlist shelf (via PC entry) — both intents legitimate, both shelves surface it.
+
 ### S9. The game-detail page is a state machine, not a uniform render
 
 The detail page can't be one template that switches a few fields on/off. The state determines the page's primary purpose:

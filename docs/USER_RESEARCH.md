@@ -123,6 +123,70 @@ Each entry is one observation, tagged with: source / what was seen / what was in
 - **Confidence:** Observed (Daniel, mediated by Andrea)
 - **Note:** Daniel's role is QA volunteer, not typical-user proxy. His behavioural data validates feature correctness but doesn't speak to user *needs*.
 
+### O14 — Stash (iOS competitor) audit during F1 interaction-flow design
+- **Source:** Andrea's walkthrough of Stash on iOS while drafting `/layers-interaction-flow` F1 (manual-add a game), 2026-05-22
+- **Confidence:** **Domain observation** (Andrea-observing-competitor, not cohort-behaviour-observed). Marker: insights inform Hoard's design *choices* but do NOT speak to Hoard's *users' needs* — those still live in the N1–N12 corpus.
+
+**Observed surfaces on Stash:**
+
+*GameDetail (using Pokemon Red as the probe):*
+- Cover, title, release date (per-console drilldown), supported consoles, [+ add] CTA
+- Aggregate signals: critics score, X wishlisted / Y played / Z reviewed (community stats)
+- "Available in shops" with Amazon icon below (deals adjacency)
+- Five lateral-navigation buttons: **game saga** (all games in same series) · **game version / packages** (release variants) · **community collections** (user-curated groupings shared across users) · **developer Game Freak** (all games by) · **publisher Nintendo** (all games published by) — each opens a list view of related games
+- Time-to-beat (community-sourced)
+- Tags (single player / RPG / fantasy / etc. — corresponds to IGDB genres + themes + perspectives)
+- Videos + images horizontal scroll
+- Description, plot, supported languages
+- "Updated versions" section (mods, regional re-releases)
+
+*Add-to-collection flow:*
+
+Stage 1 — primary picker:
+- Status buckets: **Wishlist · Playing · Completed · Archive** (4 options, NOT 6 like Hoard)
+- **Owned toggle** (independent of status — orthogonal dimension)
+- Add to user-defined Collection (multi-select)
+- [Save]
+
+Stage 2 — optional post-save:
+- Score 1–10 with reactive emoji (vomiting at 1 → heart-eyes at 10)
+- Free-text optional review
+- Status-contextual sub-status radio:
+    - Completed → not selected / main story / main + side / 100%
+    - Playing → not selected / infinite / paused
+    - Archive → not selected / abandoned / didn't play
+
+Stage 2b — `[+ add+]` chip opens optional-fields screen with 7 buttons:
+1. **Times beaten** (−[1]+ stepper) — free
+2. **Platforms** — pro-gated
+3. **Game time** (hours + minutes manual) — free
+4. **Date range** (when played) — pro-gated
+5. **Private notes** — pro-gated
+6. **Advancement** (% manual) — free
+7. **Screenshots** — pro-gated
+
+**Inferences drawn for F1 (locked into the interaction-flow doc 2026-05-22):**
+- **Status-first framing** — Stash makes status the primary question; Hoard's current modal treats status + platform as parallel. Locked into F1 P2 design: status rendered as the primary visual question, platform / mediaType as secondary supporting context.
+- **Manual playtime is S7 promise-essential** — without it, manually-added games permanently show "playtime: —" while synced games show real numbers. That's the second-class-citizen treatment S7 commits us to avoid. Locked into F1 P2 as a collapsible `[+ more details]` panel.
+- **Times beaten — architectural slot locked in F1, implementation deferred** (per Andrea 2026-05-22). Placement inside the `[+ more details]` panel decided now so the panel structure doesn't need rework when implementation lands. Survives the "fake precision" critique because completion-count is countable real data ("I beat Pokemon Red 3 times"). Bundled with the CM12 amendment pass for the schema decision (`UserGame.completionsCount: Int?` column vs. Session-log entries).
+- ~~**Manual advancement (% input)**~~ **REJECTED 2026-05-22 (Andrea's pushback).** Percentage implies measurement against a 100% that's undefined for retro/pre-achievement games. Fake precision violates N3 (liveness as credibility) and N4 (scope invariant). The use case (memory hook for "where am I") is already served by the notes field + the status enum. The S7 "trophies: —" downgrade signal is a surface-layer problem fixed in GameDetail display logic, not by adding a column the user lies into. **Stash includes the field; Hoard explicitly rejects it.** Worth pinning so future-me doesn't reopen.
+- **Rate/review at moment-of-intentionality** — Stash treats it as a natural post-save extension. Locked into F1 P5 as `[+ rate / note]` deep-link to GameDetail (reuses existing `?focus=notes` pattern from post-8 PR A) — no rating-data subsystem required for F1 itself.
+- **Platform pinning across `[add another]`** — bulk-add collector use case ("stack of SNES carts") is the S7 use case F1 exists to serve. Locked as OQ-F1-4 resolution: preserve platform pick + intent across [add another] with visible "pinned" indicator + tappable unpin.
+
+**Inferences captured as future scope (NOT F1, bundled as CM12 + S15 + B14 amendment pass post-F1):**
+- **Owned-as-toggle vs. status-only** — Stash's status / ownership decoupling unlocks real cases Hoard currently can't represent ("completed on a borrowed copy", "bought but haven't started yet"). Conceptual-model surgery. Real upside, real CM-level work.
+- **Status-contextual sub-statuses** — Stash's per-status radio (Completed → main / +side / 100%; Playing → infinite / paused) captures nuance Hoard collapses. More relevant to GameDetail status-edit than to add-time.
+- **Rating-as-data** — new `UserGame.rating: Int?` column (1–10) + GameDetail score input + score-aware shelves/filters. F1's [+ rate/note] deep-link is the entry path; the data model + dedicated UI are the post-F1 work.
+- **Collections as user-defined personal groupings** — Stash's community-collections are shared (doesn't fit Hoard's personal-tool identity), but **personal** collections ("Cyberpunk vault", "Pokemon completionist run", "Dad's PS2 favorites") orthogonal to status are a real S0 collector affordance. New entity (`UserCollection`?) + join table + Collection management UI.
+- **Series / Developer / Publisher as reference-data entities + lateral navigation UX** — Stash's "click developer → see all their games" pattern turns the personal library into a discovery instrument. IGDB has all the data (`franchises`, `collections`, `involved_companies`). Matches S0 collector identity ("complete my Mega Man X catalog"; "everything FromSoftware made"; "all Atlus releases"). Adds Developer + Publisher + Series/Franchise reference entities + Game FK relationships + GameDetail link affordances + "all games by X" list view surface.
+- **Screenshots / UserGameMedia entity** — user-uploaded media tied to UserGame as memory/journaling. Genuinely net-new. Adjacent to the deferred Session entity (CM2).
+- **Completions count, play date range** — replay tracking (Times beaten stepper) + session-bounded date tracking (`playStartedAt` / `playEndedAt` or full Session lifecycle). Both adjacent to CM2-deferred Session entity.
+
+**Values divergence worth preserving as Hoard identity:**
+- **Stash paywalls private notes; Hoard treats them as core.** Reflects different product identities — Stash is consumer-collectibles-tracker; Hoard is personal terminal companion per S1 + N6. Private annotation is *foundational*, not a power-user upsell. Worth keeping this contrast vivid if Hoard ever writes publicly about its design choices.
+- **Reactive emoji on scoring (vomiting → heart-eyes) — rejected for Hoard.** Pure surface-aesthetic concern but worth pinning so future-me doesn't reopen. Hoard's terminal aesthetic is craft-instrument identity (N6); reactive emojis would feel like furniture wearing a clown wig.
+- **Community-aggregate stats (X wishlisted / Y played / Z reviewed) — out of scope for Hoard.** Hoard is personal-tool, not social. The signal Stash surfaces here isn't part of Hoard's value claim.
+
 ---
 
 ## 3. Patterns
