@@ -277,9 +277,23 @@ export function LibraryDesktop() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [shelvesData, applyFilters, JSON.stringify(shelfCounts)]);
 
+  // Modal element extracted to a stable position. Prepended to every
+  // return fragment so React reconciles it at index 0 across all branches
+  // (error / loading / single-shelf / shelves). Without this, the brief
+  // `loading` flicker that follows refetch (cache.invalidate clears the
+  // shelves cache entry → useQuery flips loading=true → component hits
+  // the skeleton early-return) unmounts the modal and remounts it on the
+  // next render, resetting all state (P5 success → P1 empty + focused
+  // search input). Andrea reported this 2026-05-22; the structural fix
+  // is to keep the modal outside the data-loading-conditional branches.
+  const modalElement = showAddModal && (
+    <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
+  );
+
   if (error) {
     return (
       <>
+        {modalElement}
         <TopBar crumbs={['hoard', 'library']} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '32px' }}>
           <span className="t-mono t-red" style={{ fontSize: "var(--text-xs)" }}>{`// failed to load library`}</span>
@@ -297,6 +311,7 @@ export function LibraryDesktop() {
       const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
       return (
         <>
+          {modalElement}
           <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam ?? '').toLowerCase()]} />
           <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div className="skel" style={{ width: 88, height: 24 }} />
@@ -326,6 +341,7 @@ export function LibraryDesktop() {
     }
     return (
       <>
+        {modalElement}
         <TopBar crumbs={['hoard', 'library']} />
         <div style={{ padding: '20px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div className="skel" style={{ width: 320, height: 28 }} />
@@ -363,6 +379,7 @@ export function LibraryDesktop() {
     const accent = cfg?.tone === 'green' ? 'var(--green)' : cfg?.tone === 'amber' ? 'var(--amber)' : cfg?.tone === 'red' ? 'var(--red)' : 'var(--paper)';
     return (
       <>
+        {modalElement}
         <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam).toLowerCase()]} />
         <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Btn sm onClick={() => navigate('/library')}>
@@ -392,9 +409,6 @@ export function LibraryDesktop() {
             <Icon name="plus" size={10} /> add game
           </Btn>
         </div>
-        {showAddModal && (
-          <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
-        )}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px' }}>
           {items.length === 0 ? (
             <span className="t-mono t-faint" style={{ fontSize: "var(--text-xs)" }}>// no titles in this shelf yet</span>
@@ -410,6 +424,7 @@ export function LibraryDesktop() {
 
   return (
     <>
+      {modalElement}
       <TopBar crumbs={['hoard', 'library']} />
 
       {/* Filter bar — shelves view only.
@@ -458,12 +473,6 @@ export function LibraryDesktop() {
             <Icon name="plus" size={10} /> add game
           </Btn>
         </div>
-        {showAddModal && (
-          <AddGameModal
-            onClose={() => setShowAddModal(false)}
-            onAdded={() => { void refetch(); }}
-          />
-        )}
 
       {/* search results OR shelves OR empty-state CTA */}
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '0 32px 40px' }}>

@@ -195,9 +195,18 @@ export function LibraryMobile() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [shelvesData, applyFilters, JSON.stringify(shelfCounts)]);
 
+  // Modal element rendered at a stable position across all return branches.
+  // See LibraryDesktop's matching comment for the rationale — refetch's
+  // brief loading flicker would otherwise unmount the modal and remount it
+  // on the next render, losing P5 success state.
+  const modalElement = showAddModal && (
+    <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
+  );
+
   if (error) {
     return (
       <>
+        {modalElement}
         <MobileHeader title="shelves" sub="// load failed" />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '24px' }}>
           <span className="t-mono t-red" style={{ fontSize: "var(--text-2xs)" }}>{`// failed to load library`}</span>
@@ -216,6 +225,7 @@ export function LibraryMobile() {
       const title = (cfg?.name ?? statusParam ?? '').toLowerCase();
       return (
         <>
+          {modalElement}
           <MobileHeader title={title} sub="// loading…" back onBack={() => navigate('/library')} />
           <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 16px 20px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -229,6 +239,7 @@ export function LibraryMobile() {
     }
     return (
       <>
+        {modalElement}
         <MobileHeader title="shelves" sub="// loading…" />
         <div style={{ padding: '10px 16px 0', display: 'flex', gap: 6, overflowX: 'auto' }}>
           <div className="skel" style={{ width: 32, height: 22 }} />
@@ -267,6 +278,7 @@ export function LibraryMobile() {
     const title = (cfg?.name ?? statusParam).toLowerCase();
     return (
       <>
+        {modalElement}
         <MobileHeader
           title={title}
           sub={`// ${items.length} titles`}
@@ -274,9 +286,6 @@ export function LibraryMobile() {
           onBack={() => navigate('/library')}
           right={<Btn sm variant="primary" ariaLabel="Add game" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
         />
-        {showAddModal && (
-          <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { void refetch(); }} />
-        )}
         {/* Filter strip — same chips as the unfiltered view, mirrors desktop's filter bar */}
         <div className="thin-scroll" style={{ padding: '10px 16px 0', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
           <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
@@ -326,17 +335,12 @@ export function LibraryMobile() {
 
   return (
     <>
+      {modalElement}
       <MobileHeader
         title="shelves"
         sub={`// ${totalGames} titles`}
         right={<Btn sm variant="primary" ariaLabel="Add game" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
       />
-      {showAddModal && (
-        <AddGameModal
-          onClose={() => setShowAddModal(false)}
-          onAdded={() => { void refetch(); }}
-        />
-      )}
       {/* Library-only search (A1c). Sort + plat-filter chips removed from
           the shelves view in PR A (D4) — both remain on the filtered
           single-shelf page where the full set is loaded. */}

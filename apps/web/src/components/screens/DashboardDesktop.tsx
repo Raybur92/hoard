@@ -71,9 +71,21 @@ export function DashboardDesktop() {
     [data],
   );
 
+  // Modal element rendered at a stable position across all return branches.
+  // Without this, the loading flicker from refetch() unmounts the modal mid-P5.
+  // See LibraryDesktop's matching comment.
+  // onAdded was previously `() => { refetch(); setShowAddModal(false); }` — the
+  // forced setShowAddModal(false) closed the modal before its P5 success
+  // summary could render. F1-PR1 lets the modal handle its own close via
+  // the auto-close timer + [done] CTA.
+  const modalElement = showAddModal && (
+    <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { refetch(); }} />
+  );
+
   if (loading || error || !data) {
     return (
       <>
+        {modalElement}
         <TopBar crumbs={['hoard', 'dashboard']} />
         {error
           ? <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14 }}>
@@ -111,6 +123,7 @@ export function DashboardDesktop() {
   if (stats.totalGames === 0) {
     return (
       <>
+        {modalElement}
         <TopBar crumbs={['hoard', 'dashboard']} />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px' }}>
           <div className="panel" style={{ padding: 40, maxWidth: 520, width: '100%', textAlign: 'center' }}>
@@ -129,9 +142,6 @@ export function DashboardDesktop() {
             </div>
           </div>
         </div>
-        {showAddModal && (
-          <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { refetch(); setShowAddModal(false); }} />
-        )}
       </>
     );
   }
@@ -160,6 +170,7 @@ export function DashboardDesktop() {
 
   return (
     <>
+      {modalElement}
       <TopBar
         crumbs={['hoard', 'dashboard']}
         syncedAt={platforms[0]?.lastSyncAt ? `synced ${formatRelative(platforms[0].lastSyncAt)}` : null}
