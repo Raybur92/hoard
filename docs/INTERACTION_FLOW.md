@@ -428,7 +428,7 @@ P5 — Origin (post-success — Pattern (b) per 2026-05-22 lock)
   - [add another]                                → P1 empty (preserves entry intent + platform pick
                                                    per OQ-F1-4 resolution below)
   - [done] / [×]                                 → close modal; user is back at origin
-  - 3s auto-close timeout (no user action)       → close modal; user is back at origin
+  - 10s auto-close timeout (no user action)       → close modal; user is back at origin
   - Esc / click outside                          → close modal
 
   context preserved across [add another]:
@@ -468,7 +468,7 @@ Narrating the user's experience through happy paths, then walking every edge. Ea
 | 11 | Tap `[+ add to library]` | P2 transitions to **saving** state — button shows `[saving…]`, form fields disabled |
 | 12 | Server upsert | `Game` upserted (IGDB cache hit or fresh fetch); `UserGame` created with status=Backlog, playtimeByPlatform={GB: undefined}, condition=LOOSE, region=PAL, mediaType=PHYSICAL_CART. Cache invalidated for `games:`, `shelves:`, `gameCounts`, `dashboard` |
 | 13 | Server returns 201 | **Transition to P5 post-success** (pattern b) |
-| 14 | **P5 — post-success summary** | Inline: `// added · Pokémon Red Version · Game Boy · Backlog`. Three CTAs: `[view game]` `[+ add another]` `[done]`. 3s auto-close timer starts |
+| 14 | **P5 — post-success summary** | Inline: `// added · Pokémon Red Version · Game Boy · Backlog`. Three CTAs: `[view game]` `[+ add another]` `[done]`. 10s auto-close timer starts |
 | 15 | Tap `[done]` (or wait for timeout, or click outside) | Modal closes; user is back at `/library` |
 | 16 | Library shelves refresh | SWR revalidates from cache invalidation; Backlog shelf now shows Pokémon Red with cover. Sidebar shelf-count badges update |
 
@@ -527,7 +527,7 @@ User searches for an obscure regional indie. P1 enters no-results sub-state with
 
 | Edge | Behavior |
 |---|---|
-| 3s auto-close, no user action | Modal closes silently. Cache already invalidated server-side at save; library shelves already reflect the new entry. |
+| 10s auto-close, no user action | Modal closes silently. Cache already invalidated server-side at save; library shelves already reflect the new entry. |
 | `[+ add another]` | → P1 empty. Preserves: intent + platform pin (with visible `[unpin]`). Drops: selectedGame, freeform, status, mediaType, [+ more details] values. |
 | `[+ rate / note]` | navigates to `/game/{userGameId}?focus=notes` — modal closes. Uses existing post-8 PR A focus-on-notes pattern. |
 | `[view game]` | navigates to `/game/{userGameId}` — modal closes. |
@@ -839,7 +839,7 @@ Outbound edges F1 anticipates:
 ─────────────────────────────────────────────────────────────────────
 P5 — Origin (post-success per Pattern (b))
 [ content: inline summary "// added {title} · {platform} · {status}"
-           · three CTAs · 3s auto-close timer ]
+           · three CTAs · 10s auto-close timer ]
 
 Affordances:
 - [view game]                                  → /game/{userGameId}; modal closes
@@ -853,7 +853,7 @@ Affordances:
                                                  drops: selectedGame, freeform, status,
                                                  mediaType, [+ more details] values
 - [done] / [×]                                 → close modal; user back at origin
-- 3s auto-close (no interaction)               → close modal; user back at origin
+- 10s auto-close (no interaction)               → close modal; user back at origin
 - Esc / click outside                          → close modal
 
 Copy variants by state-conflict outcome:

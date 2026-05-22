@@ -54,7 +54,11 @@ interface SuccessPayload {
   intent: 'own' | 'wishlist';
 }
 
-const AUTO_CLOSE_MS = 3000;
+// 10s gives the user time to read the summary + decide between [view game],
+// [+ rate / note], [+ add another], or [done] without feeling rushed.
+// Bumped from 3s to 10s 2026-05-22 after Andrea's smoke test confirmed
+// the modal stayed open correctly but the 3s window was too fast to read.
+const AUTO_CLOSE_MS = 10000;
 
 export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalProps) {
   // Search

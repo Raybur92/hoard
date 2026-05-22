@@ -373,7 +373,7 @@ The modal stays open with summary + CTAs + auto-close timer. Visual treatment re
 
 ────────────────────────────────────────────────────────────
                                                     [ done ]
-████████████████░░░░░░░░░░░░░░░░  (~3s auto-close bar)
+████████████████░░░░░░░░░░░░░░░░  (~10s auto-close bar)
 ```
 
 ### 6.2 Content treatment
@@ -381,7 +381,7 @@ The modal stays open with summary + CTAs + auto-close timer. Visual treatment re
 - Summary line: `// added · {title} · {platform} · {status}` in `t-mono` at `--text-sm`, the word "added" colored `--green` to give a soft positive accent without using a graphical checkmark (which would feel consumer-app-y)
 - Three text-link CTAs separated by `·` middots: `view game` · `+ rate / note` · `+ add another`. Each is a `<button>` styled as a text link (`--paper-dim` color, underline on hover/focus, no border). Lower-affordance than the `[done]` button but clearly clickable.
 - `[done]` button in the footer-right position (same place as the prior `[+ add to library]` button) — primary visual weight stays there even though the action shifted from "save" to "close"
-- Auto-close progress bar: 2px-thick `--green` fill at the very bottom of the modal, draining left-to-right over 3 seconds. Respects `prefers-reduced-motion` — when reduced, bar appears at full and snaps to empty at the 3s mark with no animation.
+- Auto-close progress bar: 2px-thick `--green` fill at the very bottom of the modal, draining left-to-right over **10 seconds** (bumped from 3s 2026-05-22 after Andrea's smoke test — 3s felt too fast to read the summary + decide between the CTAs). Respects `prefers-reduced-motion` — when reduced, bar appears at full and snaps to empty at the 10s mark with no animation.
 
 ### 6.3 Copy variants by save outcome
 
