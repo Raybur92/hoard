@@ -54,11 +54,14 @@ interface SuccessPayload {
   intent: 'own' | 'wishlist';
 }
 
-// 10s gives the user time to read the summary + decide between [view game],
-// [+ rate / note], [+ add another], or [done] without feeling rushed.
-// Bumped from 3s to 10s 2026-05-22 after Andrea's smoke test confirmed
-// the modal stayed open correctly but the 3s window was too fast to read.
-const AUTO_CLOSE_MS = 10000;
+// 15s gives the user time to read the summary + decide between
+// [+ add another] (bulk-add affordance — the S7 use case) or [done].
+// Bumped 3s → 10s → 15s across smoke tests 2026-05-22; 15s landed
+// because the user wanted breathing room to also internalize what
+// platform got pinned for the next add. The auto-close progress bar
+// still drains visually; users who don't want to wait can hit [done]
+// or click outside / Esc to close immediately.
+const AUTO_CLOSE_MS = 15000;
 
 export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalProps) {
   // Search
@@ -441,22 +444,18 @@ function SuccessBody({ payload, progressWidth, onDone, onAddAnother }: {
             <>{' · '}<span className="t-faint">{payload.status}</span></>
           )}
         </div>
-
-        <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* [view game] / [+ rate / note] deep-links — both go to /game/:userGameId. */}
-          {/* PR1 ships without the userGameId since addManualGame doesn't return it; */}
-          {/* PR6 wires these. For now we render them as visually present but */}
-          {/* non-functional placeholders styled to match the final treatment. */}
-          <CtaLink disabled>view game</CtaLink>
-          <Sep />
-          <CtaLink disabled>+ rate / note</CtaLink>
-          <Sep />
-          <CtaLink onClick={onAddAnother}>+ add another</CtaLink>
-        </div>
+        {/*
+          [view game] + [+ rate / note] deep-links live here in F1-PR6 — both
+          need the userGameId from addManualGame's response (which the route
+          doesn't currently return). Rendering them as disabled placeholders
+          in F1-PR1 read as broken UI per Andrea's smoke test 2026-05-22, so
+          they're omitted until they can actually do something.
+        */}
       </div>
 
-      <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--rule)' }}>
-        <Btn sm onClick={onDone}>done</Btn>
+      <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--rule)' }}>
+        <Btn sm onClick={onAddAnother}>+ add another</Btn>
+        <Btn sm variant="primary" onClick={onDone}>done</Btn>
       </div>
 
       {/* Auto-close progress bar — 2px green at the very bottom */}
@@ -468,30 +467,4 @@ function SuccessBody({ payload, progressWidth, onDone, onAddAnother }: {
       }} />
     </>
   );
-}
-
-function CtaLink({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="t-mono"
-      style={{
-        background: 'transparent',
-        border: 'none',
-        cursor: disabled ? 'default' : 'pointer',
-        color: disabled ? 'var(--paper-faint)' : 'var(--paper-dim)',
-        fontSize: 'var(--text-xs)',
-        padding: '4px 6px',
-        textDecoration: 'none',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Sep() {
-  return <span className="t-faint" style={{ fontSize: 'var(--text-2xs)' }}>·</span>;
 }
