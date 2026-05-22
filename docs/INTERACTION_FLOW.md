@@ -72,7 +72,7 @@ The user is in some related task:
 A new `UserGame` row exists with:
 - Correct `Game` reference resolved via IGDB (or, in the freeform-fallback path per §1.5, a Game row created from user-supplied data)
 - Appropriate `Platform` / `RetroPlatform` binding covering the full strategy-required platform set, not just the existing 4-option list
-- Appropriate `mediaType` (`DIGITAL | PHYSICAL_DISC | PHYSICAL_CART | ROM` per the conceptual model's expected enum; not yet implemented at the schema layer — see [§1.6 risks](#risks))
+- Appropriate `mediaType` (`DIGITAL | PHYSICAL` per the simplified-2026-05-22 enum; not yet implemented at the schema layer — see [§1.6 risks](#risks))
 - `status` set by entry-vector default (Wishlist when entered via wishlist affordances; otherwise user-picked with sensible default based on context)
 - For physical / retro entries: optional `condition` and `region` (collection metadata per CM2; deferred at UserGame schema layer)
 - For multi-platform-owned games: graceful UX (per N8) — see [§1.5 scope edges](#scope-edges)
@@ -105,7 +105,7 @@ Modal opens
 | # | Gap | Anchored in | Severity |
 |---|---|---|---|
 | G1 | Platform picker is 4 options; needs ~30+ retro + the 4 synced platforms (ST/PS/XB/GG) when adding physical copies + niche storefronts (Itch.io, Humble, Subscription services) | S7, S11, N11 | **Blocking S7** |
-| G2 | No `mediaType` flag (digital / physical-disc / physical-cart / ROM) — required to drive detail-page state derivation (§3.4.1 in CONCEPTUAL_MODEL) | S7, CM4 | **Blocking S9** (detail-page variants) |
+| G2 | No `mediaType` flag (DIGITAL / PHYSICAL — simplified 2026-05-22 from a 4-value enum) — required to drive detail-page state derivation (§3.4.1 in CONCEPTUAL_MODEL) | S7, CM4 | **Blocking S9** (detail-page variants) |
 | G3 | No `condition` / `region` capture (collector metadata for physical/retro entries) | S11, CM2 | Deferred OK (optional fields per CM2) |
 | G4 | Status default is hard-coded `Backlog`; no entry-vector tuning (Wishlist-when-entered-via-wishlist) | S8, N10, B9a-c | **Blocking B9a-c** |
 | G5 | No multi-platform-ownership handling — `@@unique([userId, gameId])` throws 409 on duplicate; user gets a raw error instead of silent merge | N8 | Real UX defect — fix is server-side upsert per R4 resolution (silent merge into `playtimeByPlatform`); no UI design needed |
@@ -119,7 +119,7 @@ Modal opens
 - All text-search → add → confirm paths from any entry vector listed in §1.2 (incl. wishlist-deep-link and search-overlay-recovery)
 - All gap fixes G1–G5 + G7–G8 above
 - Empty / loading / error / success post-action states
-- Conditional UI: condition + region appear only when `mediaType ∈ {PHYSICAL_DISC, PHYSICAL_CART, ROM}` (G3)
+- Conditional UI: condition + region appear only when `mediaType === 'PHYSICAL'` (G3)
 - Duplicate detection UX (G5)
 - IGDB-not-found freeform fallback (G7)
 
@@ -164,7 +164,7 @@ The user's mental model throughout: *"I'm searching for the game I want to add."
 A game has been selected. The user is filling in the per-ownership metadata before saving.
 
 Always-visible affordances: platform, mediaType, status.
-Conditional affordances: condition + region (only when `mediaType ∈ {PHYSICAL_DISC, PHYSICAL_CART, ROM}` — folds in G3 once schema lands).
+Conditional affordances: condition + region (only when `mediaType === 'PHYSICAL'` — folds in G3 once schema lands).
 
 Inbound from: P1 (picked a result), P3 (freeform-confirmed), P4 (barcode resolved — future), GameDetail [+ wishlist] (for games not yet in user's library — future entry vector).
 
@@ -281,8 +281,8 @@ P2 — Confirm details
   - mediaType picker                            required; depends on R1 (schema gap)
 
   conditional affordances:
-  - condition picker                            visible when mediaType ∈ {PHYSICAL_DISC, PHYSICAL_CART, ROM}; depends on R3
-  - region picker                                visible when mediaType ∈ {PHYSICAL_DISC, PHYSICAL_CART, ROM}; depends on R3
+  - condition picker                            visible when mediaType === 'PHYSICAL'; depends on R3
+  - region picker                                visible when mediaType === 'PHYSICAL'; depends on R3
 
   optional details (collapsible — Stash "add+" pattern, per Q1 lock 2026-05-22):
   - [+ more details ▼]                          collapsed by default; expands to reveal:
@@ -354,23 +354,24 @@ Picker structure — *two-stage, IGDB-aware* (locked per OQ-F1-1 + OQ-F1-9 resol
 
 ##### §3.2 — Save outcomes + status-conflict matrix
 
-Backend behavior on save — updated per **CM12** ([CONCEPTUAL_MODEL §3.4.2](CONCEPTUAL_MODEL.md)) 2026-05-22: per-game `status` + per-platform `playtimeByPlatform` (owned) + per-platform `wishlistedPlatforms` (wished) coexist on one UserGame row.
+Backend behavior on save — updated per **CM12 + CM13** ([CONCEPTUAL_MODEL §3.4.2 + CM13](CONCEPTUAL_MODEL.md)) 2026-05-22: per-game `status` is the primary signal; `wishlistedPlatforms` is an opt-in collector affordance accessed via GameDetail (NOT auto-populated on wishlist add); sync auto-promotes Wishlist → library on ownership detection.
 
-| Existing state | New add intent + platform | Server behavior | UX message |
+| Existing state | New input | Server behavior | UX message |
 |---|---|---|---|
-| No existing UserGame | own + P | Create UserGame; set status; add P to playtimeByPlatform | `// added · {P} · {status}` |
-| No existing UserGame | wishlist + P | Create UserGame with status=Wishlist; add P to wishlistedPlatforms | `// wishlisted · {P}` |
-| Existing, P already in playtimeByPlatform | own + P | No-op (game already owned on P) | `// already owned on {P}` (soft) |
-| Existing, P not yet in playtimeByPlatform | own + P | Add P to playtimeByPlatform | `// added {P} to your platforms` |
-| Existing, P already in playtimeByPlatform | **wishlist + P** | **Refuse** — same platform, mutually exclusive states. P stays in playtimeByPlatform. | `// you already own this on {P} — wishlisting the same platform doesn't apply` |
-| **Existing, owned on PS5, P not yet anywhere (GTA case)** | **wishlist + PC** | **Add PC to wishlistedPlatforms; status stays as-is.** Honors CM12 — per-game status + per-platform wishlist. | `// wishlisted on PC (you own it on PS5)` |
-| Existing, P already in wishlistedPlatforms | own + P | **Status logic:** if global status=Wishlist AND wishlistedPlatforms is about to be empty after removing P, flip status to user's chosen status. Always: remove P from wishlistedPlatforms, add P to playtimeByPlatform. | `// you got it! moved {P} from wishlist to owned` (warm copy — Hoard recognizes a fulfilled wishlist) |
-| Existing, P already in wishlistedPlatforms | wishlist + P | No-op | `// already wishlisted on {P}` (soft) |
-| Existing, ANY state | wishlist + Q (Q not in either collection) | Add Q to wishlistedPlatforms; status untouched | `// wishlisted on {Q}` (if global status=Wishlist) OR `// wishlisted on {Q} (you own it on {owned-platforms})` (if global status ≠ Wishlist) |
+| No existing UserGame | manual-add: own + P | Create UserGame; set status; add P to playtimeByPlatform | `// added · {P} · {status}` |
+| No existing UserGame | manual-add: wishlist | Create UserGame with status=Wishlist; **wishlistedPlatforms stays empty** | `// wishlisted` |
+| No existing UserGame | Releases-page toggle (wishlist) | Atomic UserGame(status=Wishlist) + WishlistRelease; **wishlistedPlatforms stays empty** per CM13 | `// wishlisted` |
+| Existing, P already in playtimeByPlatform | manual-add: own + P | No-op (game already owned on P) | `// already owned on {P}` (soft) |
+| Existing, P not yet in playtimeByPlatform | manual-add: own + P | Add P to playtimeByPlatform | `// added {P} to your platforms` |
+| **Existing, status=Wishlist** | **manual-add: own + P (any P)** | **Auto-promote per CM13:** add P to playtimeByPlatform; flip status: incoming playtime > 0 → OnHold, else → Backlog. `wishlistedPlatforms` untouched. Companion `WishlistRelease` untouched per CM13 ("two separate logics"). | `// you got it! moved from wishlist to {status} on {P}` (warm copy — Hoard recognizes a fulfilled wishlist) |
+| **Existing, status=Wishlist** | **sync: incoming row with playtime on P** | **Auto-promote per CM13:** same logic as manual-add path; shared helper. | (silent — sync flow has no per-save toast; reflected in the next dashboard / library refresh) |
+| Existing, status ≠ Wishlist | manual-add: wishlist (no platform) | No-op on status (user manually adjusted out of wishlist; respect the decision) | `// already in your library — status is {existing}` (soft) |
+| GameDetail per-row affordance | "I want PC version too" tap on a game owned on PS5 | Add 'PC' to wishlistedPlatforms; status untouched | `// wishlisted on PC (you own it on PS5)` |
+| GameDetail per-row affordance | `[× un-wishlist {P}]` on a wishlisted platform | Remove P from wishlistedPlatforms; if global status=Wishlist AND wishlistedPlatforms becomes empty AND no playtime data exists, the row remains status=Wishlist (the user is removing the per-platform refinement, not the wishlist itself) | (silent — row updates inline) |
 
-**OQ-F1-2 RESOLVED via CM12** — replaces the earlier "refuse with info" lock. The GTA case (own on PS5, wishlist on PC) is now a clean success path. The honest refuse case narrows to "wishlist the same platform you already own" — a tautological intent that genuinely doesn't make sense.
+**Key shift per CM13:** the previous "GTA case clean-success path on manual-add of wishlist + platform" goes away. Manual-add to wishlist no longer takes a platform; per-platform binding only happens via the explicit GameDetail affordance. The auto-promotion handles the Wishlist → library transition naturally when the user actually buys/syncs the game.
 
-Wishlist-shelf visibility on save: a game appears on the Wishlist shelf if `status='Wishlist'` OR `wishlistedPlatforms.length > 0`. Per CM12, the GTA case (owned + per-platform wishlist) appears on BOTH the global-status shelf AND the Wishlist shelf.
+Wishlist-shelf visibility on save: a game appears on the Wishlist shelf if `status='Wishlist'` OR `wishlistedPlatforms.length > 0`. The second case (own + per-platform-wishlist) is rare by default (no auto-population); only set by the explicit GameDetail tap.
 
 #### P3 — Freeform entry
 
@@ -466,7 +467,7 @@ Narrating the user's experience through happy paths, then walking every edge. Ea
 | 9 | Pick mediaType | `Physical cart` (when R1 ships) |
 | 10 | Conditional pickers appear | `condition` (LOOSE / CIB / SEALED / etc.) + `region` (NTSC-U / NTSC-J / PAL / OTHER) become visible because mediaType ∈ physical set. User picks LOOSE + PAL |
 | 11 | Tap `[+ add to library]` | P2 transitions to **saving** state — button shows `[saving…]`, form fields disabled |
-| 12 | Server upsert | `Game` upserted (IGDB cache hit or fresh fetch); `UserGame` created with status=Backlog, playtimeByPlatform={GB: undefined}, condition=LOOSE, region=PAL, mediaType=PHYSICAL_CART. Cache invalidated for `games:`, `shelves:`, `gameCounts`, `dashboard` |
+| 12 | Server upsert | `Game` upserted (IGDB cache hit or fresh fetch); `UserGame` created with status=Backlog, playtimeByPlatform={GB: undefined}, condition=LOOSE, region=PAL, mediaType=PHYSICAL. Cache invalidated for `games:`, `shelves:`, `gameCounts`, `dashboard` |
 | 13 | Server returns 201 | **Transition to P5 post-success** (pattern b) |
 | 14 | **P5 — post-success summary** | Inline: `// added · Pokémon Red Version · Game Boy · Backlog`. Three CTAs: `[view game]` `[+ add another]` `[done]`. 15s auto-close timer starts |
 | 15 | Tap `[done]` (or wait for timeout, or click outside) | Modal closes; user is back at `/library` |
@@ -579,7 +580,7 @@ Where would a real user give up before saving?
 |---|---|---|---|
 | Platform picker overwhelm (~40 options) | Medium | Six manufacturer buckets (PC / PlayStation / Xbox / Nintendo / Sega / Other); recently-used pinned within Stage 2; type-to-filter | ✓ Sufficient |
 | User's platform missing from the list | Medium | Niche/storefronts bucket includes Itch.io / Humble / etc.; freeform fallback (P3) catches catalog-side gaps but not platform-side gaps | **New OQ-F1-8** — what happens if user wants to add a game on a platform Hoard hasn't enumerated? Two options: (a) "Other" generic option in each bucket with free-text label, (b) GitHub-issue-style "request platform" link. Defer to Phase 6 challenge; lean toward (a) "Other / freeform platform" for v1 |
-| mediaType ambiguity ("Pokemon Red on Game Boy — ROM or PHYSICAL_CART?") | Low-medium | Micro-copy on each option: `digital · downloaded purchase`, `physical disc · BluRay / DVD / cart with case`, `physical cart · standalone cart`, `ROM · digital file emulated` | Folds into F1-PR2 implementation polish |
+| mediaType ambiguity | ~~Low-medium~~ **RESOLVED 2026-05-22** by simplifying mediaType to `DIGITAL | PHYSICAL`. The disc-vs-cart-vs-ROM distinction was over-modeling; platform already tells you. | n/a |
 | No-results → P3 freeform fallback discoverability | Medium | `[+ add freeform "{query}"]` affordance prominent in no-results sub-state | ✓ Sufficient if the affordance is visually weighty (not buried in small grey text) |
 | IGDB slowness / timeout | Medium | Searching indicator visible; timeout falls into no-results-with-reason ("// IGDB unreachable") + retry | ✓ Sufficient |
 | Saving spinner with no progress signal | Low | Standard saving state; backend is fast (<500ms typical) | ✓ Sufficient |
@@ -617,7 +618,7 @@ Cross-checking flow language against the conceptual model's ubiquitous language 
 | "wishlisted" row marker | wishlistedPlatforms entry per CM12 | ✓ matches |
 | Status options "Backlog / Playing / Completed / OnHold / Dropped / Wishlist" | GameStatus enum (§6.3) | ✓ all six match |
 | "platform" picker label | Platform (sync-capable) + RetroPlatform (reference) per CM1 — distinction hidden from user, surfaced via the two-stage bucket structure | ✓ honest abstraction — user picks a code; backend binds to the right entity |
-| "mediaType" | mediaType enum (DIGITAL / PHYSICAL_DISC / PHYSICAL_CART / ROM) per CM2 | ✓ matches |
+| "mediaType" | mediaType enum (DIGITAL / PHYSICAL — simplified 2026-05-22) per CM2 + post-CM12-clarification | ✓ matches |
 | "condition" / "region" | Condition / Region enums (§6.3) | ✓ matches |
 | `// added · {platform} · {status}` toast copy | UserGame state shorthand | ✓ honest |
 | `[+ more details]` panel | (no direct model term — UI affordance only) | ✓ no conflict |
@@ -768,10 +769,11 @@ Always-visible secondary affordances:
 - platform picker (two-stage, IGDB-aware)     required; pre-opens IGDB-suggested bucket;
                                               stage-2 pin order: IGDB-suggested, recently-used,
                                               full list; "Other / freeform platform" at bottom
-- mediaType picker (4 options + micro-copy)   required when R1 ships (digital, physical disc,
-                                              physical cart, ROM)
+- mediaType picker (2 options)                required when R1 ships: DIGITAL / PHYSICAL.
+                                              Simplified 2026-05-22 from 4 options — disc/cart/ROM
+                                              distinction is over-modeling (platform tells you).
 
-Conditional affordances (visible when mediaType ∈ {PHYSICAL_DISC, PHYSICAL_CART, ROM}):
+Conditional affordances (visible when mediaType === 'PHYSICAL'):
 - condition picker (5 options)                LOOSE / CIB / SEALED / REPLICA / GRADED
 - region picker (4 options)                   NTSC_U / NTSC_J / PAL / OTHER
 

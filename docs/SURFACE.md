@@ -468,7 +468,7 @@ Per OQ-S-1 below: the panel is always collapsed when the modal opens fresh. Powe
 
 ## 9. Conditional pickers (condition / region)
 
-When mediaType ∈ {PHYSICAL_DISC, PHYSICAL_CART, ROM}, two additional pickers appear below mediaType in P2.
+When `mediaType === 'PHYSICAL'`, two additional pickers appear below mediaType in P2. (Simplified 2026-05-22: was a 3-value set ∈ {PHYSICAL_DISC, PHYSICAL_CART, ROM}; now just one PHYSICAL value.)
 
 ### 9.1 ASCII mock (condition + region, visible)
 
@@ -690,13 +690,13 @@ Filed as **OQ-S-12** below.
 
 Cleanest implementation: separate Prisma query `prisma.userGame.count({ where: { userId, OR: [{ status: 'Wishlist' }, { wishlistedPlatforms: { isEmpty: false } }] } })` and substitute its result for `shelfCounts['Wishlist']`.
 
-#### S-A5: Releases-page wishlist toggle — populate `wishlistedPlatforms`
+#### S-A5: Releases-page wishlist toggle — `wishlistedPlatforms` stays empty
 
-[`apps/api/src/routes/upcoming.ts`](../apps/api/src/routes/upcoming.ts) — the existing `POST /api/upcoming/:igdbId/wishlist` endpoint. Per CLAUDE.md decision #29 it atomically creates `UserGame(status='Wishlist')` + `WishlistRelease`. With CM12, it also needs to populate `wishlistedPlatforms`.
+[`apps/api/src/routes/upcoming.ts`](../apps/api/src/routes/upcoming.ts) — the existing `POST /api/upcoming/:igdbId/wishlist` endpoint atomically creates `UserGame(status='Wishlist')` + `WishlistRelease` per CLAUDE.md decision #29. With CM12 the `wishlistedPlatforms` column also exists.
 
-Per the cross-flow consequence in INTERACTION_FLOW.md §6.4 (recommendation): populate `wishlistedPlatforms` with ALL of the game's IGDB-reported platforms when the user stars from the Releases page (most users wishlisting from Releases want it on whatever platform they can get; per-row prune via GameDetail's PLATFORMS section).
+**Per CM13 (Andrea 2026-05-22):** `wishlistedPlatforms` is **NOT populated** by the Releases-page toggle. Default wishlist intent is platform-agnostic — "I want this game." The user can later add explicit per-platform binding via GameDetail's per-row affordance (e.g., they own GTA on PS5, then later tap to mark "I want PC version too"). Auto-population would have lied about the user's intent at toggle-time.
 
-Andrea hasn't explicitly locked this — flagging as **OQ-S-13** for confirmation.
+OQ-S-13 (which had locked the all-IGDB-platforms population approach) is now reversed by CM13.
 
 #### S-A6: Releases page `[on wishlist]` / `[+ wishlist]` toggle — semantic clarity
 
@@ -758,7 +758,7 @@ For F1-PR2 implementation (lockstep with the GameDetail surface changes):
 - [ ] **Backend dashboard.ts:192 wishlistCount widening**: add a separate Prisma count query covering `status='Wishlist' OR wishlistedPlatforms.length > 0`; substitute its result for `shelfCounts['Wishlist']` — see S-A4
 - [ ] **Library Wishlist shelf filter widening**: backend query for the Library Wishlist shelf must widen to include partial-wishlist entries — see S-A3
 - [ ] **Partially-wishlisted shelf marker (OQ-S-12 locked)**: render Wishlist-shelf entries that are in via `wishlistedPlatforms.length > 0` (not via global status) with a small amber `★ on {platforms}` marker line under the title in `--text-2xs` mono — see S-A3
-- [ ] **Releases-page wishlist toggle backend update (OQ-S-13 locked)**: in `POST /api/upcoming/:igdbId/wishlist`, populate `wishlistedPlatforms` with all IGDB-reported platforms (`release.platforms.map(toPlatCode)`) after the existing atomic UserGame + WishlistRelease creation — see S-A5
+- [ ] **Sync auto-promotion of Wishlist → library (NEW per CM13)**: in `syncRunner.ts`'s UserGame upsert path AND in the `addManualGame` route, detect existing `status='Wishlist'` for the matched game and flip status: incoming playtime > 0 → OnHold, else Backlog. Implement as a shared `promoteWishlistOnOwnership(userGame, incomingPlaytime)` helper called by both. Companion `WishlistRelease` is NOT touched — two separate logics. ~~Releases-page wishlist toggle wishlistedPlatforms population~~ — **REVERSED per CM13**: wishlistedPlatforms stays empty by default; per-platform binding is explicit-opt-in only.
 - [ ] **Sidebar Wishlist count visual**: no code change needed if dashboard.ts:192 widening lands — count source is consistent
 
 Five surface-fix items + one backend widening + two open questions. None invalidates F1; all need to ship in the same release as F1-PR2 (the GameDetail surface PR).
@@ -768,7 +768,7 @@ Five surface-fix items + one backend widening + two open questions. None invalid
 | Code | Question | Lean |
 |---|---|---|
 | ~~**OQ-S-12**~~ | ~~Visual treatment for partially-wishlisted entries on the Library Wishlist shelf~~ — **RESOLVED 2026-05-22 → small marker like `★ on PC`.** N4 scope invariant — a user scanning shouldn't have to mentally reconcile why an owned game appears on the wishlist. Implementation: when a game appears on the Wishlist shelf via `wishlistedPlatforms.length > 0` (not via global `status='Wishlist'`), render a small amber `★ on {platforms}` marker line beneath the title in `--text-2xs` mono. For games where BOTH conditions are true (e.g. global Wishlist + extra per-platform wishes), no marker — the global state covers the framing. |
-| ~~**OQ-S-13**~~ | ~~Releases-page wishlist toggle backend update — what populates `wishlistedPlatforms`?~~ — **RESOLVED 2026-05-22 → all IGDB-reported platforms.** Most users wishlisting from Releases want the game on whatever platform they can get; per-row prune via GameDetail's PLATFORMS section covers collectors who want surgical control. (c) prompt-at-toggle was over-engineered for a one-tap action. (b) leave-empty would leave the new feature unused on its first encounter. Implementation: in `POST /api/upcoming/:igdbId/wishlist`, after the atomic UserGame + WishlistRelease creation, set `wishlistedPlatforms = release.platforms.map(toPlatCode)` using IGDB's platform list. |
+| ~~**OQ-S-13**~~ | ~~Releases-page wishlist toggle backend update~~ — **SUPERSEDED by CM13 2026-05-22.** Initial resolution was "populate wishlistedPlatforms with all IGDB-reported platforms." Andrea reversed after thinking through the wishlist semantic: by default a wishlist add is "I want this game," not platform-bound. Auto-populating would lie about the user's intent. `wishlistedPlatforms` stays empty on Releases-page toggle; per-platform binding is an explicit collector affordance reached via GameDetail. The auto-promotion of Wishlist → library on ownership detection (also CM13) makes the empty-default case the load-bearing one. |
 
 ### 13.9 What's working — don't lose
 
