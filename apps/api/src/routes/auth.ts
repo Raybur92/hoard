@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
@@ -450,12 +450,18 @@ router.get('/auth/steam/callback', async (req: Request, res: Response): Promise<
 // existing `skipInDev` pattern.
 const skipInDev = (): boolean => process.env['NODE_ENV'] !== 'production';
 
+// IP-based key generators must wrap `req.ip` with the library's
+// `ipKeyGenerator()` helper per express-rate-limit v8+ so IPv6 addresses
+// collapse to a /64 prefix subnet (otherwise IPv6 users could rotate
+// addresses within their allocation and bypass per-IP limits). The
+// fallback to 'unknown' covers the case where req.ip is undefined
+// (shouldn't happen with trust-proxy set, but defensive).
 const redeemInviteIpLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: Request) => req.ip ?? 'unknown',
+  keyGenerator: (req: Request) => req.ip ? ipKeyGenerator(req.ip) : 'unknown',
   skip: skipInDev,
   message: { error: 'Too many redemption attempts — try again in an hour.' },
 });
@@ -467,8 +473,9 @@ const redeemInviteUserLimiter = rateLimit({
   legacyHeaders: false,
   // Runs AFTER requireUser so req.userId is populated. Falls back to
   // req.ip only as paranoia for the misconfigured-middleware case;
-  // shouldn't fire under normal operation.
-  keyGenerator: (req: Request) => req.userId ?? req.ip ?? 'unknown',
+  // shouldn't fire under normal operation. The IP fallback goes through
+  // ipKeyGenerator() per the v8+ IPv6 hygiene rule.
+  keyGenerator: (req: Request) => req.userId ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
   skip: skipInDev,
   message: { error: 'Too many redemption attempts — try again in an hour.' },
 });

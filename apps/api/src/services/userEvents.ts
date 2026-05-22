@@ -60,7 +60,19 @@ export async function logEvent(
     });
   } catch (err) {
     // TL-D2: telemetry must never break the user-visible path.
-    // Log and swallow.
+    // Log and swallow — but downgrade the noisy "user doesn't exist"
+    // FK-violation case (P2003) to a one-line warn, since the cause
+    // is well-understood (stale JWT cookie referencing a deleted user)
+    // and the Prisma error object is verbose.
+    //
+    // requireUser fires session.opened on cookie verify SUCCESS, before
+    // the route hits any DB code that would notice the user is gone.
+    // The 404 the route eventually returns is the right response shape;
+    // the telemetry write just happens to fail first, and that's fine.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+      console.warn(`[userEvents] skipped ${event} for user ${userId}: user no longer exists`);
+      return;
+    }
     console.error('[userEvents] logEvent failed:', err);
   }
 }

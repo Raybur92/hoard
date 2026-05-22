@@ -16,7 +16,7 @@
 
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
@@ -26,12 +26,16 @@ const router = Router();
 
 const skipInDev = (): boolean => process.env['NODE_ENV'] !== 'production';
 
+// IP fallback uses ipKeyGenerator() per express-rate-limit v8+ to collapse
+// IPv6 addresses to a /64 prefix subnet (prevents trivial bypass via IPv6
+// address rotation within an allocation). Userid path is unchanged —
+// it's an opaque id, not an address.
 const feedbackHourlyLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: Request) => req.userId ?? req.ip ?? 'unknown',
+  keyGenerator: (req: Request) => req.userId ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
   skip: skipInDev,
   message: { error: 'RATE_LIMITED' },
 });
@@ -41,7 +45,7 @@ const feedbackDailyLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: Request) => req.userId ?? req.ip ?? 'unknown',
+  keyGenerator: (req: Request) => req.userId ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
   skip: skipInDev,
   message: { error: 'RATE_LIMITED' },
 });
