@@ -139,33 +139,67 @@ router.get('/games/shelves', requireUser, requireActive, async (req: Request, re
   const { perStatus } = parsed.data;
   const userId = req.userId;
 
-  const [perShelfRows, countGroups] = await Promise.all([
+  // F1-PR2 audit punch-list (SURFACE.md §13.7) per CM12 + CM13. The
+  // Wishlist shelf rows + count widen to include UserGames where
+  // wishlistedPlatforms is non-empty (per-platform wishlist binding
+  // without global status=Wishlist — the GTA case). Other shelves
+  // keep their narrow status= filter. Wishlist gets a dedicated query
+  // with the OR condition because Prisma can't easily mix OR into
+  // a groupBy.
+  const [perShelfRows, wishlistRows, wishlistCount, countGroups] = await Promise.all([
     Promise.all(
-      SHELF_STATUSES.map((status) =>
+      SHELF_STATUSES.filter((s) => s !== 'Wishlist').map((status) =>
         prisma.userGame.findMany({
           where: { userId, status },
-          orderBy: status === 'Wishlist' ? { addedAt: 'desc' } : { lastPlayedAt: 'desc' },
+          orderBy: { lastPlayedAt: 'desc' },
           take: perStatus,
           include: { game: { include: { hltbData: true } } },
         }),
       ),
     ),
+    prisma.userGame.findMany({
+      where: {
+        userId,
+        OR: [
+          { status: 'Wishlist' },
+          { wishlistedPlatforms: { isEmpty: false } },
+        ],
+      },
+      orderBy: { addedAt: 'desc' },
+      take: perStatus,
+      include: { game: { include: { hltbData: true } } },
+    }),
+    prisma.userGame.count({
+      where: {
+        userId,
+        OR: [
+          { status: 'Wishlist' },
+          { wishlistedPlatforms: { isEmpty: false } },
+        ],
+      },
+    }),
     prisma.userGame.groupBy({ by: ['status'], where: { userId }, _count: { status: true } }),
   ]);
 
   const shelves: ShelvesResponse['shelves'] = {
     Playing: [], Backlog: [], Completed: [], 'On Hold': [], Dropped: [], Wishlist: [],
   };
-  SHELF_STATUSES.forEach((status, i) => {
+  const nonWishlistStatuses = SHELF_STATUSES.filter((s) => s !== 'Wishlist');
+  nonWishlistStatuses.forEach((status, i) => {
     const key: GameStatus = status === 'OnHold' ? 'On Hold' : status as GameStatus;
     shelves[key] = (perShelfRows[i] ?? []).map(mapUserGame);
   });
+  shelves.Wishlist = wishlistRows.map(mapUserGame);
 
   const counts: Partial<Record<GameStatus, number>> = {};
   for (const g of countGroups) {
     const key: GameStatus = (g.status === 'OnHold' ? 'On Hold' : g.status) as GameStatus;
     counts[key] = g._count.status;
   }
+  // Override Wishlist count with the widened total (groupBy only sees
+  // status='Wishlist'; wishlistCount() picks up the wishlistedPlatforms-only
+  // case too).
+  counts.Wishlist = wishlistCount;
 
   const body: ShelvesResponse = { shelves, counts };
   res.json(body);

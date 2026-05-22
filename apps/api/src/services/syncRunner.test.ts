@@ -113,6 +113,62 @@ describe('runSync', () => {
     );
   });
 
+  // F1-PR2 / CM13: wishlist auto-promotion on ownership detection
+  it('CM13: auto-promotes status=Wishlist → OnHold when sync brings playtime > 0', async () => {
+    (prisma.userGame.findUnique as jest.Mock).mockResolvedValue({
+      status: 'Wishlist',
+      playtimeByPlatform: {}, // no prior playtime
+      lastPlayedAt: null,
+    });
+
+    await runSync('user-1', [{ ...syncedGame, playtimeMinutes: 120 }]);
+
+    // Update payload should flip status to OnHold (playtime > 0)
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          status: 'OnHold',
+          playtimeByPlatform: { ST: 120 },
+        }),
+      }),
+    );
+  });
+
+  it('CM13: auto-promotes status=Wishlist → Backlog when sync brings zero playtime', async () => {
+    (prisma.userGame.findUnique as jest.Mock).mockResolvedValue({
+      status: 'Wishlist',
+      playtimeByPlatform: {},
+      lastPlayedAt: null,
+    });
+
+    await runSync('user-1', [{ ...syncedGame, playtimeMinutes: 0 }]);
+
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          status: 'Backlog',
+          playtimeByPlatform: { ST: 0 },
+        }),
+      }),
+    );
+  });
+
+  it('CM13: leaves status untouched when existing is NOT Wishlist (user manual choices survive)', async () => {
+    (prisma.userGame.findUnique as jest.Mock).mockResolvedValue({
+      status: 'Completed', // user manually marked it
+      playtimeByPlatform: { ST: 800 },
+      lastPlayedAt: null,
+    });
+
+    await runSync('user-1', [{ ...syncedGame, playtimeMinutes: 900 }]);
+
+    // The update payload must NOT include a status field — auto-promotion
+    // only fires when existing status is Wishlist; any other state is
+    // the user's manual decision and survives.
+    const upsertCall = (prisma.userGame.upsert as jest.Mock).mock.calls[0]?.[0];
+    expect(upsertCall.update).not.toHaveProperty('status');
+  });
+
   it('skips a game when IGDB returns no results', async () => {
     (searchGames as jest.Mock).mockResolvedValue([]);
     const result = await runSync('user-1', [syncedGame]);

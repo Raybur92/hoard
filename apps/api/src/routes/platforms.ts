@@ -489,6 +489,17 @@ router.delete('/platforms/:code', requireUser, requireActive, async (req: Reques
 });
 
 // POST /api/games/manual — manually add a game
+//
+// F1-PR2 (2026-05-22) extends the schema with collector-metadata fields
+// from the new modal: mediaType, condition, region, wishlistedPlatforms.
+// All are optional — when omitted, the corresponding UserGame columns
+// stay at their schema defaults (null for mediaType/condition/region,
+// empty array for wishlistedPlatforms).
+//
+// The upsert still does the minimal status-overwrite-on-update path
+// inherited from before F1 (the full conflict matrix per CM12 + CM13
+// lands in F1-PR5). For F1-PR2 the new fields just flow through to the
+// row when present.
 router.post('/games/manual', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const schema = z.object({
     igdbId: z.number().int().positive(),
@@ -497,6 +508,11 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
     title: z.string().min(1).max(300),
     developer: z.string().optional(),
     coverUrl: z.string().url().optional(),
+    // F1-PR2 collector-metadata fields (all optional; null/undefined → field stays at schema default)
+    mediaType: z.enum(['DIGITAL', 'PHYSICAL']).optional(),
+    condition: z.enum(['LOOSE', 'CIB', 'SEALED', 'REPLICA', 'GRADED']).optional(),
+    region: z.enum(['NTSC_U', 'NTSC_J', 'PAL', 'OTHER']).optional(),
+    wishlistedPlatforms: z.array(z.string().min(1).max(50)).max(20).optional(),
   });
 
   const parsed = schema.safeParse(req.body);
@@ -505,7 +521,7 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
     return;
   }
 
-  const { igdbId, platformLabel, status, title, developer, coverUrl } = parsed.data;
+  const { igdbId, platformLabel, status, title, developer, coverUrl, mediaType, condition, region, wishlistedPlatforms } = parsed.data;
 
   const game = await prisma.game.upsert({
     where: { igdbId },
@@ -520,14 +536,25 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
 
   const prismaStatus = (status === 'On Hold' ? 'OnHold' : status) as PrismaGameStatus;
 
+  // Optional-field passthrough — only included in the upsert payload when
+  // the request actually provided them. Avoids accidentally overwriting an
+  // existing value with undefined.
+  const optionalFields = {
+    ...(mediaType !== undefined          ? { mediaType }          : {}),
+    ...(condition !== undefined          ? { condition }          : {}),
+    ...(region !== undefined             ? { region }             : {}),
+    ...(wishlistedPlatforms !== undefined ? { wishlistedPlatforms } : {}),
+  };
+
   const userGame = await prisma.userGame.upsert({
     where: { userId_gameId: { userId: req.userId, gameId: game.id } },
-    update: { status: prismaStatus },
+    update: { status: prismaStatus, ...optionalFields },
     create: {
       userId: req.userId,
       gameId: game.id,
       status: prismaStatus,
       playtimeByPlatform: { [platformLabel]: 0 },
+      ...optionalFields,
     },
     include: { game: { include: { hltbData: true } } },
   });

@@ -444,4 +444,67 @@ describe('POST /api/games/manual', () => {
       }),
     );
   });
+
+  // F1-PR2 collector-metadata fields per CM2 + CM12
+  it('passes through mediaType + condition + region on the create path when provided', async () => {
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-3', igdbId: 22222, title: 'Pokémon Red' });
+    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-3', gameId: 'game-3', userId: 'test-user-id' });
+
+    await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 22222,
+        title: 'Pokémon Red',
+        platformLabel: 'Game Boy',
+        status: 'Backlog',
+        mediaType: 'PHYSICAL',
+        condition: 'LOOSE',
+        region: 'PAL',
+      });
+
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          status: 'Backlog',
+          mediaType: 'PHYSICAL',
+          condition: 'LOOSE',
+          region: 'PAL',
+        }),
+        update: expect.objectContaining({
+          mediaType: 'PHYSICAL',
+          condition: 'LOOSE',
+          region: 'PAL',
+        }),
+      }),
+    );
+  });
+
+  it('omits optional fields from upsert payload when not provided (avoids overwriting existing values with undefined)', async () => {
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-4', igdbId: 33333, title: 'Some Game' });
+    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-4', gameId: 'game-4', userId: 'test-user-id' });
+
+    await request(app)
+      .post('/api/games/manual')
+      .send({ igdbId: 33333, title: 'Some Game', platformLabel: 'PC', status: 'Backlog' });
+
+    const upsertCall = (prisma.userGame.upsert as jest.Mock).mock.calls[0]?.[0];
+    expect(upsertCall.create).not.toHaveProperty('mediaType');
+    expect(upsertCall.create).not.toHaveProperty('condition');
+    expect(upsertCall.create).not.toHaveProperty('region');
+    expect(upsertCall.create).not.toHaveProperty('wishlistedPlatforms');
+    expect(upsertCall.update).not.toHaveProperty('mediaType');
+    expect(upsertCall.update).not.toHaveProperty('condition');
+    expect(upsertCall.update).not.toHaveProperty('region');
+    expect(upsertCall.update).not.toHaveProperty('wishlistedPlatforms');
+  });
+
+  it('rejects invalid mediaType values (Zod schema enforces the 2-value enum)', async () => {
+    const res = await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 44444, title: 'Bad Media', platformLabel: 'PC', status: 'Backlog',
+        mediaType: 'PHYSICAL_DISC', // old 4-value enum value — no longer accepted
+      });
+    expect(res.status).toBe(400);
+  });
 });

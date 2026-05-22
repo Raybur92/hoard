@@ -64,6 +64,7 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
 
   const [
     countGroups,
+    wishlistCount,
     weeklyAdded,
     nowPlayingRaw,
     backlogIdsRaw,
@@ -76,6 +77,21 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
       by: ['status'],
       where: { userId },
       _count: { status: true },
+    }),
+    // F1-PR2 audit punch-list (SURFACE.md §13.7 per CM12 + CM13). The
+    // Wishlist shelf widens to include games where wishlistedPlatforms
+    // is non-empty (per-platform wishlist binding without global
+    // status=Wishlist). Done as a separate count() because OR conditions
+    // don't fit cleanly into groupBy. Distinct count of UserGames
+    // matching either condition.
+    prisma.userGame.count({
+      where: {
+        userId,
+        OR: [
+          { status: 'Wishlist' },
+          { wishlistedPlatforms: { isEmpty: false } },
+        ],
+      },
     }),
     prisma.userGame.count({
       where: { userId, addedAt: { gte: oneWeekAgo } },
@@ -189,7 +205,11 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     completedCount: shelfCounts['Completed'],
     onHoldCount: shelfCounts['On Hold'],
     droppedCount: shelfCounts['Dropped'],
-    wishlistCount: shelfCounts['Wishlist'],
+    // wishlistCount widened per CM12 + CM13 (SURFACE.md §13.7 audit punch-list):
+    // counts UserGames where status='Wishlist' OR wishlistedPlatforms non-empty.
+    // The groupBy-derived shelfCounts['Wishlist'] only counts global-status
+    // matches; the separate count() query above captures both.
+    wishlistCount,
     totalPlaytimeMinutes,
     completionPct,
     weeklyAdded,

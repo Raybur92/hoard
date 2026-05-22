@@ -154,11 +154,28 @@ export async function runSync(
       const newLastPlayed = sg.lastPlayedAt ?? existing?.lastPlayedAt ?? null;
       const totalMergedPlaytime = Object.values(mergedPlaytime).reduce<number>((sum, m) => sum + (m ?? 0), 0);
       const initialStatus = totalMergedPlaytime > 0 ? 'OnHold' : 'Backlog';
+
+      // CM13 wishlist auto-promotion (2026-05-22). When sync brings in
+      // ownership of a game the user previously had as status=Wishlist,
+      // flip the status to OnHold (playtime > 0) or Backlog (no playtime).
+      // The wishlist's job is done; the user owns the game now. Trigger
+      // condition is SPECIFICALLY `status==='Wishlist'` — any other
+      // existing status is preserved (the user's manual library state
+      // survives auto-promotion naturally because the trigger doesn't
+      // fire). The companion WishlistRelease row is NOT touched — per
+      // Andrea: "two separate logics." Its lifecycle is release-date
+      // driven, independent of ownership.
+      const promoteToStatus: 'OnHold' | 'Backlog' | undefined =
+        existing?.status === 'Wishlist'
+          ? (totalMergedPlaytime > 0 ? 'OnHold' : 'Backlog')
+          : undefined;
+
       await prisma.userGame.upsert({
         where: { userId_gameId: { userId, gameId: game.id } },
         update: {
           playtimeByPlatform: mergedPlaytime,
           ...(newLastPlayed ? { lastPlayedAt: newLastPlayed } : {}),
+          ...(promoteToStatus ? { status: promoteToStatus } : {}),
         },
         create: {
           userId,

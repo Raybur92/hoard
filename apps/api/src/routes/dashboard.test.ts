@@ -242,6 +242,52 @@ describe('GET /api/dashboard', () => {
 
 /* ── T6 — achievements rollup on /api/dashboard ── */
 
+describe('GET /api/dashboard — wishlistCount widening (F1-PR2 / CM12 + CM13)', () => {
+  it('wishlistCount comes from the widened count() query, not from countGroups[Wishlist]', async () => {
+    // The widened count() captures status=Wishlist OR wishlistedPlatforms
+    // non-empty. The groupBy-derived countGroups only sees status=Wishlist.
+    // When the two diverge (per-platform-wishlist case), the widened count
+    // wins. This test mocks them with different values to make the wiring
+    // unambiguous: countGroups says 3 status=Wishlist rows; the widened
+    // count() says 5 (3 status-Wishlist + 2 partially-wishlisted via
+    // wishlistedPlatforms). The response should report 5.
+    (prisma.userGame.groupBy as jest.Mock).mockResolvedValue([
+      { status: 'Backlog',  _count: { status: 10 } },
+      { status: 'Wishlist', _count: { status: 3 } },
+    ]);
+    (prisma.userGame.count as jest.Mock)
+      .mockResolvedValueOnce(5) // widened wishlistCount (first count() in Promise.all order)
+      .mockResolvedValueOnce(0); // weeklyAdded (second count() in order)
+    const findManyMock = prisma.userGame.findMany as jest.Mock;
+    findManyMock.mockReset();
+    findManyMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.platform.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.userGame.aggregate as jest.Mock).mockResolvedValue({ _sum: { achievementsEarned: null, achievementsTotal: null } });
+
+    const res = await request(app).get('/api/dashboard');
+
+    expect(res.status).toBe(200);
+    expect(res.body.stats.wishlistCount).toBe(5);
+    expect(res.body.stats.backlogCount).toBe(10); // status-derived count unchanged
+
+    // Verify the count() call shape — the widened one uses OR with isEmpty: false
+    const countCalls = (prisma.userGame.count as jest.Mock).mock.calls;
+    const widenedCall = countCalls.find((c) => c[0]?.where?.OR);
+    expect(widenedCall).toBeDefined();
+    expect(widenedCall![0].where.OR).toEqual(
+      expect.arrayContaining([
+        { status: 'Wishlist' },
+        { wishlistedPlatforms: { isEmpty: false } },
+      ]),
+    );
+  });
+});
+
 describe('GET /api/dashboard — achievements rollup (T6)', () => {
   it('returns null when no game in the library has achievement data yet', async () => {
     setupDashboard({
