@@ -375,9 +375,23 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
         </div>
       )}
 
-      {/* P2 — Selected game + confirm details */}
+      {/* P2 — Selected game + confirm details.
+          P2 can grow tall once mediaType=PHYSICAL reveals condition+region
+          AND the F1-PR3 [+ more details] panel expands. The outer .panel
+          enforces maxHeight: 80vh with overflow: hidden, so without an
+          inner scroll the bottom — including the toggle and the playtime
+          inputs — gets clipped on shorter viewports. Cap P2 to the
+          remaining space and scroll. */}
       {selected && (
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
+        <div
+          className="thin-scroll"
+          style={{
+            padding: '14px 18px',
+            borderBottom: '1px solid var(--rule)',
+            overflowY: 'auto',
+            maxHeight: 'calc(80vh - 160px)',
+          }}
+        >
           {/* Status chip strip — PRIMARY visual question */}
           <div style={{ marginBottom: 14 }}>
             <div className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>// status</div>
