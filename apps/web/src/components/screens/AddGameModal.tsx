@@ -9,9 +9,13 @@
 //   PLATFORMS section appears elsewhere) + §3 (status-first P2) + §6
 //   (P5 pattern b) + §7 (platform pin)
 //
-// NOT in F1-PR1 (deferred to subsequent PRs):
-// - mediaType picker (R1 schema gap — PR2)
-// - condition + region pickers (R3 — PR2)
+// F1-PR2 (this PR) — adds collector metadata pickers to P2:
+// - mediaType chip strip (DIGITAL | PHYSICAL)
+// - condition chip strip (LOOSE | CIB | SEALED | REPLICA | GRADED)
+// - region chip strip (NTSC-U | NTSC-J | PAL | OTHER)
+// condition + region only render when mediaType=PHYSICAL.
+//
+// NOT in F1-PR2 (deferred to subsequent PRs):
 // - [+ more details] panel with manual playtime (PR3)
 // - Freeform-fallback P3 (PR4)
 // - Backend silent-merge upsert + status-conflict matrix (PR5)
@@ -25,9 +29,32 @@ import { Cover } from '../primitives/Cover';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { PlatformPicker } from './PlatformPicker';
 import { pushRecent } from '../../lib/recentPlatforms';
-import type { IgdbSearchResult, GameStatus } from '@hoard/types';
+import type { IgdbSearchResult, GameStatus, MediaType, Condition, Region } from '@hoard/types';
 
 const STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist'];
+
+// F1-PR2 collector chip-strip values. Labels render in lowercase to match
+// the rest of the modal vocabulary; underlying values are the canonical
+// SCREAMING_SNAKE_CASE enums per the schema.
+const MEDIA_TYPES: ReadonlyArray<{ value: MediaType; label: string }> = [
+  { value: 'DIGITAL', label: 'digital' },
+  { value: 'PHYSICAL', label: 'physical' },
+];
+
+const CONDITIONS: ReadonlyArray<{ value: Condition; label: string }> = [
+  { value: 'LOOSE', label: 'loose' },
+  { value: 'CIB', label: 'CIB' },
+  { value: 'SEALED', label: 'sealed' },
+  { value: 'REPLICA', label: 'replica' },
+  { value: 'GRADED', label: 'graded' },
+];
+
+const REGIONS: ReadonlyArray<{ value: Region; label: string }> = [
+  { value: 'NTSC_U', label: 'NTSC-U' },
+  { value: 'NTSC_J', label: 'NTSC-J' },
+  { value: 'PAL', label: 'PAL' },
+  { value: 'OTHER', label: 'other' },
+];
 
 /** Map a GameStatus to its visual treatment when active in the chip strip. */
 const STATUS_ACTIVE_COLOR: Record<GameStatus, { bg: string; fg: string; border: string }> = {
@@ -74,6 +101,12 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
   // Form
   const [platform, setPlatform] = useState<string | null>(null);
   const [status, setStatus] = useState<GameStatus>(intent === 'wishlist' ? 'Wishlist' : 'Backlog');
+  // F1-PR2 collector metadata. All optional. condition + region only apply
+  // when mediaType=PHYSICAL — flipped back to null when user switches to
+  // DIGITAL so a stale value doesn't ride along under the hidden UI.
+  const [mediaType, setMediaType] = useState<MediaType | null>(null);
+  const [condition, setCondition] = useState<Condition | null>(null);
+  const [region, setRegion] = useState<Region | null>(null);
   // Save
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -159,6 +192,9 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
         ...(selected.coverUrl ? { coverUrl: selected.coverUrl } : {}),
         platformLabel: platform,
         status,
+        ...(mediaType ? { mediaType } : {}),
+        ...(mediaType === 'PHYSICAL' && condition ? { condition } : {}),
+        ...(mediaType === 'PHYSICAL' && region ? { region } : {}),
       });
       pushRecent(platform);
       onAdded();
@@ -186,6 +222,11 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
     setSelected(null);
     setStatus(activeIntent === 'wishlist' ? 'Wishlist' : 'Backlog');
     setAddError(null);
+    // Collector metadata is per-entry — reset on every [+ add another].
+    // Unlike platform, these don't repeat across a bulk-add session.
+    setMediaType(null);
+    setCondition(null);
+    setRegion(null);
     // platform stays — pinnedPlatform effect re-prefills it
     setPlatform(platform);
     // refocus the search input
@@ -371,6 +412,94 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
               disabled={adding}
             />
           </div>
+
+          {/* F1-PR2 — media-type chip strip (always visible). DIGITAL is the
+              implicit-default case for most adds; PHYSICAL reveals the
+              collector-only condition + region strips below. */}
+          <div style={{ marginTop: 14 }}>
+            <div className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>// media</div>
+            <div role="radiogroup" aria-label="Media type" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {MEDIA_TYPES.map((m) => {
+                const active = m.value === mediaType;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => {
+                      if (active) {
+                        setMediaType(null);
+                        setCondition(null);
+                        setRegion(null);
+                      } else {
+                        setMediaType(m.value);
+                        if (m.value === 'DIGITAL') {
+                          setCondition(null);
+                          setRegion(null);
+                        }
+                      }
+                    }}
+                    className={active ? 'chip on' : 'chip'}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* condition + region only meaningful for PHYSICAL — hidden
+              for DIGITAL (and when mediaType is null) so the modal stays
+              compact for the common case. */}
+          {mediaType === 'PHYSICAL' && (
+            <>
+              <div style={{ marginTop: 14 }}>
+                <div className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>// condition</div>
+                <div role="radiogroup" aria-label="Condition" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {CONDITIONS.map((c) => {
+                    const active = c.value === condition;
+                    return (
+                      <button
+                        key={c.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setCondition(active ? null : c.value)}
+                        className={active ? 'chip on' : 'chip'}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <div className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>// region</div>
+                <div role="radiogroup" aria-label="Region" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {REGIONS.map((r) => {
+                    const active = r.value === region;
+                    return (
+                      <button
+                        key={r.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setRegion(active ? null : r.value)}
+                        className={active ? 'chip on' : 'chip'}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {r.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

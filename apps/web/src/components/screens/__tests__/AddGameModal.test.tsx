@@ -210,4 +210,150 @@ describe('AddGameModal', () => {
       expect(screen.queryByText(/^\/\/ added/)).not.toBeInTheDocument();
     });
   });
+
+  describe('F1-PR2 collector metadata pickers', () => {
+    it('renders the media-type chip strip once a game is selected', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      expect(screen.getByRole('radiogroup', { name: 'Media type' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'digital' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'physical' })).toBeInTheDocument();
+    });
+
+    it('does NOT render condition / region strips by default (no mediaType picked)', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      expect(screen.queryByRole('radiogroup', { name: 'Condition' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: 'Region' })).not.toBeInTheDocument();
+    });
+
+    it('does NOT render condition / region strips when mediaType = DIGITAL', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('radio', { name: 'digital' }));
+      expect(screen.queryByRole('radiogroup', { name: 'Condition' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: 'Region' })).not.toBeInTheDocument();
+    });
+
+    it('reveals condition + region strips when mediaType = PHYSICAL', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('radio', { name: 'physical' }));
+      expect(screen.getByRole('radiogroup', { name: 'Condition' })).toBeInTheDocument();
+      expect(screen.getByRole('radiogroup', { name: 'Region' })).toBeInTheDocument();
+      // Spot-check all five condition + four region values are rendered
+      expect(screen.getByRole('radio', { name: 'loose' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'CIB' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'sealed' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'replica' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'graded' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'NTSC-U' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'NTSC-J' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'PAL' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'other' })).toBeInTheDocument();
+    });
+
+    it('switching PHYSICAL → DIGITAL hides + clears condition + region', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('radio', { name: 'physical' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'CIB' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'PAL' }));
+      // Now switch to DIGITAL — strips disappear
+      fireEvent.click(screen.getByRole('radio', { name: 'digital' }));
+      expect(screen.queryByRole('radiogroup', { name: 'Condition' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: 'Region' })).not.toBeInTheDocument();
+      // Pick a platform + save → addManualGame must NOT carry condition/region
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(api.addManualGame).toHaveBeenCalledTimes(1));
+      const body = (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(body.mediaType).toBe('DIGITAL');
+      expect(body).not.toHaveProperty('condition');
+      expect(body).not.toHaveProperty('region');
+    });
+
+    it('clicking an already-active chip toggles it off (mediaType, condition, region)', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      // PHYSICAL → toggle off → strips disappear
+      fireEvent.click(screen.getByRole('radio', { name: 'physical' }));
+      expect(screen.getByRole('radio', { name: 'physical' })).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(screen.getByRole('radio', { name: 'physical' }));
+      expect(screen.getByRole('radio', { name: 'physical' })).toHaveAttribute('aria-checked', 'false');
+      expect(screen.queryByRole('radiogroup', { name: 'Condition' })).not.toBeInTheDocument();
+      // Re-arm PHYSICAL and toggle condition + region
+      fireEvent.click(screen.getByRole('radio', { name: 'physical' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'sealed' }));
+      expect(screen.getByRole('radio', { name: 'sealed' })).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(screen.getByRole('radio', { name: 'sealed' }));
+      expect(screen.getByRole('radio', { name: 'sealed' })).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('save body includes mediaType + condition + region when PHYSICAL is fully filled', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('radio', { name: 'physical' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'CIB' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'NTSC-J' }));
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(api.addManualGame).toHaveBeenCalledTimes(1));
+      const body = (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(body.mediaType).toBe('PHYSICAL');
+      expect(body.condition).toBe('CIB');
+      expect(body.region).toBe('NTSC_J');
+    });
+
+    it('omits collector fields entirely when no mediaType is picked', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      // Skip mediaType — go straight to save
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(api.addManualGame).toHaveBeenCalledTimes(1));
+      const body = (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(body).not.toHaveProperty('mediaType');
+      expect(body).not.toHaveProperty('condition');
+      expect(body).not.toHaveProperty('region');
+    });
+
+    it('[+ add another] resets mediaType/condition/region (preserves only platform pin)', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('radio', { name: 'physical' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'sealed' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'PAL' }));
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(screen.getByText(/added/i)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /add another/i }));
+      // Pin survives
+      await waitFor(() => expect(screen.getByText(/pinned: Game Boy/i)).toBeInTheDocument());
+      // Pick a new game; mediaType must be back to "unset"
+      await pickFirstResult();
+      expect(screen.getByRole('radio', { name: 'physical' })).toHaveAttribute('aria-checked', 'false');
+      expect(screen.getByRole('radio', { name: 'digital' })).toHaveAttribute('aria-checked', 'false');
+      // condition + region not visible (no mediaType armed)
+      expect(screen.queryByRole('radiogroup', { name: 'Condition' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radiogroup', { name: 'Region' })).not.toBeInTheDocument();
+    });
+  });
 });
