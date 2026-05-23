@@ -607,3 +607,73 @@ describe('POST /api/games/:id/remap', () => {
     expect(data.rating).toBe(7);
   });
 });
+
+describe('DELETE /api/games/:id/wishlist-platforms/:code (F1-PR2 / CM12)', () => {
+  const makeWishlistRow = (wishlistedPlatforms: string[], id = 'ug-1') => ({
+    ...makeUserGame({ id }),
+    wishlistedPlatforms,
+  });
+
+  it('returns 404 when the UserGame does not belong to the user', async () => {
+    (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).delete('/api/games/missing/wishlist-platforms/PC');
+    expect(res.status).toBe(404);
+    expect(prisma.userGame.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the code path segment is too long (>32 chars)', async () => {
+    // Express trims out empty path segments so the empty-string case 404s
+    // at the router rather than reaching the handler — the length cap is the
+    // testable boundary.
+    const tooLong = 'x'.repeat(33);
+    const res = await request(app).delete(`/api/games/ug-1/wishlist-platforms/${tooLong}`);
+    expect(res.status).toBe(400);
+    expect(prisma.userGame.update).not.toHaveBeenCalled();
+  });
+
+  it('removes a code from wishlistedPlatforms when present', async () => {
+    const before = makeWishlistRow(['PC', 'PS']);
+    (prisma.userGame.findFirst as jest.Mock).mockResolvedValueOnce(before);
+    (prisma.userGame.update as jest.Mock).mockResolvedValue({ ...before, wishlistedPlatforms: ['PS'] });
+
+    const res = await request(app).delete('/api/games/ug-1/wishlist-platforms/PC');
+    expect(res.status).toBe(200);
+    expect(res.body.wishlistedPlatforms).toEqual(['PS']);
+
+    const updateArgs = (prisma.userGame.update as jest.Mock).mock.calls[0][0];
+    expect(updateArgs.data).toEqual({ wishlistedPlatforms: ['PS'] });
+    expect(updateArgs.where).toEqual({ id: 'ug-1' });
+  });
+
+  it('is idempotent: returns 200 with unchanged record when the code is not present (no update call)', async () => {
+    const before = makeWishlistRow(['PS']);
+    (prisma.userGame.findFirst as jest.Mock)
+      .mockResolvedValueOnce(before)   // initial lookup (select wishlistedPlatforms)
+      .mockResolvedValueOnce(before);  // refetch with hltbData when no change
+
+    const res = await request(app).delete('/api/games/ug-1/wishlist-platforms/PC');
+    expect(res.status).toBe(200);
+    expect(res.body.wishlistedPlatforms).toEqual(['PS']);
+    expect(prisma.userGame.update).not.toHaveBeenCalled();
+  });
+
+  it('only removes the matching code (leaves others intact, including order)', async () => {
+    const before = makeWishlistRow(['PC', 'NT', 'XB']);
+    (prisma.userGame.findFirst as jest.Mock).mockResolvedValueOnce(before);
+    (prisma.userGame.update as jest.Mock).mockImplementation(async (args: { data: { wishlistedPlatforms: string[] } }) => ({
+      ...before,
+      wishlistedPlatforms: args.data.wishlistedPlatforms,
+    }));
+
+    const res = await request(app).delete('/api/games/ug-1/wishlist-platforms/NT');
+    expect(res.status).toBe(200);
+    expect(res.body.wishlistedPlatforms).toEqual(['PC', 'XB']);
+  });
+
+  it('scopes the lookup to the requesting user (cross-user isolation)', async () => {
+    (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+    await request(app).delete('/api/games/ug-other/wishlist-platforms/PC');
+    const firstCall = (prisma.userGame.findFirst as jest.Mock).mock.calls[0][0];
+    expect(firstCall.where).toEqual({ id: 'ug-other', userId: 'test-user-id' });
+  });
+});

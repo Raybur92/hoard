@@ -9,6 +9,7 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
+import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, generateReceipt, achievementLabel, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
@@ -90,6 +91,18 @@ export function GameDetailMobile() {
     if (!ug || ug.status === 'Playing') return;
     try { await update({ status: 'Playing' }); }
     catch { /* silent */ }
+  }
+
+  async function unwishlistPlatform(code: string) {
+    if (!id || !ug) return;
+    // Optimistic local update + server idempotent remove. On failure
+    // reconcile via refetch — same shape as the Desktop handler.
+    update({ wishlistedPlatforms: ug.wishlistedPlatforms.filter((c) => c !== code) });
+    try {
+      await api.removeWishlistedPlatform(id, code);
+    } catch {
+      refetch();
+    }
   }
 
   async function handleSharePressed() {
@@ -359,7 +372,25 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
                 ) : (
                   <>
                     <span style={{ fontSize: "var(--text-xs)" }}>{row.code}</span>
-                    <span className="t-mono t-amber t-up" style={{ fontSize: "var(--text-3xs)", letterSpacing: '0.08em' }}>wishlisted</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                      <span className="t-mono t-amber t-up" style={{ fontSize: "var(--text-3xs)", letterSpacing: '0.08em' }}>wishlisted</span>
+                      <button
+                        type="button"
+                        onClick={() => void unwishlistPlatform(row.code)}
+                        className="t-mono"
+                        aria-label={`Un-wishlist ${row.code}`}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--paper-dim)',
+                          fontSize: 'var(--text-3xs)',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                      >
+                        [×]
+                      </button>
+                    </span>
                   </>
                 )}
               </div>

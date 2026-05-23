@@ -72,6 +72,19 @@ export function GameDetailDesktop() {
     await api.patchGame(id, { notes: noteDraft || null }).catch(() => null);
   }
 
+  async function unwishlistPlatform(code: string) {
+    if (!id || !ug) return;
+    // Optimistic — strip the code locally first so the row vanishes before
+    // the round trip. Server is idempotent so a transient blip just
+    // re-renders without it. On failure we refetch to reconcile.
+    update({ wishlistedPlatforms: ug.wishlistedPlatforms.filter((c) => c !== code) });
+    try {
+      await api.removeWishlistedPlatform(id, code);
+    } catch {
+      refetch();
+    }
+  }
+
   if (loading || !ug) {
     return (
       <>
@@ -261,7 +274,25 @@ export function GameDetailDesktop() {
                         ) : (
                           <>
                             <span style={{ fontSize: "var(--text-2xs)" }} />
-                            <span className="t-mono t-amber t-up" style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.08em' }}>wishlisted</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                              <span className="t-mono t-amber t-up" style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.08em' }}>wishlisted</span>
+                              <button
+                                type="button"
+                                onClick={() => void unwishlistPlatform(row.code)}
+                                className="t-mono"
+                                aria-label={`Un-wishlist ${row.code}`}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: 'var(--paper-dim)',
+                                  fontSize: 'var(--text-3xs)',
+                                  cursor: 'pointer',
+                                  padding: 0,
+                                }}
+                              >
+                                [× un-wishlist]
+                              </button>
+                            </span>
                           </>
                         )}
                       </div>

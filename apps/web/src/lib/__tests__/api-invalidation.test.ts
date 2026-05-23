@@ -127,6 +127,41 @@ describe('api mutation invalidation', () => {
     expect(cache.get('dashboard')).toBeUndefined();
   });
 
+  it('removeWishlistedPlatform drops game:{id} + library caches', async () => {
+    const api = await loadApi();
+    cache.set('game:abc', { id: 'abc', wishlistedPlatforms: ['PC', 'PS'] });
+    cache.set('games:{}', 'old');
+    cache.set('gameCounts', 'old');
+    cache.set('dashboard', 'old');
+
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ id: 'abc', wishlistedPlatforms: ['PS'] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    ) as unknown as typeof fetch;
+
+    await api.removeWishlistedPlatform('abc', 'PC');
+
+    expect(cache.get('game:abc')).toBeUndefined();
+    expect(cache.get('games:{}')).toBeUndefined();
+    expect(cache.get('gameCounts')).toBeUndefined();
+    expect(cache.get('dashboard')).toBeUndefined();
+  });
+
+  it('removeWishlistedPlatform encodes the platform code path segment', async () => {
+    const api = await loadApi();
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ id: 'abc', wishlistedPlatforms: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    ) as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
+
+    // Use a code with a character that must be percent-encoded to ensure
+    // the client never lets a raw `/` smuggle into the path.
+    await api.removeWishlistedPlatform('abc', 'A/B');
+
+    const callArgs = (fetchSpy as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]!;
+    expect(callArgs[0]).toContain('/api/games/abc/wishlist-platforms/A%2FB');
+    expect(callArgs[1]?.method).toBe('DELETE');
+  });
+
   it('platform mutations drop platformStatus + library', async () => {
     const api = await loadApi();
     cache.set('platformStatus', 'old');

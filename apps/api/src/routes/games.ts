@@ -461,4 +461,60 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
   res.json(mapUserGame(updated));
 });
 
+// DELETE /api/games/:id/wishlist-platforms/:code — F1-PR2 / CM12
+//
+// Removes a single platform code from UserGame.wishlistedPlatforms. The
+// only mutation path exposed for the array in PR2 — the corresponding
+// add-affordance lives in the manual-add modal (sub-unit #1) and a
+// future GameDetail collector flow. Idempotent: removing a code that
+// isn't present returns 200 with the unchanged record (covers the
+// double-tap case cleanly).
+router.delete(
+  '/games/:id/wishlist-platforms/:code',
+  requireUser,
+  requireActive,
+  async (req: Request, res: Response): Promise<void> => {
+    const { id, code } = req.params as { id: string; code: string };
+    const userId = req.userId;
+
+    if (!code || code.length === 0 || code.length > 32) {
+      res.status(400).json({ error: 'Invalid platform code' });
+      return;
+    }
+
+    const existing = await prisma.userGame.findFirst({
+      where: { id, userId },
+      select: { id: true, wishlistedPlatforms: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    const next = existing.wishlistedPlatforms.filter((c) => c !== code);
+    // Skip the write entirely when nothing would change — saves a round
+    // trip on rapid double-taps and keeps `updatedAt` honest.
+    if (next.length === existing.wishlistedPlatforms.length) {
+      const unchanged = await prisma.userGame.findFirst({
+        where: { id, userId },
+        include: { game: { include: { hltbData: true } } },
+      });
+      if (!unchanged) {
+        res.status(404).json({ error: 'Not found' });
+        return;
+      }
+      res.json(mapUserGame(unchanged));
+      return;
+    }
+
+    const updated = await prisma.userGame.update({
+      where: { id },
+      data: { wishlistedPlatforms: next },
+      include: { game: { include: { hltbData: true } } },
+    });
+
+    res.json(mapUserGame(updated));
+  },
+);
+
 export default router;

@@ -441,6 +441,19 @@ export const api = {
   // existing target one and delete the source. Cache invalidation drops
   // BOTH userGames + the library prefixes — after a merge, both rows
   // changed identity (one was deleted, one was rewritten).
+  // F1-PR2 / CM12 — remove a single platform code from a UserGame's
+  // wishlistedPlatforms array. Idempotent on the server side; we still
+  // refresh the per-game cache so the GameDetail view reflects the change
+  // without a refetch round-trip.
+  removeWishlistedPlatform: async (userGameId: string, code: string) => {
+    const data = await del<UserGameDetail>(
+      `/api/games/${userGameId}/wishlist-platforms/${encodeURIComponent(code)}`,
+    );
+    cache.invalidate(`game:${userGameId}`);
+    invalidateLibrary();
+    return data;
+  },
+
   remapGame: async (userGameId: string, igdbId: number, merge = false) => {
     const res = await fetch(url(`/api/games/${userGameId}/remap`), {
       method: 'POST',
