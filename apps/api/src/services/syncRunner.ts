@@ -4,6 +4,7 @@ import type { PlatformCode } from '@hoard/types';
 import { searchGames, getGameBySteamId, getTimeToBeat } from './igdb';
 import { pickBestMatch } from './igdbMatch';
 import { fetchHltbWithFallback } from './hltb';
+import { promoteWishlistOnOwnership } from '../lib/promoteWishlist';
 import type { SyncedGame } from './platforms/steam';
 
 export interface SyncResult {
@@ -155,20 +156,11 @@ export async function runSync(
       const totalMergedPlaytime = Object.values(mergedPlaytime).reduce<number>((sum, m) => sum + (m ?? 0), 0);
       const initialStatus = totalMergedPlaytime > 0 ? 'OnHold' : 'Backlog';
 
-      // CM13 wishlist auto-promotion (2026-05-22). When sync brings in
-      // ownership of a game the user previously had as status=Wishlist,
-      // flip the status to OnHold (playtime > 0) or Backlog (no playtime).
-      // The wishlist's job is done; the user owns the game now. Trigger
-      // condition is SPECIFICALLY `status==='Wishlist'` — any other
-      // existing status is preserved (the user's manual library state
-      // survives auto-promotion naturally because the trigger doesn't
-      // fire). The companion WishlistRelease row is NOT touched — per
-      // Andrea: "two separate logics." Its lifecycle is release-date
-      // driven, independent of ownership.
-      const promoteToStatus: 'OnHold' | 'Backlog' | undefined =
-        existing?.status === 'Wishlist'
-          ? (totalMergedPlaytime > 0 ? 'OnHold' : 'Backlog')
-          : undefined;
+      // CM13 wishlist auto-promotion — policy lives in
+      // apps/api/src/lib/promoteWishlist.ts so the manual-add path
+      // (F1-PR5) shares the same rule. `undefined` means no status
+      // change; non-Wishlist existing statuses are preserved.
+      const promoteToStatus = promoteWishlistOnOwnership(existing?.status, totalMergedPlaytime);
 
       await prisma.userGame.upsert({
         where: { userId_gameId: { userId, gameId: game.id } },
