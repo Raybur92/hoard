@@ -9,7 +9,7 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
-import { minutesToHours, formatRelative, generateReceipt, achievementLabel } from '../../lib/utils';
+import { minutesToHours, formatRelative, generateReceipt, achievementLabel, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
 
@@ -139,14 +139,15 @@ export function GameDetailMobile() {
   const stillOwedMin = g.hltb?.mainStory ? Math.max(0, g.hltb.mainStory - totalMin) : null;
   const stillOwed = stillOwedMin != null ? minutesToHours(stillOwedMin) : '—';
 
-  const platforms = Object.entries(g.playtimeByPlatform)
-    .filter(([, min]) => min !== undefined)
-    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0));
+  const platformRows = buildPlatformRows(g.playtimeByPlatform, g.wishlistedPlatforms);
+  // Receipt section uses owned-only — wishlisted rows have no playtime
+  // so a SUBTOTAL with them would mix metrics.
+  const ownedRows = platformRows.filter((r) => r.kind === 'owned');
 
   const noteLines = g.notes ? g.notes.split('\n').filter(Boolean) : [];
 
-  const platLines = platforms
-    .map(([code, min]) => `${code.padEnd(2)}  ${code.padEnd(8)}  ${minutesToHours(min ?? 0).padStart(5)}`)
+  const platLines = ownedRows
+    .map((row) => `${row.code.padEnd(2)}  ${row.code.padEnd(8)}  ${minutesToHours(row.minutes).padStart(5)}`)
     .join('\n');
 
   return (
@@ -237,7 +238,7 @@ ADDED ........... ${g.addedAt.slice(0, 10)}`}
 
           <div className="rule" style={{ margin: '12px 0' }} />
 
-          <div style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.1em', marginBottom: 6 }}>OWNED ON ──────────────</div>
+          <div style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.1em', marginBottom: 6 }}>PLATFORMS ─────────────</div>
           <pre style={{ fontSize: "var(--text-3xs)", lineHeight: 1.55, margin: 0, fontFamily: 'inherit' }}>
             {platLines}
             {'\n              ───────\nSUBTOTAL '}
@@ -343,15 +344,24 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
           </Btn>
         </div>
 
-        {/* owned on */}
+        {/* platforms (owned + wishlist-only) */}
         <div style={{ marginTop: 20 }}>
-          <Marker>// owned on</Marker>
+          <Marker>// platforms</Marker>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {platforms.map(([code, min]) => (
-              <div key={code} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, alignItems: 'center', padding: '8px 12px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
-                <Plat code={code} />
-                <span style={{ fontSize: "var(--text-xs)" }}>{code} <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}</span></span>
-                <span className="t-tnum" style={{ fontSize: "var(--text-sm)" }}>{minutesToHours(min ?? 0)}</span>
+            {platformRows.map((row) => (
+              <div key={`${row.kind}:${row.code}`} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, alignItems: 'center', padding: '8px 12px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
+                <Plat code={row.code} />
+                {row.kind === 'owned' ? (
+                  <>
+                    <span style={{ fontSize: "var(--text-xs)" }}>{row.code} <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}</span></span>
+                    <span className="t-tnum" style={{ fontSize: "var(--text-sm)" }}>{minutesToHours(row.minutes)}</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: "var(--text-xs)" }}>{row.code}</span>
+                    <span className="t-mono t-amber t-up" style={{ fontSize: "var(--text-3xs)", letterSpacing: '0.08em' }}>wishlisted</span>
+                  </>
+                )}
               </div>
             ))}
           </div>

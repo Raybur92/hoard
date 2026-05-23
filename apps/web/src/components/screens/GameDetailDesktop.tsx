@@ -11,7 +11,7 @@ import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
 import { api } from '../../lib/api';
-import { minutesToHours, formatRelative, shortYear, generateReceipt, achievementLabel } from '../../lib/utils';
+import { minutesToHours, formatRelative, shortYear, generateReceipt, achievementLabel, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
 
@@ -110,9 +110,10 @@ export function GameDetailDesktop() {
   const stillOwedMin = g.hltb?.mainStory ? Math.max(0, g.hltb.mainStory - totalMin) : null;
   const stillOwed = stillOwedMin != null ? minutesToHours(stillOwedMin) : '—';
 
-  const platforms = Object.entries(g.playtimeByPlatform)
-    .filter(([, min]) => min !== undefined)
-    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0));
+  const platformRows = buildPlatformRows(g.playtimeByPlatform, g.wishlistedPlatforms);
+  // Receipt section uses owned-only — wishlisted rows have no playtime
+  // so a SUBTOTAL with them would mix metrics.
+  const ownedRows = platformRows.filter((r) => r.kind === 'owned');
 
   const noteLines = g.notes ? g.notes.split('\n').filter(Boolean) : [];
 
@@ -244,16 +245,25 @@ export function GameDetailDesktop() {
                   ))}
                 </div>
 
-                {/* owned on */}
+                {/* platforms (owned + wishlist-only) */}
                 <div style={{ marginTop: 24 }}>
-                  <Marker>// owned on</Marker>
+                  <Marker>// platforms</Marker>
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {platforms.map(([code, min]) => (
-                      <div key={code} style={{ display: 'grid', gridTemplateColumns: '32px 140px 1fr auto', gap: 14, alignItems: 'center', padding: '8px 14px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
-                        <Plat code={code} lg />
-                        <span style={{ fontSize: "var(--text-sm)" }}>{code}</span>
-                        <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{formatRelative(g.lastPlayedAt)}</span>
-                        <span className="t-tnum" style={{ fontSize: "var(--text-base)" }}>{minutesToHours(min ?? 0)}</span>
+                    {platformRows.map((row) => (
+                      <div key={`${row.kind}:${row.code}`} style={{ display: 'grid', gridTemplateColumns: '32px 140px 1fr auto', gap: 14, alignItems: 'center', padding: '8px 14px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
+                        <Plat code={row.code} lg />
+                        <span style={{ fontSize: "var(--text-sm)" }}>{row.code}</span>
+                        {row.kind === 'owned' ? (
+                          <>
+                            <span className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>{formatRelative(g.lastPlayedAt)}</span>
+                            <span className="t-tnum" style={{ fontSize: "var(--text-base)" }}>{minutesToHours(row.minutes)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: "var(--text-2xs)" }} />
+                            <span className="t-mono t-amber t-up" style={{ fontSize: "var(--text-2xs)", letterSpacing: '0.08em' }}>wishlisted</span>
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -412,12 +422,12 @@ export function GameDetailDesktop() {
 
                 <div className="rule" style={{ margin: '14px 0' }} />
 
-                <div className="section-head">OWNED ON</div>
-                {platforms.map(([code, min]) => (
-                  <div key={code} className="row">
-                    <span>{code}</span>
+                <div className="section-head">PLATFORMS</div>
+                {ownedRows.map((row) => (
+                  <div key={row.code} className="row">
+                    <span>{row.code}</span>
                     <span className="dots" />
-                    <span>{minutesToHours(min ?? 0)}</span>
+                    <span>{minutesToHours(row.minutes)}</span>
                   </div>
                 ))}
                 <div style={{ borderTop: '1px solid', opacity: 0.25, margin: '6px 0 4px' }} />

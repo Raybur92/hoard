@@ -66,6 +66,33 @@ export function dominantPlatform(pbp: Partial<Record<string, number>>): string {
   return best.code;
 }
 
+/**
+ * Row shape for the GameDetail PLATFORMS section. Owned rows come first
+ * (sorted by playtime desc, matching the legacy OWNED ON ordering) followed
+ * by wishlist-only rows (alphabetical). A code that appears in both lists
+ * is treated as owned — the wishlist intent is satisfied by ownership and
+ * shouldn't render twice.
+ */
+export type PlatformRow =
+  | { code: string; kind: 'owned'; minutes: number }
+  | { code: string; kind: 'wishlisted' };
+
+export function buildPlatformRows(
+  playtimeByPlatform: Partial<Record<string, number>>,
+  wishlistedPlatforms: string[],
+): PlatformRow[] {
+  const owned: PlatformRow[] = Object.entries(playtimeByPlatform)
+    .filter(([, min]) => min !== undefined)
+    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+    .map(([code, min]) => ({ code, kind: 'owned' as const, minutes: min ?? 0 }));
+  const ownedCodes = new Set(owned.map((r) => r.code));
+  const wishlistOnly: PlatformRow[] = wishlistedPlatforms
+    .filter((code) => !ownedCodes.has(code))
+    .sort()
+    .map((code) => ({ code, kind: 'wishlisted' as const }));
+  return [...owned, ...wishlistOnly];
+}
+
 export function upcomingDateParts(iso: string | null): { full: string; month: string; day: string; dow: string } {
   if (!iso) return { full: 'TBA', month: 'TBA', day: '—', dow: '—' };
   const d = new Date(iso);
