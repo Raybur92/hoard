@@ -9,14 +9,20 @@
 //   PLATFORMS section appears elsewhere) + §3 (status-first P2) + §6
 //   (P5 pattern b) + §7 (platform pin)
 //
-// F1-PR2 (this PR) — adds collector metadata pickers to P2:
+// F1-PR2 — adds collector metadata pickers to P2:
 // - mediaType chip strip (DIGITAL | PHYSICAL)
 // - condition chip strip (LOOSE | CIB | SEALED | REPLICA | GRADED)
 // - region chip strip (NTSC-U | NTSC-J | PAL | OTHER)
 // condition + region only render when mediaType=PHYSICAL.
 //
-// NOT in F1-PR2 (deferred to subsequent PRs):
-// - [+ more details] panel with manual playtime (PR3)
+// F1-PR3 (this PR) — adds the optional [+ more details ▼] panel below
+// the collector strips:
+// - manual playtime (hours + minutes inputs) — folds into
+//   playtimeByPlatform[platformLabel] on the backend (S7 close).
+// - times beaten — architectural placeholder only; copy reads
+//   "// coming soon · v2". Schema decision deferred per Andrea 2026-05-22.
+//
+// NOT in F1-PR3 (deferred to subsequent PRs):
 // - Freeform-fallback P3 (PR4)
 // - Backend silent-merge upsert + status-conflict matrix (PR5)
 // - "you got it!" copy variant (PR6)
@@ -107,6 +113,13 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
   const [mediaType, setMediaType] = useState<MediaType | null>(null);
   const [condition, setCondition] = useState<Condition | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
+  // F1-PR3 — [+ more details ▼] panel + manual playtime. Inputs kept as
+  // strings so the empty state is distinguishable from "0" and so the
+  // user can clear them naturally. Computed total minutes folded into
+  // the addManualGame body only when at least one input is non-empty.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [hoursDraft, setHoursDraft] = useState('');
+  const [minutesDraft, setMinutesDraft] = useState('');
   // Save
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -184,6 +197,17 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
     if (!selected || !platform) return;
     setAdding(true);
     setAddError(null);
+    // F1-PR3: fold hours+minutes into total minutes only when at least
+    // one input is non-empty. Empty inputs → undefined (backend writes
+    // the legacy 0 default). NaN / negative get clamped to 0 — the
+    // backend rejects negatives, but we'd rather not surface a 400 for
+    // a user who typed "abc" by accident.
+    const hoursParsed = hoursDraft.trim() === '' ? null : Math.max(0, Math.floor(Number(hoursDraft) || 0));
+    const minutesParsed = minutesDraft.trim() === '' ? null : Math.max(0, Math.floor(Number(minutesDraft) || 0));
+    const manualPlaytimeMinutes =
+      hoursParsed === null && minutesParsed === null
+        ? undefined
+        : (hoursParsed ?? 0) * 60 + (minutesParsed ?? 0);
     try {
       await api.addManualGame({
         igdbId: selected.igdbId,
@@ -195,6 +219,7 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
         ...(mediaType ? { mediaType } : {}),
         ...(mediaType === 'PHYSICAL' && condition ? { condition } : {}),
         ...(mediaType === 'PHYSICAL' && region ? { region } : {}),
+        ...(manualPlaytimeMinutes !== undefined ? { manualPlaytimeMinutes } : {}),
       });
       pushRecent(platform);
       onAdded();
@@ -227,6 +252,11 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
     setMediaType(null);
     setCondition(null);
     setRegion(null);
+    // F1-PR3 — manual playtime is per-entry too. Collapse the panel so
+    // the next add starts compact.
+    setDetailsOpen(false);
+    setHoursDraft('');
+    setMinutesDraft('');
     // platform stays — pinnedPlatform effect re-prefills it
     setPlatform(platform);
     // refocus the search input
@@ -500,6 +530,100 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
               </div>
             </>
           )}
+
+          {/* F1-PR3 — [+ more details ▼] panel (Stash add+ pattern).
+              Collapsed by default; one toggle reveals the optional
+              manual-playtime inputs + the architectural slot for
+              times-beaten. */}
+          <div style={{ marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={() => setDetailsOpen((o) => !o)}
+              aria-expanded={detailsOpen}
+              aria-controls="add-game-more-details"
+              className="t-mono"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: 'var(--paper-dim)',
+                fontSize: 'var(--text-2xs)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {detailsOpen ? '[− less details ▲]' : '[+ more details ▼]'}
+            </button>
+
+            {detailsOpen && (
+              <div id="add-game-more-details" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--rule)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {/* manual playtime — hours + minutes */}
+                <div>
+                  <div className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>// playtime</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label htmlFor="add-game-hours" className="sr-only">Hours played</label>
+                    <input
+                      id="add-game-hours"
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      value={hoursDraft}
+                      onChange={(e) => setHoursDraft(e.target.value)}
+                      placeholder="0"
+                      style={{
+                        width: 72,
+                        padding: '6px 8px',
+                        background: 'var(--ink-2)',
+                        border: '1px solid var(--rule)',
+                        color: 'var(--paper)',
+                        fontFamily: 'var(--mono)',
+                        fontSize: 'var(--text-xs)',
+                        textAlign: 'right',
+                      }}
+                    />
+                    <span className="t-faint" style={{ fontSize: 'var(--text-2xs)' }}>h</span>
+                    <label htmlFor="add-game-minutes" className="sr-only">Minutes played</label>
+                    <input
+                      id="add-game-minutes"
+                      type="number"
+                      min={0}
+                      max={59}
+                      step={1}
+                      inputMode="numeric"
+                      value={minutesDraft}
+                      onChange={(e) => setMinutesDraft(e.target.value)}
+                      placeholder="0"
+                      style={{
+                        width: 72,
+                        padding: '6px 8px',
+                        background: 'var(--ink-2)',
+                        border: '1px solid var(--rule)',
+                        color: 'var(--paper)',
+                        fontFamily: 'var(--mono)',
+                        fontSize: 'var(--text-xs)',
+                        textAlign: 'right',
+                      }}
+                    />
+                    <span className="t-faint" style={{ fontSize: 'var(--text-2xs)' }}>m</span>
+                  </div>
+                  <div className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', marginTop: 6 }}>
+                    // optional · estimates are fine
+                  </div>
+                </div>
+
+                {/* times beaten — architectural slot, implementation deferred
+                    per Andrea 2026-05-22. Placeholder copy only so the
+                    panel layout doesn't shift when the real control lands. */}
+                <div>
+                  <div className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>// times beaten</div>
+                  <div className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+                    coming soon · v2
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

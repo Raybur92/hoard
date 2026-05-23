@@ -356,4 +356,126 @@ describe('AddGameModal', () => {
       expect(screen.queryByRole('radiogroup', { name: 'Region' })).not.toBeInTheDocument();
     });
   });
+
+  describe('F1-PR3 [+ more details] panel + manual playtime', () => {
+    async function pickPlatform(): Promise<void> {
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+    }
+
+    it('renders the [+ more details] toggle once a game is selected, panel collapsed by default', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      const toggle = screen.getByRole('button', { name: /more details/i });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByLabelText('Hours played')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Minutes played')).not.toBeInTheDocument();
+    });
+
+    it('reveals hours + minutes inputs and the times-beaten placeholder when expanded', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /more details/i }));
+      expect(screen.getByLabelText('Hours played')).toBeInTheDocument();
+      expect(screen.getByLabelText('Minutes played')).toBeInTheDocument();
+      // Architectural slot for times-beaten is rendered as muted copy only
+      expect(screen.getByText(/coming soon · v2/i)).toBeInTheDocument();
+    });
+
+    it('toggle is idempotent — re-clicking collapses the panel + retains drafts', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      const toggle = screen.getByRole('button', { name: /more details/i });
+      fireEvent.click(toggle);
+      fireEvent.change(screen.getByLabelText('Hours played'), { target: { value: '5' } });
+      fireEvent.click(toggle);
+      expect(screen.queryByLabelText('Hours played')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /more details/i }));
+      // Draft preserved across collapse/expand
+      expect(screen.getByLabelText('Hours played')).toHaveValue(5);
+    });
+
+    it('omits manualPlaytimeMinutes from the body when both inputs are empty', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      // Expand panel but leave both inputs blank
+      fireEvent.click(screen.getByRole('button', { name: /more details/i }));
+      await pickPlatform();
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(api.addManualGame).toHaveBeenCalledTimes(1));
+      const body = (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(body).not.toHaveProperty('manualPlaytimeMinutes');
+    });
+
+    it('sends manualPlaytimeMinutes = hours*60 + minutes when either input is non-empty', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /more details/i }));
+      fireEvent.change(screen.getByLabelText('Hours played'), { target: { value: '30' } });
+      fireEvent.change(screen.getByLabelText('Minutes played'), { target: { value: '30' } });
+      await pickPlatform();
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(api.addManualGame).toHaveBeenCalledTimes(1));
+      const body = (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(body.manualPlaytimeMinutes).toBe(30 * 60 + 30);
+    });
+
+    it('treats empty as 0 when the other input is filled (hours-only)', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /more details/i }));
+      fireEvent.change(screen.getByLabelText('Hours played'), { target: { value: '12' } });
+      await pickPlatform();
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(api.addManualGame).toHaveBeenCalledTimes(1));
+      const body = (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(body.manualPlaytimeMinutes).toBe(720);
+    });
+
+    it('clamps negative and non-numeric inputs to 0 (UI safety net — backend rejects raw negatives)', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /more details/i }));
+      // input type="number" usually blocks "abc" but defensive code handles it; set via change event directly
+      fireEvent.change(screen.getByLabelText('Hours played'), { target: { value: '-5' } });
+      fireEvent.change(screen.getByLabelText('Minutes played'), { target: { value: '15' } });
+      await pickPlatform();
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(api.addManualGame).toHaveBeenCalledTimes(1));
+      const body = (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      // Hours clamped to 0, minutes passes through
+      expect(body.manualPlaytimeMinutes).toBe(15);
+    });
+
+    it('[+ add another] collapses the panel and clears playtime drafts', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /more details/i }));
+      fireEvent.change(screen.getByLabelText('Hours played'), { target: { value: '10' } });
+      await pickPlatform();
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(screen.getByText(/added/i)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /add another/i }));
+      // Pick a new game; panel collapsed + drafts cleared
+      await pickFirstResult();
+      const toggle = screen.getByRole('button', { name: /more details/i });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(toggle);
+      expect(screen.getByLabelText('Hours played')).toHaveValue(null);
+      expect(screen.getByLabelText('Minutes played')).toHaveValue(null);
+    });
+  });
 });
