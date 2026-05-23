@@ -496,10 +496,17 @@ router.delete('/platforms/:code', requireUser, requireActive, async (req: Reques
 // stay at their schema defaults (null for mediaType/condition/region,
 // empty array for wishlistedPlatforms).
 //
+// F1-PR3 (2026-05-23) adds optional manualPlaytimeMinutes from the
+// `[+ more details]` panel. When provided, the value seeds
+// playtimeByPlatform[platformLabel] on create instead of the legacy
+// `0` default. Update path is unchanged for playtime — the full
+// silent-merge matrix lands in F1-PR5; for now manual playtime is
+// strictly first-write (synced rows never get clobbered).
+//
 // The upsert still does the minimal status-overwrite-on-update path
 // inherited from before F1 (the full conflict matrix per CM12 + CM13
-// lands in F1-PR5). For F1-PR2 the new fields just flow through to the
-// row when present.
+// lands in F1-PR5). For F1-PR2/PR3 the new fields just flow through
+// to the row when present.
 router.post('/games/manual', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const schema = z.object({
     igdbId: z.number().int().positive(),
@@ -513,6 +520,11 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
     condition: z.enum(['LOOSE', 'CIB', 'SEALED', 'REPLICA', 'GRADED']).optional(),
     region: z.enum(['NTSC_U', 'NTSC_J', 'PAL', 'OTHER']).optional(),
     wishlistedPlatforms: z.array(z.string().min(1).max(50)).max(20).optional(),
+    // F1-PR3 manual playtime — bounded at 10000 hours (600000 min) which
+    // is well above the highest credible single-game count and well below
+    // anything that signals a data-entry mistake worth surfacing. Decimal
+    // values rejected — the modal only emits whole minutes.
+    manualPlaytimeMinutes: z.number().int().min(0).max(600000).optional(),
   });
 
   const parsed = schema.safeParse(req.body);
@@ -521,7 +533,7 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
     return;
   }
 
-  const { igdbId, platformLabel, status, title, developer, coverUrl, mediaType, condition, region, wishlistedPlatforms } = parsed.data;
+  const { igdbId, platformLabel, status, title, developer, coverUrl, mediaType, condition, region, wishlistedPlatforms, manualPlaytimeMinutes } = parsed.data;
 
   const game = await prisma.game.upsert({
     where: { igdbId },
@@ -546,6 +558,10 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
     ...(wishlistedPlatforms !== undefined ? { wishlistedPlatforms } : {}),
   };
 
+  // Seed playtime from manualPlaytimeMinutes when present; fall back to
+  // the legacy `0` so existing callers / older clients keep working.
+  const initialPlaytime = manualPlaytimeMinutes ?? 0;
+
   const userGame = await prisma.userGame.upsert({
     where: { userId_gameId: { userId: req.userId, gameId: game.id } },
     update: { status: prismaStatus, ...optionalFields },
@@ -553,7 +569,7 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
       userId: req.userId,
       gameId: game.id,
       status: prismaStatus,
-      playtimeByPlatform: { [platformLabel]: 0 },
+      playtimeByPlatform: { [platformLabel]: initialPlaytime },
       ...optionalFields,
     },
     include: { game: { include: { hltbData: true } } },

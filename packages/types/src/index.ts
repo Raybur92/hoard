@@ -412,6 +412,14 @@ export interface ManualAddBody {
   // the rare case where the manual-add flow itself supports per-platform
   // wishlist entry (not in PR1 P2 UI).
   wishlistedPlatforms?: string[];
+  // F1-PR3 — optional manual playtime for the picked platform, expressed
+  // in minutes. Closes the S7 "playtime: —" downgrade: without this,
+  // manual-add games render with no playtime forever while synced games
+  // show real hours. When provided, the backend writes the value into
+  // playtimeByPlatform[platformLabel] on UserGame create. Update path
+  // does not touch playtime here (full silent-merge matrix lands in
+  // F1-PR5) — manual playtime is treated as "first-write only" for now.
+  manualPlaytimeMinutes?: number;
 }
 
 /* ── IGDB ── */

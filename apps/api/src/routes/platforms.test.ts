@@ -507,4 +507,114 @@ describe('POST /api/games/manual', () => {
       });
     expect(res.status).toBe(400);
   });
+
+  // F1-PR3 manual playtime — `[+ more details]` panel
+  it('seeds playtimeByPlatform from manualPlaytimeMinutes when provided', async () => {
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-5', igdbId: 55555, title: 'Pokémon Yellow' });
+    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-5', gameId: 'game-5', userId: 'test-user-id' });
+
+    await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 55555,
+        title: 'Pokémon Yellow',
+        platformLabel: 'Game Boy',
+        status: 'Completed',
+        manualPlaytimeMinutes: 1830, // 30h 30m
+      });
+
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          playtimeByPlatform: { 'Game Boy': 1830 },
+        }),
+      }),
+    );
+  });
+
+  it('falls back to legacy 0 playtime when manualPlaytimeMinutes is omitted', async () => {
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-6', igdbId: 66666, title: 'Some Game' });
+    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-6', gameId: 'game-6', userId: 'test-user-id' });
+
+    await request(app)
+      .post('/api/games/manual')
+      .send({ igdbId: 66666, title: 'Some Game', platformLabel: 'Nintendo', status: 'Backlog' });
+
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          playtimeByPlatform: { Nintendo: 0 },
+        }),
+      }),
+    );
+  });
+
+  it('accepts manualPlaytimeMinutes=0 as a valid explicit value (not coerced to fallback)', async () => {
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-7', igdbId: 77777, title: 'Wishlist Game' });
+    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-7', gameId: 'game-7', userId: 'test-user-id' });
+
+    await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 77777,
+        title: 'Wishlist Game',
+        platformLabel: 'PC',
+        status: 'Wishlist',
+        manualPlaytimeMinutes: 0,
+      });
+
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ playtimeByPlatform: { PC: 0 } }),
+      }),
+    );
+  });
+
+  it('rejects negative manualPlaytimeMinutes', async () => {
+    const res = await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 88888, title: 'Bad Playtime', platformLabel: 'PC', status: 'Backlog',
+        manualPlaytimeMinutes: -1,
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects non-integer manualPlaytimeMinutes (Zod .int() — only whole minutes)', async () => {
+    const res = await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 99999, title: 'Bad Playtime', platformLabel: 'PC', status: 'Backlog',
+        manualPlaytimeMinutes: 30.5,
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects manualPlaytimeMinutes above the 600000-min (10000h) ceiling', async () => {
+    const res = await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 100000, title: 'Bad Playtime', platformLabel: 'PC', status: 'Backlog',
+        manualPlaytimeMinutes: 600001,
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it('does NOT touch playtimeByPlatform on the update path (synced playtime survives manual re-add)', async () => {
+    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-8', igdbId: 111111, title: 'Already Owned' });
+    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-8', gameId: 'game-8', userId: 'test-user-id' });
+
+    await request(app)
+      .post('/api/games/manual')
+      .send({
+        igdbId: 111111,
+        title: 'Already Owned',
+        platformLabel: 'PC',
+        status: 'Playing',
+        manualPlaytimeMinutes: 120,
+      });
+
+    const upsertCall = (prisma.userGame.upsert as jest.Mock).mock.calls[0]?.[0];
+    expect(upsertCall.update).not.toHaveProperty('playtimeByPlatform');
+  });
 });
