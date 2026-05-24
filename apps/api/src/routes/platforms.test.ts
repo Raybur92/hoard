@@ -18,7 +18,13 @@ jest.mock('@hoard/db', () => ({
       upsert: jest.fn(),
     },
     userGame: {
+      // F1-PR5 rewrite uses findUnique → create-or-update branching.
+      // The legacy `upsert` mock stays for any pre-PR5 helper that may
+      // still use it; the new methods cover the conflict-matrix path.
       upsert: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
     },
     $queryRaw: jest.fn(),
   },
@@ -390,11 +396,62 @@ describe('POST /api/platforms/:code/sync', () => {
 /* ── POST /api/games/manual ── */
 
 describe('POST /api/games/manual', () => {
+  /**
+   * Helper — build the "full Prisma row" shape that mapUserGame() expects.
+   * The route now returns mapUserGame(userGame) instead of a flat payload,
+   * so every successful test needs prisma.userGame.create / update to
+   * return a row include-shaped object (UserGame + nested .game + hltbData).
+   */
+  function makeUgRow(overrides: {
+    id?: string;
+    status?: string;
+    playtimeByPlatform?: Record<string, number>;
+    gameId?: string;
+    igdbId?: number;
+    title?: string;
+  } = {}) {
+    return {
+      id: overrides.id ?? 'ug-new',
+      userId: 'test-user-id',
+      gameId: overrides.gameId ?? 'game-x',
+      status: overrides.status ?? 'Backlog',
+      playtimeByPlatform: overrides.playtimeByPlatform ?? {},
+      lastPlayedAt: null,
+      notes: null,
+      rating: null,
+      achievementsEarned: null,
+      achievementsTotal: null,
+      achievementsPercent: null,
+      achievementsUpdatedAt: null,
+      mediaType: null,
+      condition: null,
+      region: null,
+      wishlistedPlatforms: [] as string[],
+      addedAt: new Date('2026-05-24T00:00:00Z'),
+      updatedAt: new Date('2026-05-24T00:00:00Z'),
+      game: {
+        id: overrides.gameId ?? 'game-x',
+        igdbId: overrides.igdbId ?? 1234,
+        title: overrides.title ?? 'Test Game',
+        developer: null,
+        releaseYear: null,
+        genres: [],
+        coverUrl: null,
+        steamAppId: null,
+        hltbId: null,
+        gogAppId: null,
+        psnNpCommunicationId: null,
+        hltbData: null,
+      },
+    };
+  }
+
+  // ── Pure Zod validation tests — unaffected by F1-PR5 ──
+
   it('returns 400 when required fields are missing', async () => {
     const res = await request(app)
       .post('/api/games/manual')
       .send({ platformLabel: 'Nintendo' });
-
     expect(res.status).toBe(400);
   });
 
@@ -402,100 +459,7 @@ describe('POST /api/games/manual', () => {
     const res = await request(app)
       .post('/api/games/manual')
       .send({ igdbId: 1234, title: 'Metroid Prime', platformLabel: 'Nintendo', status: 'NotAStatus' });
-
     expect(res.status).toBe(400);
-  });
-
-  it('creates game + userGame records and returns 201 for a Nintendo manual add', async () => {
-    const mockGame = { id: 'game-1', igdbId: 99999, title: 'Metroid Prime' };
-    (prisma.game.upsert as jest.Mock).mockResolvedValue(mockGame);
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-1', gameId: 'game-1', userId: 'test-user-id' });
-
-    const res = await request(app)
-      .post('/api/games/manual')
-      .send({ igdbId: 99999, title: 'Metroid Prime', platformLabel: 'Nintendo', status: 'Backlog' });
-
-    expect(res.status).toBe(201);
-    expect(res.body.igdbId).toBe(99999);
-    expect(res.body.title).toBe('Metroid Prime');
-    expect(res.body.platformLabel).toBe('Nintendo');
-    expect(res.body.status).toBe('Backlog');
-    expect(prisma.game.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { igdbId: 99999 } }),
-    );
-    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({ playtimeByPlatform: { Nintendo: 0 } }),
-      }),
-    );
-  });
-
-  it('maps "On Hold" status to "OnHold" in the database write', async () => {
-    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-2', igdbId: 11111, title: 'Zelda' });
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-2', gameId: 'game-2', userId: 'test-user-id' });
-
-    await request(app)
-      .post('/api/games/manual')
-      .send({ igdbId: 11111, title: 'Zelda', platformLabel: 'Nintendo', status: 'On Hold' });
-
-    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({ status: 'OnHold' }),
-      }),
-    );
-  });
-
-  // F1-PR2 collector-metadata fields per CM2 + CM12
-  it('passes through mediaType + condition + region on the create path when provided', async () => {
-    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-3', igdbId: 22222, title: 'Pokémon Red' });
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-3', gameId: 'game-3', userId: 'test-user-id' });
-
-    await request(app)
-      .post('/api/games/manual')
-      .send({
-        igdbId: 22222,
-        title: 'Pokémon Red',
-        platformLabel: 'Game Boy',
-        status: 'Backlog',
-        mediaType: 'PHYSICAL',
-        condition: 'LOOSE',
-        region: 'PAL',
-      });
-
-    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          status: 'Backlog',
-          mediaType: 'PHYSICAL',
-          condition: 'LOOSE',
-          region: 'PAL',
-        }),
-        update: expect.objectContaining({
-          mediaType: 'PHYSICAL',
-          condition: 'LOOSE',
-          region: 'PAL',
-        }),
-      }),
-    );
-  });
-
-  it('omits optional fields from upsert payload when not provided (avoids overwriting existing values with undefined)', async () => {
-    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-4', igdbId: 33333, title: 'Some Game' });
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-4', gameId: 'game-4', userId: 'test-user-id' });
-
-    await request(app)
-      .post('/api/games/manual')
-      .send({ igdbId: 33333, title: 'Some Game', platformLabel: 'PC', status: 'Backlog' });
-
-    const upsertCall = (prisma.userGame.upsert as jest.Mock).mock.calls[0]?.[0];
-    expect(upsertCall.create).not.toHaveProperty('mediaType');
-    expect(upsertCall.create).not.toHaveProperty('condition');
-    expect(upsertCall.create).not.toHaveProperty('region');
-    expect(upsertCall.create).not.toHaveProperty('wishlistedPlatforms');
-    expect(upsertCall.update).not.toHaveProperty('mediaType');
-    expect(upsertCall.update).not.toHaveProperty('condition');
-    expect(upsertCall.update).not.toHaveProperty('region');
-    expect(upsertCall.update).not.toHaveProperty('wishlistedPlatforms');
   });
 
   it('rejects invalid mediaType values (Zod schema enforces the 2-value enum)', async () => {
@@ -503,71 +467,9 @@ describe('POST /api/games/manual', () => {
       .post('/api/games/manual')
       .send({
         igdbId: 44444, title: 'Bad Media', platformLabel: 'PC', status: 'Backlog',
-        mediaType: 'PHYSICAL_DISC', // old 4-value enum value — no longer accepted
+        mediaType: 'PHYSICAL_DISC',
       });
     expect(res.status).toBe(400);
-  });
-
-  // F1-PR3 manual playtime — `[+ more details]` panel
-  it('seeds playtimeByPlatform from manualPlaytimeMinutes when provided', async () => {
-    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-5', igdbId: 55555, title: 'Pokémon Yellow' });
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-5', gameId: 'game-5', userId: 'test-user-id' });
-
-    await request(app)
-      .post('/api/games/manual')
-      .send({
-        igdbId: 55555,
-        title: 'Pokémon Yellow',
-        platformLabel: 'Game Boy',
-        status: 'Completed',
-        manualPlaytimeMinutes: 1830, // 30h 30m
-      });
-
-    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          playtimeByPlatform: { 'Game Boy': 1830 },
-        }),
-      }),
-    );
-  });
-
-  it('falls back to legacy 0 playtime when manualPlaytimeMinutes is omitted', async () => {
-    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-6', igdbId: 66666, title: 'Some Game' });
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-6', gameId: 'game-6', userId: 'test-user-id' });
-
-    await request(app)
-      .post('/api/games/manual')
-      .send({ igdbId: 66666, title: 'Some Game', platformLabel: 'Nintendo', status: 'Backlog' });
-
-    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          playtimeByPlatform: { Nintendo: 0 },
-        }),
-      }),
-    );
-  });
-
-  it('accepts manualPlaytimeMinutes=0 as a valid explicit value (not coerced to fallback)', async () => {
-    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-7', igdbId: 77777, title: 'Wishlist Game' });
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-7', gameId: 'game-7', userId: 'test-user-id' });
-
-    await request(app)
-      .post('/api/games/manual')
-      .send({
-        igdbId: 77777,
-        title: 'Wishlist Game',
-        platformLabel: 'PC',
-        status: 'Wishlist',
-        manualPlaytimeMinutes: 0,
-      });
-
-    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({ playtimeByPlatform: { PC: 0 } }),
-      }),
-    );
   });
 
   it('rejects negative manualPlaytimeMinutes', async () => {
@@ -580,7 +482,7 @@ describe('POST /api/games/manual', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejects non-integer manualPlaytimeMinutes (Zod .int() — only whole minutes)', async () => {
+  it('rejects non-integer manualPlaytimeMinutes (Zod .int())', async () => {
     const res = await request(app)
       .post('/api/games/manual')
       .send({
@@ -590,7 +492,7 @@ describe('POST /api/games/manual', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejects manualPlaytimeMinutes above the 600000-min (10000h) ceiling', async () => {
+  it('rejects manualPlaytimeMinutes above the 600000-min ceiling', async () => {
     const res = await request(app)
       .post('/api/games/manual')
       .send({
@@ -600,21 +502,337 @@ describe('POST /api/games/manual', () => {
     expect(res.status).toBe(400);
   });
 
-  it('does NOT touch playtimeByPlatform on the update path (synced playtime survives manual re-add)', async () => {
-    (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-8', igdbId: 111111, title: 'Already Owned' });
-    (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-8', gameId: 'game-8', userId: 'test-user-id' });
+  // ── CREATE PATH (no existing UserGame — matrix rows 1+2) ──
 
-    await request(app)
-      .post('/api/games/manual')
-      .send({
-        igdbId: 111111,
-        title: 'Already Owned',
-        platformLabel: 'PC',
-        status: 'Playing',
-        manualPlaytimeMinutes: 120,
+  describe('CREATE path (no existing UserGame)', () => {
+    beforeEach(() => {
+      // Default: no existing UserGame.
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(null);
+    });
+
+    it('owned + P: creates UserGame with playtimeByPlatform={P: 0} and returns 201 (Row 1)', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-1', igdbId: 99999, title: 'Metroid Prime' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({
+        id: 'ug-1', gameId: 'game-1', igdbId: 99999, title: 'Metroid Prime',
+        status: 'Backlog', playtimeByPlatform: { Nintendo: 0 },
+      }));
+
+      const res = await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 99999, title: 'Metroid Prime', platformLabel: 'Nintendo', status: 'Backlog' });
+
+      expect(res.status).toBe(201);
+      // Response is the full mapUserGame() shape — userGameId at res.body.id,
+      // game data nested under res.body.game.
+      expect(res.body.id).toBe('ug-1');
+      expect(res.body.game.igdbId).toBe(99999);
+      expect(res.body.game.title).toBe('Metroid Prime');
+      expect(res.body.status).toBe('Backlog');
+      expect(prisma.userGame.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'Backlog',
+            playtimeByPlatform: { Nintendo: 0 },
+          }),
+        }),
+      );
+      expect(prisma.userGame.update).not.toHaveBeenCalled();
+    });
+
+    it('wishlist: creates UserGame with status=Wishlist + EMPTY playtimeByPlatform per CM13 (Row 2)', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-w', igdbId: 77777, title: 'Future Game' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({
+        id: 'ug-w', gameId: 'game-w', igdbId: 77777, title: 'Future Game',
+        status: 'Wishlist', playtimeByPlatform: {},
+      }));
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 77777, title: 'Future Game', platformLabel: 'PC', status: 'Wishlist' });
+
+      expect(prisma.userGame.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'Wishlist',
+            // CM13: wishlist creates carry NO platform binding.
+            playtimeByPlatform: {},
+          }),
+        }),
+      );
+    });
+
+    it('wishlist: ignores manualPlaytimeMinutes (wishlist has no platform binding)', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-w2', igdbId: 77778, title: 'Future Game' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({
+        id: 'ug-w2', status: 'Wishlist', playtimeByPlatform: {},
+      }));
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 77778, title: 'Future Game', platformLabel: 'PC', status: 'Wishlist', manualPlaytimeMinutes: 1830 });
+
+      // The 1830 from manualPlaytimeMinutes does NOT flow into playtimeByPlatform
+      // — wishlist creates always get {}.
+      const createCall = (prisma.userGame.create as jest.Mock).mock.calls[0]?.[0];
+      expect(createCall.data.playtimeByPlatform).toEqual({});
+    });
+
+    it('maps "On Hold" status to "OnHold" Prisma enum on create', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-2', igdbId: 11111, title: 'Zelda' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({ id: 'ug-2', status: 'OnHold' }));
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 11111, title: 'Zelda', platformLabel: 'Nintendo', status: 'On Hold' });
+
+      expect(prisma.userGame.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'OnHold' }) }),
+      );
+    });
+
+    // F1-PR2 collector-metadata fields per CM2 + CM12
+    it('passes mediaType + condition + region through on create when provided', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-3', igdbId: 22222, title: 'Pokémon Red' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({ id: 'ug-3' }));
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({
+          igdbId: 22222, title: 'Pokémon Red', platformLabel: 'Game Boy', status: 'Backlog',
+          mediaType: 'PHYSICAL', condition: 'LOOSE', region: 'PAL',
+        });
+
+      expect(prisma.userGame.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            mediaType: 'PHYSICAL', condition: 'LOOSE', region: 'PAL',
+          }),
+        }),
+      );
+    });
+
+    it('omits optional fields from create payload when not provided', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-4', igdbId: 33333, title: 'Some Game' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({ id: 'ug-4' }));
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 33333, title: 'Some Game', platformLabel: 'PC', status: 'Backlog' });
+
+      const createCall = (prisma.userGame.create as jest.Mock).mock.calls[0]?.[0];
+      expect(createCall.data).not.toHaveProperty('mediaType');
+      expect(createCall.data).not.toHaveProperty('condition');
+      expect(createCall.data).not.toHaveProperty('region');
+      expect(createCall.data).not.toHaveProperty('wishlistedPlatforms');
+    });
+
+    // F1-PR3 manual playtime
+    it('seeds playtimeByPlatform from manualPlaytimeMinutes when provided (owned create)', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-5', igdbId: 55555, title: 'Pokémon Yellow' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({ id: 'ug-5' }));
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({
+          igdbId: 55555, title: 'Pokémon Yellow', platformLabel: 'Game Boy',
+          status: 'Completed', manualPlaytimeMinutes: 1830,
+        });
+
+      expect(prisma.userGame.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ playtimeByPlatform: { 'Game Boy': 1830 } }),
+        }),
+      );
+    });
+
+    it('falls back to playtimeByPlatform={P: 0} when manualPlaytimeMinutes omitted', async () => {
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-6', igdbId: 66666, title: 'Some Game' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(makeUgRow({ id: 'ug-6' }));
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 66666, title: 'Some Game', platformLabel: 'Nintendo', status: 'Backlog' });
+
+      expect(prisma.userGame.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ playtimeByPlatform: { Nintendo: 0 } }),
+        }),
+      );
+    });
+  });
+
+  // ── UPDATE PATH — F1-PR5 CM12 + CM13 conflict matrix (Rows 3–6) ──
+
+  describe('UPDATE path (existing UserGame — F1-PR5 conflict matrix)', () => {
+    it('Row 3: existing owned, P already in playtimeByPlatform, new=owned → no-op on playtime', async () => {
+      const existing = makeUgRow({
+        id: 'ug-r3', gameId: 'game-r3', status: 'Playing',
+        playtimeByPlatform: { PC: 300 },
       });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-r3', igdbId: 333, title: 'Already Owned' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
 
-    const upsertCall = (prisma.userGame.upsert as jest.Mock).mock.calls[0]?.[0];
-    expect(upsertCall.update).not.toHaveProperty('playtimeByPlatform');
+      const res = await request(app)
+        .post('/api/games/manual')
+        .send({
+          igdbId: 333, title: 'Already Owned', platformLabel: 'PC', status: 'Playing',
+          manualPlaytimeMinutes: 60, // would seed if P were new
+        });
+
+      expect(res.status).toBe(200); // 200 on merge, not 201
+      // Update happens but playtimeByPlatform is NOT in the data payload
+      // (no-op on playtime when P is already a key).
+      const updateCall = (prisma.userGame.update as jest.Mock).mock.calls[0]?.[0];
+      expect(updateCall.data).not.toHaveProperty('playtimeByPlatform');
+      expect(prisma.userGame.create).not.toHaveBeenCalled();
+    });
+
+    it('Row 4: existing owned, P NOT in playtimeByPlatform, new=owned → merges P in', async () => {
+      const existing = makeUgRow({
+        id: 'ug-r4', gameId: 'game-r4', status: 'Playing',
+        playtimeByPlatform: { ST: 500 },
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-r4', igdbId: 444, title: 'Multi-Platform Game' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({
+          igdbId: 444, title: 'Multi-Platform Game', platformLabel: 'PS', status: 'Playing',
+          manualPlaytimeMinutes: 120,
+        });
+
+      const updateCall = (prisma.userGame.update as jest.Mock).mock.calls[0]?.[0];
+      // Existing ST playtime preserved + new PS key added with the manual minutes.
+      expect(updateCall.data.playtimeByPlatform).toEqual({ ST: 500, PS: 120 });
+    });
+
+    it('Row 5: existing status=Wishlist + new=owned with playtime → CM13 auto-promote to OnHold (overrides user status pick)', async () => {
+      const existing = makeUgRow({
+        id: 'ug-r5', gameId: 'game-r5', status: 'Wishlist',
+        playtimeByPlatform: {},
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-r5', igdbId: 555, title: 'Was Wishlisted' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({
+          igdbId: 555, title: 'Was Wishlisted', platformLabel: 'PC',
+          // User picked 'Playing' but CM13 auto-promote overrides to OnHold/Backlog.
+          status: 'Playing', manualPlaytimeMinutes: 60,
+        });
+
+      const updateCall = (prisma.userGame.update as jest.Mock).mock.calls[0]?.[0];
+      // Auto-promoted to OnHold because merged playtime (60) > 0.
+      expect(updateCall.data.status).toBe('OnHold');
+      // Playtime merged.
+      expect(updateCall.data.playtimeByPlatform).toEqual({ PC: 60 });
+    });
+
+    it('Row 5b: existing status=Wishlist + new=owned with NO playtime → CM13 auto-promote to Backlog', async () => {
+      const existing = makeUgRow({
+        id: 'ug-r5b', gameId: 'game-r5b', status: 'Wishlist',
+        playtimeByPlatform: {},
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-r5b', igdbId: 556, title: 'Was Wishlisted 2' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({
+          igdbId: 556, title: 'Was Wishlisted 2', platformLabel: 'Switch', status: 'Backlog',
+          // No manualPlaytimeMinutes → incoming playtime is 0
+        });
+
+      const updateCall = (prisma.userGame.update as jest.Mock).mock.calls[0]?.[0];
+      // Auto-promoted to Backlog because merged playtime is 0.
+      expect(updateCall.data.status).toBe('Backlog');
+      expect(updateCall.data.playtimeByPlatform).toEqual({ Switch: 0 });
+    });
+
+    it('Row 6: existing status=Backlog + new=Wishlist → no-op on status (respects library decision)', async () => {
+      const existing = makeUgRow({
+        id: 'ug-r6', gameId: 'game-r6', status: 'Backlog',
+        playtimeByPlatform: { PC: 100 },
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-r6', igdbId: 666, title: 'Already In Library' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 666, title: 'Already In Library', platformLabel: 'PC', status: 'Wishlist' });
+
+      const updateCall = (prisma.userGame.update as jest.Mock).mock.calls[0]?.[0];
+      // No status field in the update — the existing Backlog state survives.
+      expect(updateCall.data).not.toHaveProperty('status');
+      // Wishlist input doesn't touch playtime either.
+      expect(updateCall.data).not.toHaveProperty('playtimeByPlatform');
+    });
+
+    it('Row 5c: existing status=Wishlist + new=Wishlist → no-op on status (already wishlisted)', async () => {
+      const existing = makeUgRow({
+        id: 'ug-r5c', gameId: 'game-r5c', status: 'Wishlist',
+        playtimeByPlatform: {},
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-r5c', igdbId: 557, title: 'Still Wishlisted' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 557, title: 'Still Wishlisted', platformLabel: 'PC', status: 'Wishlist' });
+
+      const updateCall = (prisma.userGame.update as jest.Mock).mock.calls[0]?.[0];
+      expect(updateCall.data).not.toHaveProperty('status');
+    });
+
+    it('Rows 3+4: user can bump status on a non-Wishlist re-add (Backlog → Playing)', async () => {
+      // User had it on Backlog with no playtime; now re-adding as Playing
+      // means they're starting it. Per CM12, user's explicit status pick wins
+      // for non-Wishlist existing rows.
+      const existing = makeUgRow({
+        id: 'ug-bump', gameId: 'game-bump', status: 'Backlog',
+        playtimeByPlatform: { PC: 0 },
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-bump', igdbId: 700, title: 'Starting Now' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 700, title: 'Starting Now', platformLabel: 'PC', status: 'Playing' });
+
+      const updateCall = (prisma.userGame.update as jest.Mock).mock.calls[0]?.[0];
+      expect(updateCall.data.status).toBe('Playing');
+    });
+
+    it('returns the full UserGameDetail shape (with userGameId at body.id) on merge', async () => {
+      const existing = makeUgRow({
+        id: 'ug-shape', gameId: 'game-shape', status: 'Backlog',
+        playtimeByPlatform: { PC: 50 },
+        igdbId: 800, title: 'Shape Check',
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-shape', igdbId: 800, title: 'Shape Check' });
+      (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(existing);
+
+      const res = await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 800, title: 'Shape Check', platformLabel: 'PC', status: 'Backlog' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe('ug-shape');
+      expect(res.body.gameId).toBe('game-shape');
+      expect(res.body.game.igdbId).toBe(800);
+      expect(res.body.status).toBe('Backlog');
+      // wishlistedPlatforms is in the UserGameDetail shape too.
+      expect(res.body.wishlistedPlatforms).toEqual([]);
+    });
   });
 });

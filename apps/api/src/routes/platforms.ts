@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@hoard/db';
 import type { PlatformCode as PrismaCode, GameStatus as PrismaGameStatus } from '@hoard/db';
 import { requireUser } from '../middleware/user';
 import { requireActive } from '../middleware/active';
-import type { PlatformStatusResponse, PlatformDetail, ManualAddBody, PlatformLogResponse, PlatformLogEntry } from '@hoard/types';
+import type { PlatformStatusResponse, PlatformDetail, PlatformLogResponse, PlatformLogEntry } from '@hoard/types';
+import { mapUserGame } from '../lib/mappers';
+import { promoteWishlistOnOwnership } from '../lib/promoteWishlist';
 import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
@@ -490,23 +493,27 @@ router.delete('/platforms/:code', requireUser, requireActive, async (req: Reques
 
 // POST /api/games/manual — manually add a game
 //
-// F1-PR2 (2026-05-22) extends the schema with collector-metadata fields
-// from the new modal: mediaType, condition, region, wishlistedPlatforms.
-// All are optional — when omitted, the corresponding UserGame columns
-// stay at their schema defaults (null for mediaType/condition/region,
-// empty array for wishlistedPlatforms).
+// F1-PR2 (2026-05-22) added collector-metadata fields (mediaType /
+// condition / region / wishlistedPlatforms). F1-PR3 (2026-05-23) added
+// optional manualPlaytimeMinutes from the [+ more details] panel.
 //
-// F1-PR3 (2026-05-23) adds optional manualPlaytimeMinutes from the
-// `[+ more details]` panel. When provided, the value seeds
-// playtimeByPlatform[platformLabel] on create instead of the legacy
-// `0` default. Update path is unchanged for playtime — the full
-// silent-merge matrix lands in F1-PR5; for now manual playtime is
-// strictly first-write (synced rows never get clobbered).
+// F1-PR5 (2026-05-23) replaces the naive overwrite-on-update upsert with
+// the full CM12 + CM13 conflict matrix per docs/INTERACTION_FLOW.md §3.2.
+// Six rows summarised:
+//   1. No existing row + new owned        → create with playtime on P
+//   2. No existing row + new wishlist     → create status=Wishlist, empty playtime
+//   3. Existing, P already in playtime, new owned    → no-op on playtime, status from new
+//   4. Existing, P not in playtime, new owned        → merge P into playtime, status from new
+//   5. Existing status=Wishlist, new owned (ANY P)   → CM13 auto-promote via promoteWishlistOnOwnership(); user's status pick is overridden by the policy (OnHold if total playtime > 0, else Backlog)
+//   6. Existing status ≠ Wishlist, new wishlist      → no-op on status (respect user's library decision)
 //
-// The upsert still does the minimal status-overwrite-on-update path
-// inherited from before F1 (the full conflict matrix per CM12 + CM13
-// lands in F1-PR5). For F1-PR2/PR3 the new fields just flow through
-// to the row when present.
+// wishlistedPlatforms is NEVER auto-populated here — per CM13 it's a
+// GameDetail-only collector affordance. The endpoint accepts an explicit
+// wishlistedPlatforms field for future use, but no flow in F1 sets it.
+//
+// Response is the full mapUserGame() shape (UserGameDetail) so the
+// frontend success summary can carry the userGameId into F1-PR6's
+// [+ rate / note] deep-link without a refetch.
 router.post('/games/manual', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const schema = z.object({
     igdbId: z.number().int().positive(),
@@ -547,6 +554,7 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
   });
 
   const prismaStatus = (status === 'On Hold' ? 'OnHold' : status) as PrismaGameStatus;
+  const newIsWishlist = prismaStatus === 'Wishlist';
 
   // Optional-field passthrough — only included in the upsert payload when
   // the request actually provided them. Avoids accidentally overwriting an
@@ -559,31 +567,84 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
   };
 
   // Seed playtime from manualPlaytimeMinutes when present; fall back to
-  // the legacy `0` so existing callers / older clients keep working.
-  const initialPlaytime = manualPlaytimeMinutes ?? 0;
+  // the legacy `0`. Wishlist creates carry no platform (per CM13 the
+  // platform binding only happens on owned-status creation).
+  const incomingPlaytime = manualPlaytimeMinutes ?? 0;
 
-  const userGame = await prisma.userGame.upsert({
+  // F1-PR5 conflict matrix begins here. Fetch the existing UserGame
+  // first so we can branch on the 6 rows. findUnique on the composite
+  // unique key is the single SQL round-trip we need for this.
+  const existing = await prisma.userGame.findUnique({
     where: { userId_gameId: { userId: req.userId, gameId: game.id } },
-    update: { status: prismaStatus, ...optionalFields },
-    create: {
-      userId: req.userId,
-      gameId: game.id,
-      status: prismaStatus,
-      playtimeByPlatform: { [platformLabel]: initialPlaytime },
-      ...optionalFields,
-    },
-    include: { game: { include: { hltbData: true } } },
   });
 
-  res.status(201).json({
-    id: userGame.id,
-    igdbId: game.igdbId,
-    title: game.title,
-    gameId: game.id,
-    userId: req.userId,
-    platformLabel,
-    status,
-  } satisfies ManualAddBody & { id: string; gameId: string; userId: string });
+  let userGame: Prisma.UserGameGetPayload<{ include: { game: { include: { hltbData: true } } } }>;
+
+  if (!existing) {
+    // Rows 1 + 2 — no existing row, plain create.
+    userGame = await prisma.userGame.create({
+      data: {
+        userId: req.userId,
+        gameId: game.id,
+        status: prismaStatus,
+        // Wishlist creates carry empty playtime per CM13; owned creates
+        // seed the picked platform with the (optional) manual playtime.
+        playtimeByPlatform: newIsWishlist ? {} : { [platformLabel]: incomingPlaytime },
+        ...optionalFields,
+      },
+      include: { game: { include: { hltbData: true } } },
+    });
+  } else {
+    // Rows 3–6 — merge into existing row per the matrix.
+    const existingPlaytime = (existing.playtimeByPlatform ?? {}) as Record<string, number>;
+
+    // Compute the merged playtime first — only changes on owned input.
+    let nextPlaytime: Record<string, number> = existingPlaytime;
+    let touchedPlaytime = false;
+    if (!newIsWishlist && !(platformLabel in existingPlaytime)) {
+      // Row 4 — add the new platform. Row 3 (P already in playtime) is
+      // a no-op on the playtime field, so we skip the write entirely.
+      nextPlaytime = { ...existingPlaytime, [platformLabel]: incomingPlaytime };
+      touchedPlaytime = true;
+    }
+
+    // Compute the next status per CM13 + the matrix.
+    let nextStatus: PrismaGameStatus | undefined;
+    if (newIsWishlist) {
+      // Row 6 (existing ≠ Wishlist + new=wishlist) → no-op on status.
+      // Row 5b (existing=Wishlist + new=Wishlist) → also no-op.
+      nextStatus = undefined;
+    } else if (existing.status === 'Wishlist') {
+      // Row 5 — CM13 auto-promote. The user's status pick is
+      // overridden by the policy; the new status reflects whether
+      // there's any playtime evidence post-merge. Use the merged
+      // playtime so manualPlaytimeMinutes flows in correctly.
+      const totalMergedPlaytime = Object.values(nextPlaytime).reduce<number>(
+        (sum, m) => sum + (m ?? 0), 0,
+      );
+      nextStatus = promoteWishlistOnOwnership(existing.status, totalMergedPlaytime);
+    } else {
+      // Rows 3 + 4 — existing is a library row, new is owned. User's
+      // explicit status pick wins (they may be bumping Backlog → Playing
+      // on a re-add).
+      nextStatus = prismaStatus;
+    }
+
+    userGame = await prisma.userGame.update({
+      where: { id: existing.id },
+      data: {
+        ...(nextStatus !== undefined ? { status: nextStatus } : {}),
+        ...(touchedPlaytime ? { playtimeByPlatform: nextPlaytime } : {}),
+        ...optionalFields,
+      },
+      include: { game: { include: { hltbData: true } } },
+    });
+  }
+
+  // 201 on net-new UserGame, 200 when we merged into an existing row.
+  // The full UserGameDetail shape lets the frontend P5 summary build
+  // F1-PR6's [+ rate / note] deep-link directly off the response.
+  res.status(existing ? 200 : 201).json(mapUserGame(userGame));
 });
 
 export default router;
