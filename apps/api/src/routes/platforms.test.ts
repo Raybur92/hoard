@@ -26,8 +26,22 @@ jest.mock('@hoard/db', () => ({
       create: jest.fn(),
       update: jest.fn(),
     },
+    // F1-PR5 OQ-F1-5: wishlist create wraps userGame + wishlistRelease
+    // creation in a transaction. Mock $transaction to execute the
+    // callback against a tx that proxies to the same prisma mocks.
+    wishlistRelease: {
+      create: jest.fn(),
+    },
+    $transaction: jest.fn(),
     $queryRaw: jest.fn(),
   },
+}));
+
+// F1-PR5 OQ-F1-5: wishlist-create path calls getReleaseDetails to enrich
+// the WishlistRelease row. Mock it at module level so tests can override
+// per-case.
+jest.mock('../services/igdb', () => ({
+  getReleaseDetails: jest.fn(),
 }));
 
 jest.mock('../middleware/user', () => ({
@@ -44,6 +58,7 @@ jest.mock('../middleware/active', () => ({
 
 import { app } from '../index';
 import { prisma } from '@hoard/db';
+import { getReleaseDetails } from '../services/igdb';
 
 const NPSSO_64 = 'A'.repeat(64);
 
@@ -659,6 +674,118 @@ describe('POST /api/games/manual', () => {
         }),
       );
     });
+
+    // ── F1-PR5 OQ-F1-5: atomic WishlistRelease creation ──
+
+    it('OQ-F1-5: wishlist create with IGDB release data → userGame + WishlistRelease inside $transaction', async () => {
+      const ugRow = makeUgRow({
+        id: 'ug-wl-1', gameId: 'game-wl-1', igdbId: 88888,
+        title: 'Future Hype', status: 'Wishlist', playtimeByPlatform: {},
+      });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-wl-1', igdbId: 88888, title: 'Future Hype' });
+      (getReleaseDetails as jest.Mock).mockResolvedValue({
+        igdbId: 88888,
+        title: 'Future Hype',
+        developer: 'Mega Crit',
+        releaseDate: '2027-03-15T00:00:00.000Z',
+        releaseDateCategory: 'date',
+        platforms: ['PC', 'PS5'],
+        genres: ['Card Game'],
+        coverUrl: 'https://images.igdb.com/cover.jpg',
+        synopsis: 'A future game.',
+        hype: 95,
+        category: 0,
+      });
+
+      // $transaction is invoked with a callback; mock it to run the callback
+      // against a tx proxy that reuses our existing prisma mocks.
+      const txCreate = jest.fn().mockResolvedValue(ugRow);
+      const txWlCreate = jest.fn().mockResolvedValue({ id: 'wl-1', igdbId: 88888 });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => {
+        return await cb({
+          userGame: { create: txCreate },
+          wishlistRelease: { create: txWlCreate },
+        });
+      });
+
+      const res = await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 88888, title: 'Future Hype', platformLabel: 'PC', status: 'Wishlist' });
+
+      expect(res.status).toBe(201);
+      expect(getReleaseDetails).toHaveBeenCalledWith(88888);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      // Both writes happened inside the transaction.
+      expect(txCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'Wishlist', playtimeByPlatform: {} }),
+        }),
+      );
+      expect(txWlCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'test-user-id',
+            igdbId: 88888,
+            title: 'Future Hype',
+            developer: 'Mega Crit',
+            releaseDateCategory: 'date',
+            platforms: ['PC', 'PS5'],
+            hype: 95,
+          }),
+        }),
+      );
+      // No fallback path triggered.
+      expect(prisma.userGame.create).not.toHaveBeenCalled();
+    });
+
+    it('OQ-F1-5 graceful degradation: wishlist create with IGDB returning null → only userGame.create, no WishlistRelease', async () => {
+      const ugRow = makeUgRow({ id: 'ug-wl-2', status: 'Wishlist', playtimeByPlatform: {} });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-wl-2', igdbId: 88889, title: 'Retro Game' });
+      (getReleaseDetails as jest.Mock).mockResolvedValue(null);
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(ugRow);
+
+      const res = await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 88889, title: 'Retro Game', platformLabel: 'PC', status: 'Wishlist' });
+
+      expect(res.status).toBe(201);
+      expect(getReleaseDetails).toHaveBeenCalledWith(88889);
+      // No transaction opened — fallback path used plain create.
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.userGame.create).toHaveBeenCalledTimes(1);
+      expect(prisma.wishlistRelease.create).not.toHaveBeenCalled();
+    });
+
+    it('OQ-F1-5 graceful degradation: wishlist create with IGDB throwing → still creates UserGame', async () => {
+      const ugRow = makeUgRow({ id: 'ug-wl-3', status: 'Wishlist', playtimeByPlatform: {} });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-wl-3', igdbId: 88890, title: 'Unreachable' });
+      (getReleaseDetails as jest.Mock).mockRejectedValue(new Error('IGDB 500'));
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(ugRow);
+
+      const res = await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 88890, title: 'Unreachable', platformLabel: 'PC', status: 'Wishlist' });
+
+      expect(res.status).toBe(201);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.userGame.create).toHaveBeenCalledTimes(1);
+      expect(prisma.wishlistRelease.create).not.toHaveBeenCalled();
+    });
+
+    it('OQ-F1-5: owned create does NOT call getReleaseDetails (no WishlistRelease on owned path)', async () => {
+      const ugRow = makeUgRow({ id: 'ug-owned', status: 'Playing' });
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-owned', igdbId: 9090, title: 'Owned' });
+      (prisma.userGame.create as jest.Mock).mockResolvedValue(ugRow);
+
+      await request(app)
+        .post('/api/games/manual')
+        .send({ igdbId: 9090, title: 'Owned', platformLabel: 'PC', status: 'Playing' });
+
+      // Owned path skips IGDB release lookup entirely.
+      expect(getReleaseDetails).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.wishlistRelease.create).not.toHaveBeenCalled();
+    });
   });
 
   // ── UPDATE PATH — F1-PR5 CM12 + CM13 conflict matrix (Rows 3–6) ──
@@ -773,6 +900,10 @@ describe('POST /api/games/manual', () => {
       expect(updateCall.data).not.toHaveProperty('status');
       // Wishlist input doesn't touch playtime either.
       expect(updateCall.data).not.toHaveProperty('playtimeByPlatform');
+      // OQ-F1-5 — update path never creates a WishlistRelease (only the
+      // create+wishlist combo does, per the matrix).
+      expect(getReleaseDetails).not.toHaveBeenCalled();
+      expect(prisma.wishlistRelease.create).not.toHaveBeenCalled();
     });
 
     it('Row 5c: existing status=Wishlist + new=Wishlist → no-op on status (already wishlisted)', async () => {

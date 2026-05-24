@@ -9,6 +9,7 @@ import { requireActive } from '../middleware/active';
 import type { PlatformStatusResponse, PlatformDetail, PlatformLogResponse, PlatformLogEntry } from '@hoard/types';
 import { mapUserGame } from '../lib/mappers';
 import { promoteWishlistOnOwnership } from '../lib/promoteWishlist';
+import { getReleaseDetails } from '../services/igdb';
 import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
@@ -581,19 +582,78 @@ router.post('/games/manual', requireUser, requireActive, async (req: Request, re
   let userGame: Prisma.UserGameGetPayload<{ include: { game: { include: { hltbData: true } } } }>;
 
   if (!existing) {
-    // Rows 1 + 2 — no existing row, plain create.
-    userGame = await prisma.userGame.create({
-      data: {
-        userId: req.userId,
-        gameId: game.id,
-        status: prismaStatus,
-        // Wishlist creates carry empty playtime per CM13; owned creates
-        // seed the picked platform with the (optional) manual playtime.
-        playtimeByPlatform: newIsWishlist ? {} : { [platformLabel]: incomingPlaytime },
-        ...optionalFields,
-      },
-      include: { game: { include: { hltbData: true } } },
-    });
+    // Rows 1 + 2 — no existing row.
+    //
+    // F1-PR5 OQ-F1-5 — when row 2 fires (status=Wishlist), also create
+    // a WishlistRelease atomically so the Releases page wishlist feed
+    // + hero countdown + agenda surfaces pick this game up. Mirrors the
+    // wishlist-toggle endpoint pattern (decision #29).
+    //
+    // IGDB lookup is best-effort: if getReleaseDetails returns null
+    // (game not in IGDB or release date missing) or throws (IGDB
+    // unreachable / rate-limited), we degrade gracefully and skip the
+    // WishlistRelease — the user still gets their UserGame(Wishlist)
+    // row; the Releases page just won't surface it until a future
+    // path populates the release row.
+    const userGameCreatePayload = {
+      userId: req.userId,
+      gameId: game.id,
+      status: prismaStatus,
+      // Wishlist creates carry empty playtime per CM13; owned creates
+      // seed the picked platform with the (optional) manual playtime.
+      playtimeByPlatform: newIsWishlist ? {} : { [platformLabel]: incomingPlaytime },
+      ...optionalFields,
+    };
+
+    if (newIsWishlist) {
+      // Try IGDB release details before opening the transaction so a slow
+      // IGDB call doesn't hold a DB transaction open longer than needed.
+      let igdbRelease: Awaited<ReturnType<typeof getReleaseDetails>> = null;
+      try {
+        igdbRelease = await getReleaseDetails(igdbId);
+      } catch {
+        igdbRelease = null;
+      }
+
+      if (igdbRelease) {
+        userGame = await prisma.$transaction(async (tx) => {
+          const ug = await tx.userGame.create({
+            data: userGameCreatePayload,
+            include: { game: { include: { hltbData: true } } },
+          });
+          await tx.wishlistRelease.create({
+            data: {
+              userId: req.userId,
+              igdbId,
+              title: igdbRelease!.title,
+              developer: igdbRelease!.developer,
+              releaseDate: igdbRelease!.releaseDate ? new Date(igdbRelease!.releaseDate) : null,
+              releaseDateCategory: igdbRelease!.releaseDateCategory,
+              platforms: igdbRelease!.platforms,
+              genres: igdbRelease!.genres,
+              coverUrl: igdbRelease!.coverUrl,
+              synopsis: igdbRelease!.synopsis,
+              hype: igdbRelease!.hype,
+              category: igdbRelease!.category,
+            },
+          });
+          return ug;
+        });
+      } else {
+        // IGDB lookup failed/empty — UserGame still gets created; Releases
+        // page just won't surface this row.
+        userGame = await prisma.userGame.create({
+          data: userGameCreatePayload,
+          include: { game: { include: { hltbData: true } } },
+        });
+      }
+    } else {
+      // Row 1 — owned create. No WishlistRelease.
+      userGame = await prisma.userGame.create({
+        data: userGameCreatePayload,
+        include: { game: { include: { hltbData: true } } },
+      });
+    }
   } else {
     // Rows 3–6 — merge into existing row per the matrix.
     const existingPlaytime = (existing.playtimeByPlatform ?? {}) as Record<string, number>;
