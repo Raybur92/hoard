@@ -15,19 +15,31 @@
 // - region chip strip (NTSC-U | NTSC-J | PAL | OTHER)
 // condition + region only render when mediaType=PHYSICAL.
 //
-// F1-PR3 (this PR) — adds the optional [+ more details ▼] panel below
-// the collector strips:
+// F1-PR3 — adds the optional [+ more details ▼] panel below the
+// collector strips:
 // - manual playtime (hours + minutes inputs) — folds into
 //   playtimeByPlatform[platformLabel] on the backend (S7 close).
 // - times beaten — architectural placeholder only; copy reads
 //   "// coming soon · v2". Schema decision deferred per Andrea 2026-05-22.
 //
-// NOT in F1-PR3 (deferred to subsequent PRs):
-// - Freeform-fallback P3 (PR4)
-// - Backend silent-merge upsert + status-conflict matrix (PR5)
-// - "you got it!" copy variant (PR6)
+// F1-PR4 — freeform fallback was deferred 2026-05-23 (extremely
+// marginal to the overall experience). See git history for the
+// reverted commits.
+//
+// F1-PR5 (backend, 2026-05-24) — silent-merge upsert + CM12/CM13
+// conflict matrix in addManualGame. Response now returns the full
+// UserGameDetail shape so this modal can read `response.id` for the
+// userGameId.
+//
+// F1-PR6 (this PR, 2026-05-24) — P5 deep-links to GameDetail:
+// - [view game] → /game/{userGameId}
+// - [+ rate / note] → /game/{userGameId}?focus=notes (reuses post-8
+//   PR A focus-on-notes pattern; auto-opens the notes editor on land
+//   per OQ-F1-7 resolution)
+// Both cancel the auto-close timer + close the modal before navigating.
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
@@ -97,6 +109,7 @@ interface SuccessPayload {
 const AUTO_CLOSE_MS = 15000;
 
 export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalProps) {
+  const navigate = useNavigate();
   // Search
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<IgdbSearchResult[]>([]);
@@ -209,7 +222,11 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
         ? undefined
         : (hoursParsed ?? 0) * 60 + (minutesParsed ?? 0);
     try {
-      await api.addManualGame({
+      // F1-PR5 widened the response to the full UserGameDetail shape;
+      // `response.id` is the new UserGame's id (or the existing id on a
+      // silent-merge update). F1-PR6 threads it into the P5 summary so
+      // [view game] / [+ rate / note] can deep-link without a refetch.
+      const response = await api.addManualGame({
         igdbId: selected.igdbId,
         title: selected.title,
         ...(selected.developer ? { developer: selected.developer } : {}),
@@ -224,7 +241,7 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
       pushRecent(platform);
       onAdded();
       setSuccessPayload({
-        userGameId: null, // backend doesn't currently return the userGameId from addManualGame; refetch covers display
+        userGameId: response?.id ?? null,
         title: selected.title,
         platform,
         status,
@@ -268,6 +285,25 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
     setPlatform(null);
   }
 
+  // F1-PR6 — P5 deep-link handlers. Both cancel the auto-close timer
+  // (so the modal doesn't try to call onClose() after the user has
+  // already navigated away) and close the modal before navigating, so
+  // the deep-link target loads cleanly.
+  function handleViewGame(userGameId: string): void {
+    if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+    onClose();
+    navigate(`/game/${userGameId}`);
+  }
+
+  function handleRateNote(userGameId: string): void {
+    if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+    onClose();
+    // ?focus=notes auto-opens the notes editor on land — reuses the
+    // post-8 PR A pattern verified at GameDetailDesktop.tsx:45 +
+    // GameDetailMobile.tsx:56.
+    navigate(`/game/${userGameId}?focus=notes`);
+  }
+
   // ── render ──
 
   if (successPayload) {
@@ -277,6 +313,8 @@ export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalP
         progressWidth={progressWidth}
         onDone={onClose}
         onAddAnother={handleAddAnother}
+        onViewGame={handleViewGame}
+        onRateNote={handleRateNote}
       />
     </ModalShell>;
   }
@@ -693,16 +731,25 @@ function ModalShell({ trapRef, onClose, children }: { trapRef: React.RefObject<H
 
 // ── P5 post-success body (pattern b) ──
 
-function SuccessBody({ payload, progressWidth, onDone, onAddAnother }: {
+function SuccessBody({ payload, progressWidth, onDone, onAddAnother, onViewGame, onRateNote }: {
   payload: SuccessPayload;
   progressWidth: number;
   onDone: () => void;
   onAddAnother: () => void;
+  /** F1-PR6: invoked with the new UserGame's id when [view game] tapped. */
+  onViewGame: (userGameId: string) => void;
+  /** F1-PR6: invoked with the new UserGame's id when [+ rate / note] tapped. */
+  onRateNote: (userGameId: string) => void;
 }) {
   const summaryVerb = payload.intent === 'wishlist' ? 'added to wishlist' : 'added';
+  // F1-PR6 — deep-link CTAs are gated on userGameId being present. The
+  // backend always returns it (F1-PR5 response shape), but the null
+  // fallback in handleSave defends against a future response-shape
+  // regression — we'd rather show nothing than a broken link.
+  const hasDeepLinks = payload.userGameId !== null;
   return (
     <>
-      <div style={{ padding: '40px 24px 28px 24px', textAlign: 'center' }}>
+      <div style={{ padding: '40px 24px 24px 24px', textAlign: 'center' }}>
         <div className="t-mono" style={{ fontSize: 'var(--text-sm)', color: 'var(--paper)' }}>
           <span style={{ color: 'var(--green)' }}>// {summaryVerb}</span>
           {' · '}{payload.title}
@@ -711,13 +758,13 @@ function SuccessBody({ payload, progressWidth, onDone, onAddAnother }: {
             <>{' · '}<span className="t-faint">{payload.status}</span></>
           )}
         </div>
-        {/*
-          [view game] + [+ rate / note] deep-links live here in F1-PR6 — both
-          need the userGameId from addManualGame's response (which the route
-          doesn't currently return). Rendering them as disabled placeholders
-          in F1-PR1 read as broken UI per Andrea's smoke test 2026-05-22, so
-          they're omitted until they can actually do something.
-        */}
+
+        {hasDeepLinks && (
+          <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center', gap: 10 }}>
+            <Btn sm onClick={() => onViewGame(payload.userGameId!)}>view game</Btn>
+            <Btn sm onClick={() => onRateNote(payload.userGameId!)}>+ rate / note</Btn>
+          </div>
+        )}
       </div>
 
       <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--rule)' }}>

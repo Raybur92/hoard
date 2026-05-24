@@ -1,8 +1,28 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import type { IgdbSearchResult } from '@hoard/types';
 import { AddGameModal } from '../AddGameModal';
 import { _resetForTests } from '../../../lib/recentPlatforms';
+
+// F1-PR6 — AddGameModal now uses useNavigate for the P5 deep-links, so
+// every render needs a Router context. Wrap rtl's render so existing
+// callsites don't need updating. A LocationProbe is mounted under the
+// router so tests can read window-style location.pathname/search via
+// `screen.getByTestId('location')` for the deep-link assertions.
+function LocationProbe() {
+  const loc = useLocation();
+  return <div data-testid="location" data-path={loc.pathname} data-search={loc.search} />;
+}
+function render(ui: React.ReactElement, opts?: { initialEntries?: string[] }) {
+  return rtlRender(
+    <MemoryRouter initialEntries={opts?.initialEntries ?? ['/library']}>
+      <Routes>
+        <Route path="*" element={<>{ui}<LocationProbe /></>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 vi.mock('../../../lib/api', () => ({
   api: {
@@ -477,5 +497,92 @@ describe('AddGameModal', () => {
       expect(screen.getByLabelText('Hours played')).toHaveValue(null);
       expect(screen.getByLabelText('Minutes played')).toHaveValue(null);
     });
+  });
+
+  describe('F1-PR6 P5 deep-links — [view game] + [+ rate / note]', () => {
+    // Mocked UserGameDetail shape — enough surface for the modal's
+    // setSuccessPayload to read `response.id`.
+    function mockResponse(id: string) {
+      return { id, gameId: 'game-x', title: 'Pokémon Red' };
+    }
+
+    it('does NOT render the deep-link CTAs when the response lacks an id', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      // Legacy / null-response shape — defensive guard fires.
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(screen.getByText(/added/i)).toBeInTheDocument());
+      // The two F1-PR6 CTAs must NOT render — keeps the success screen
+      // intact for legacy / regression-edge cases without showing broken
+      // "navigates nowhere" links.
+      expect(screen.queryByRole('button', { name: /^view game$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /\+ rate \/ note/i })).not.toBeInTheDocument();
+    });
+
+    it('renders [view game] + [+ rate / note] once the response carries a userGameId', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse('ug-pr6-1'));
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(screen.getByText(/added/i)).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /^view game$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /\+ rate \/ note/i })).toBeInTheDocument();
+    });
+
+    it('[view game] navigates to /game/:id and closes the modal', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse('ug-pr6-2'));
+      const onClose = vi.fn();
+      render(<AddGameModal onClose={onClose} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /^view game$/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /^view game$/i }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      // Probe reads the router's location after navigation.
+      expect(screen.getByTestId('location').getAttribute('data-path')).toBe('/game/ug-pr6-2');
+      expect(screen.getByTestId('location').getAttribute('data-search')).toBe('');
+    });
+
+    it('[+ rate / note] navigates to /game/:id?focus=notes and closes the modal', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse('ug-pr6-3'));
+      const onClose = vi.fn();
+      render(<AddGameModal onClose={onClose} onAdded={vi.fn()} />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /\+ rate \/ note/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /\+ rate \/ note/i }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('location').getAttribute('data-path')).toBe('/game/ug-pr6-3');
+      // ?focus=notes is the post-8 PR A pattern that auto-opens the notes
+      // editor on land (GameDetailDesktop.tsx:45 + GameDetailMobile.tsx:56).
+      expect(screen.getByTestId('location').getAttribute('data-search')).toBe('?focus=notes');
+    });
+
+    it('deep-links render in both own and wishlist intents (notes are useful for wishlist too)', async () => {
+      (api.igdbSearch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([makeResult()]);
+      (api.addManualGame as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse('ug-pr6-4'));
+      render(<AddGameModal onClose={vi.fn()} onAdded={vi.fn()} intent="wishlist" />);
+      await pickFirstResult();
+      fireEvent.click(screen.getByRole('button', { name: /pick a platform/i }));
+      fireEvent.click(screen.getAllByRole('option', { name: /Game Boy/ })[0]!);
+      fireEvent.click(screen.getByRole('button', { name: /add to wishlist/i }));
+      await waitFor(() => expect(screen.getByText(/added to wishlist/i)).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /^view game$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /\+ rate \/ note/i })).toBeInTheDocument();
+    });
+
   });
 });
