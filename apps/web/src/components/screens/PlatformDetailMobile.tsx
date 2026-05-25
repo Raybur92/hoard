@@ -38,6 +38,9 @@ export function PlatformDetailMobile() {
   const [activeTab, setActiveTab] = useState<MobileTab>('auth');
   const [platform, setPlatform] = useState<PlatformDetail | null>(null);
   const [npssoInput, setNpssoInput] = useState('');
+  const [xboxApiKeyInput, setXboxApiKeyInput] = useState('');
+  const [xboxConnectError, setXboxConnectError] = useState<string | null>(null);
+  const [xboxSaving, setXboxSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   // S1 — local state for the reveal-NPSSO toggle on the auth tab.
   const [revealedNpsso, setRevealedNpsso] = useState<string | null>(null);
@@ -166,6 +169,45 @@ export function PlatformDetailMobile() {
                   save token
                 </Btn>
               </div>
+            </div>
+          ) : code.toLowerCase() === 'xb' ? (
+            <div>
+              <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>// openxbl api key</div>
+              <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6, lineHeight: 1.5 }}>
+                Get a key at{' '}
+                <a href="https://xbl.io" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--paper)', textDecoration: 'underline' }}>xbl.io</a>
+                {' '}— free tier covers 150 req/hour. Your Microsoft password is never seen by Hoard.
+              </div>
+              <input
+                className="field"
+                value={xboxApiKeyInput}
+                onChange={(e) => { setXboxApiKeyInput(e.target.value); if (xboxConnectError) setXboxConnectError(null); }}
+                placeholder="paste OpenXBL API key"
+                style={{ width: '100%', marginTop: 10, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-2xs)", padding: '0 12px', height: 36, outline: 'none' }}
+                aria-label="OpenXBL API key"
+                aria-invalid={xboxConnectError !== null}
+              />
+              <div style={{ marginTop: 8 }}>
+                <Btn sm variant="primary" disabled={xboxApiKeyInput.trim().length < 10 || xboxSaving}
+                  onClick={() => {
+                    if (xboxSaving) return;
+                    setXboxSaving(true);
+                    setXboxConnectError(null);
+                    void api.connectXbox(xboxApiKeyInput.trim())
+                      .then(() => window.location.reload())
+                      .catch((e: unknown) => {
+                        setXboxConnectError(e instanceof Error ? e.message : 'Failed to save Xbox API key');
+                        setXboxSaving(false);
+                      });
+                  }}>
+                  {xboxSaving ? 'saving…' : 'save key'}
+                </Btn>
+              </div>
+              {xboxConnectError && (
+                <div className="t-mono t-red" role="alert" style={{ fontSize: "var(--text-3xs)", marginTop: 8 }}>
+                  // {xboxConnectError}
+                </div>
+              )}
             </div>
           ) : (() => {
             const connectPath = PLATFORM_CONNECT_PATH[code.toLowerCase()];

@@ -39,6 +39,8 @@ export function PlatformDetailDesktop() {
   const [activeTab, setActiveTab] = useState<TabKey>('authentication');
   const [platform, setPlatform] = useState<PlatformDetail | null>(null);
   const [npssoInput, setNpssoInput] = useState('');
+  const [xboxApiKeyInput, setXboxApiKeyInput] = useState('');
+  const [xboxConnectError, setXboxConnectError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -243,6 +245,16 @@ last sync   ${platform.lastSyncAt ? relativeTime(platform.lastSyncAt) : 'never'}
               <PsnConnectPanel npssoInput={npssoInput} setNpssoInput={setNpssoInput} />
             )}
 
+            {/* Xbox connect (OpenXBL API key — single-input, no guided flow needed) */}
+            {!isConnected && code.toLowerCase() === 'xb' && (
+              <XboxConnectPanel
+                apiKey={xboxApiKeyInput}
+                setApiKey={setXboxApiKeyInput}
+                error={xboxConnectError}
+                setError={setXboxConnectError}
+              />
+            )}
+
         </div>
       </div>
     </>
@@ -260,6 +272,23 @@ function ConnectButton({ info, code, npssoInput: _npssoInput, setNpssoInput: _se
     return (
       <Btn sm variant="primary" onClick={() => navigate('/settings/platforms/ps/connect')}>
         <Icon name="key" size={11} /> connect via npsso →
+      </Btn>
+    );
+  }
+  if (code.toLowerCase() === 'xb') {
+    // Xbox connect is inline (no separate guided-flow screen — the API
+    // key is one paste). Scroll to + focus the input below.
+    return (
+      <Btn
+        sm
+        variant="primary"
+        onClick={() => {
+          const input = document.getElementById('xbox-api-key-input') as HTMLInputElement | null;
+          input?.focus();
+          input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+      >
+        <Icon name="key" size={11} /> connect via api key ↓
       </Btn>
     );
   }
@@ -308,6 +337,67 @@ function PsnConnectPanel({ npssoInput, setNpssoInput }: { npssoInput: string; se
         {npssoInput.length > 0 && npssoInput.length < 64 && (
           <div className="t-faint" style={{ fontSize: "var(--text-3xs)", marginTop: 6 }}>
             {npssoInput.length}/64 characters
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function XboxConnectPanel({ apiKey, setApiKey, error, setError }: {
+  apiKey: string;
+  setApiKey: (v: string) => void;
+  error: string | null;
+  setError: (v: string | null) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const trimmed = apiKey.trim();
+
+  async function handleConnect(): Promise<void> {
+    if (saving || trimmed.length < 10) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.connectXbox(trimmed);
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save Xbox API key');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div className="panel" style={{ padding: 20 }}>
+        <Marker>// connect xbox via openxbl api key</Marker>
+        <div className="t-faint" style={{ fontSize: "var(--text-xs)", marginTop: 8, lineHeight: 1.55, maxWidth: 600 }}>
+          Xbox Live has no public API. Hoard uses{' '}
+          <a
+            href="https://xbl.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--paper)', textDecoration: 'underline' }}
+          >OpenXBL</a>
+          , a third-party proxy that signs you in with your Microsoft account and returns a personal API key. Free tier covers 150 requests/hour — well within Hoard&apos;s sync cadence. Your Microsoft password is never seen by Hoard.
+        </div>
+        <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            id="xbox-api-key-input"
+            className="field"
+            value={apiKey}
+            onChange={(e) => { setApiKey(e.target.value); if (error) setError(null); }}
+            placeholder="paste your OpenXBL API key here"
+            style={{ flex: 1, background: 'var(--ink-2)', border: '1px solid var(--rule-bright)', color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: "var(--text-xs)", padding: '0 12px', height: 36, outline: 'none' }}
+            aria-label="OpenXBL API key"
+            aria-invalid={error !== null}
+          />
+          <Btn sm variant="primary" disabled={trimmed.length < 10 || saving} onClick={() => void handleConnect()}>
+            {saving ? 'saving…' : 'save'}
+          </Btn>
+        </div>
+        {error && (
+          <div className="t-mono t-red" role="alert" style={{ fontSize: "var(--text-3xs)", marginTop: 8 }}>
+            // {error}
           </div>
         )}
       </div>
