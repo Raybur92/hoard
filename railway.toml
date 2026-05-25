@@ -1,7 +1,8 @@
-# touch 2026-05-25 — force Railway redeploy to pick up Xbox sync diagnostic
-# fetch. Watch Paths config still suspect; bumping this comment is the
-# cheapest force-trigger until the dashboard is healthy enough to audit
-# the config.
+# touch 2026-05-25 — force Railway redeploy. Xbox sync OpenXBL fetch
+# now sets Accept-Language explicitly (Node/undici defaults to `*`,
+# which OpenXBL app-level rejects with HTTP-200-but-code-400 envelope).
+# Watch Paths config still suspect; bumping this comment is the
+# cheapest force-trigger until the dashboard is healthy enough to audit.
 
 [build]
 builder = "nixpacks"

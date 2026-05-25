@@ -54,6 +54,12 @@ interface OpenXblTitle {
 
 interface OpenXblTitleHistoryResponse {
   titles?: OpenXblTitle[];
+  // OpenXBL wraps app-level errors as HTTP 200 with body
+  // {code: <non-200>, content: <string>}. Detect via the `code` field
+  // being present and non-200; the parser throws so the orchestrator
+  // logs a real `sync.error` instead of silently producing 0 games.
+  code?: number;
+  content?: string;
 }
 
 export async function syncXboxLibrary(credentials: XboxCredentials): Promise<SyncedGame[]> {
@@ -66,6 +72,12 @@ export async function syncXboxLibrary(credentials: XboxCredentials): Promise<Syn
       headers: {
         'X-Authorization': apiKey,
         Accept: 'application/json',
+        // Node/undici injects `Accept-Language: *` by default, which
+        // OpenXBL rejects at the application layer (returns HTTP 200
+        // with body `{code: 400, content: "...invalid locale value: *"}`).
+        // Explicit valid value overrides the default. Verified via the
+        // diagnostic capture 2026-05-25.
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     });
   } catch (err) {
@@ -80,6 +92,14 @@ export async function syncXboxLibrary(credentials: XboxCredentials): Promise<Syn
     data = await res.json() as OpenXblTitleHistoryResponse;
   } catch {
     throw new Error('OpenXBL API returned malformed JSON');
+  }
+
+  // OpenXBL surfaces app-level errors as HTTP 200 with body
+  // {code: <non-200>, content: <string>}. Treat as an explicit failure
+  // so the orchestrator logs `sync.error` instead of silently mapping
+  // to zero titles.
+  if (typeof data.code === 'number' && data.code !== 200) {
+    throw new Error(`OpenXBL app-level error code=${data.code} content=${data.content ?? '(none)'}`);
   }
 
   const titles = data.titles ?? [];

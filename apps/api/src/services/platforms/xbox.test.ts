@@ -89,14 +89,42 @@ describe('syncXboxLibrary', () => {
     expect(await syncXboxLibrary({ apiKey: 'fake-key' })).toEqual([]);
   });
 
-  it('passes the API key as X-Authorization header (not Authorization)', async () => {
+  it('passes the API key as X-Authorization header (not Authorization) + a valid Accept-Language', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(ok({ titles: [] }));
     await syncXboxLibrary({ apiKey: 'my-secret-key' });
     const call = (global.fetch as jest.Mock).mock.calls[0];
     expect(call[0]).toBe('https://xbl.io/api/v2/player/titleHistory');
     expect((call[1] as RequestInit).headers).toEqual(
-      expect.objectContaining({ 'X-Authorization': 'my-secret-key' }),
+      expect.objectContaining({
+        'X-Authorization': 'my-secret-key',
+        // Without this header Node/undici injects `Accept-Language: *`,
+        // which OpenXBL rejects at the application layer (returns HTTP
+        // 200 with body {code: 400, content: "...invalid locale value: *"}).
+        'Accept-Language': 'en-US,en;q=0.9',
+      }),
     );
+  });
+
+  it('throws when OpenXBL returns its HTTP-200-but-app-level-error envelope', async () => {
+    // Real failure mode observed 2026-05-25: OpenXBL rejected the
+    // Accept-Language header at the app layer but used HTTP 200.
+    // Without explicit detection the parser would silently produce 0
+    // titles + a deceptive "sync ok" log line.
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({ code: 400, content: '["Request contains Accept-Language header with invalid locale value: *"]' }),
+    );
+    await expect(syncXboxLibrary({ apiKey: 'fake-key' })).rejects.toThrow(/app-level error code=400/);
+  });
+
+  it('does NOT treat code=200 in the response body as an error (success envelope)', async () => {
+    // If OpenXBL ever starts wrapping success responses with an
+    // explicit code=200 field, the parser should still process titles.
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({ code: 200, titles: [{ titleId: 'T1', name: 'OK Game', lastTimePlayed: '2026-04-01T00:00:00Z' }] }),
+    );
+    const out = await syncXboxLibrary({ apiKey: 'fake-key' });
+    expect(out).toHaveLength(1);
+    expect(out[0]?.igdbSearchTitle).toBe('OK Game');
   });
 
   it('throws when the API key is missing or empty', async () => {
