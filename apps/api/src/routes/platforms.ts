@@ -288,6 +288,32 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         // without taking down the whole sync flow.
         const creds = platform.credentials as { apiKey?: string } | null;
         if (!creds?.apiKey) throw new Error('Xbox credentials missing');
+
+        // TEMP DIAGNOSTIC (2026-05-25) — first smoke test against a real
+        // OpenXBL key returned `sync ok` with 0 games imported. Either
+        // the endpoint path is wrong or the response shape doesn't match
+        // what syncXboxLibrary expects. Doing a raw debug fetch BEFORE
+        // the main sync call to capture the response status + body
+        // snippet into PlatformLog. Once we know the actual shape we'll
+        // fix the parser + remove this block.
+        try {
+          const debugRes = await fetch('https://xbl.io/api/v2/player/titleHistory', {
+            headers: { 'X-Authorization': creds.apiKey, Accept: 'application/json' },
+          });
+          const debugText = await debugRes.text();
+          await logPlatform(
+            platform.id, platform.userId, 'info',
+            'sync.debug',
+            `openxbl status=${debugRes.status} body=${debugText.slice(0, 1500)}`,
+          );
+        } catch (err) {
+          await logPlatform(
+            platform.id, platform.userId, 'warn',
+            'sync.debug',
+            `openxbl debug fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
         syncedGames = await syncXboxLibrary({ apiKey: creds.apiKey });
       }
       // GG — stub returns [] until fully implemented (next sub-unit
