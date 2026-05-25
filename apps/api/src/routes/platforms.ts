@@ -12,6 +12,7 @@ import { promoteWishlistOnOwnership } from '../lib/promoteWishlist';
 import { getReleaseDetails } from '../services/igdb';
 import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
+import { syncXboxLibrary } from '../services/platforms/xbox';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -278,8 +279,19 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         if (!creds?.npsso) throw new Error('PSN credentials missing');
         psnNpsso = creds.npsso;
         syncedGames = await syncPsnLibrary({ npssoToken: psnNpsso });
+      } else if (code === 'XB') {
+        // Xbox sync via OpenXBL. `apiKey` was persisted by
+        // POST /api/platforms/xbox/connect at line 446. syncXboxLibrary
+        // throws on missing key / non-2xx / malformed JSON / network
+        // error — the outer try/catch logs the failure as
+        // `library.failed` (mirroring trophies/achievements pattern)
+        // without taking down the whole sync flow.
+        const creds = platform.credentials as { apiKey?: string } | null;
+        if (!creds?.apiKey) throw new Error('Xbox credentials missing');
+        syncedGames = await syncXboxLibrary({ apiKey: creds.apiKey });
       }
-      // XB, GG — stubs return [] until fully implemented
+      // GG — stub returns [] until fully implemented (next sub-unit
+      // after Xbox sync stabilises).
 
       if (syncedGames.length > 0) {
         const r = await runSync(platform.userId, syncedGames);
@@ -290,7 +302,10 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           `library: ${r.imported} imported, ${r.skipped} skipped`,
           { imported: r.imported, skipped: r.skipped },
         );
-      } else if (code === 'XB' || code === 'GG') {
+      } else if (code === 'GG') {
+        // XB no longer falls through here — it has real sync support.
+        // An empty XB result is "user has no games", not "sync not
+        // implemented", and should look like a normal zero-game sync.
         await logPlatform(
           platform.id, platform.userId, 'warn',
           'library.unsupported',

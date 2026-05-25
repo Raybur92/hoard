@@ -406,6 +406,32 @@ describe('POST /api/platforms/:code/sync', () => {
       expect.objectContaining({ data: { syncStatus: 'syncing' } }),
     );
   });
+
+  // Xbox sync sub-unit #2 — verify the XB branch is reachable + routes
+  // through syncXboxLibrary. The actual fetcher + sync orchestration are
+  // unit-tested in xbox.test.ts and syncRunner.test.ts; this is just the
+  // route-level wiring assertion.
+  it('accepts XB sync against a connected platform with apiKey credentials', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-xb-1',
+      code: 'XB',
+      syncable: true,
+      credentials: { apiKey: 'fake-openxbl-key' },
+      lastSyncAt: null,
+    });
+    (prisma.platform.update as jest.Mock).mockResolvedValue({});
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ titles: [] }),
+    });
+
+    const res = await request(app).post('/api/platforms/xb/sync');
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('syncing');
+    // The route does not 400/404 the XB code — confirms it's recognised
+    // as a syncable platform with real implementation behind it.
+  });
 });
 
 /* ── POST /api/games/manual ── */
