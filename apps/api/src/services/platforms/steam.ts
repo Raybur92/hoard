@@ -6,6 +6,13 @@ export interface SyncedGame {
   platformCode: PlatformCode;
   playtimeMinutes: number;
   lastPlayedAt: Date | null;
+  // Engagement signal for platforms (Xbox via OpenXBL) that don't expose
+  // per-title minutes but DO expose a "last played" timestamp. When true,
+  // syncRunner treats the entry as engagement-positive (→ OnHold on
+  // first import / CM13 auto-promote on Wishlist→library) even if
+  // playtimeMinutes === 0. Steam + PSN don't set this — they have real
+  // minutes via playtimeMinutes.
+  hasBeenPlayed?: boolean;
 }
 
 export interface SteamCredentials {

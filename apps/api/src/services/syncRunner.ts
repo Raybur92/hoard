@@ -154,13 +154,25 @@ export async function runSync(
       const isNew = !existing;
       const newLastPlayed = sg.lastPlayedAt ?? existing?.lastPlayedAt ?? null;
       const totalMergedPlaytime = Object.values(mergedPlaytime).reduce<number>((sum, m) => sum + (m ?? 0), 0);
-      const initialStatus = totalMergedPlaytime > 0 ? 'OnHold' : 'Backlog';
+      // Engagement signal — true if we have any playtime minutes OR the
+      // platform-specific "lastPlayed exists" flag (Xbox via OpenXBL
+      // doesn't surface per-title minutes; hasBeenPlayed lets that path
+      // still land in OnHold instead of Backlog). Steam + PSN reach this
+      // via the playtime side since they expose real minutes.
+      const hasEngagement = totalMergedPlaytime > 0 || sg.hasBeenPlayed === true;
+      const initialStatus = hasEngagement ? 'OnHold' : 'Backlog';
 
       // CM13 wishlist auto-promotion — policy lives in
       // apps/api/src/lib/promoteWishlist.ts so the manual-add path
       // (F1-PR5) shares the same rule. `undefined` means no status
-      // change; non-Wishlist existing statuses are preserved.
-      const promoteToStatus = promoteWishlistOnOwnership(existing?.status, totalMergedPlaytime);
+      // change; non-Wishlist existing statuses are preserved. Pass a
+      // synthetic engagement value (1 if hasEngagement else 0) so the
+      // helper's "playtime > 0 → OnHold" rule covers the Xbox case
+      // without faking minutes downstream.
+      const promoteToStatus = promoteWishlistOnOwnership(
+        existing?.status,
+        hasEngagement ? Math.max(totalMergedPlaytime, 1) : 0,
+      );
 
       await prisma.userGame.upsert({
         where: { userId_gameId: { userId, gameId: game.id } },
