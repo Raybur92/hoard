@@ -1,3 +1,8 @@
+# touch 2026-05-25 — force Railway redeploy to pick up Xbox sync commits
+# (08b6b0f / 4549e0d / 76b77bf). /health uptime showed ~12.9h proving
+# the prior pushes didn't trigger a deploy; Watch Paths misconfig
+# suspected per the operational gotcha in CLAUDE.md.
+
 [build]
 builder = "nixpacks"
 buildCommand = "npm run build --workspace=apps/api"
