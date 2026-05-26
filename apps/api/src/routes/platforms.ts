@@ -326,23 +326,26 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           } catch { /* malformed — leave xuid null */ }
 
           if (xuid) {
-            // Step 2: fetch stats for one title (Forza Horizon 5)
-            const titleId = '2030093255';
-            const statsRes = await fetch(
-              `https://xbl.io/api/v2/${xuid}/stats/${titleId}`,
+            // Step 2: per OpenXBL OpenAPI spec, the v3 achievements
+            // endpoint includes `minutesPlayed` in the stats decoration
+            // alongside achievement data — single call per user returns
+            // playtime + achievements for the whole library. That's the
+            // path forward; here we just sample the response shape.
+            const achRes = await fetch(
+              `https://xbl.io/api/v3/achievements/player/${xuid}`,
               { headers },
             );
-            const statsText = await statsRes.text();
+            const achText = await achRes.text();
             await logPlatform(
               platform.id, platform.userId, 'info',
               'sync.debug',
-              `openxbl /stats/${titleId} status=${statsRes.status} body=${statsText.slice(0, 1500)}`,
+              `openxbl /v3/achievements/player status=${achRes.status} body=${achText.slice(0, 3000)}`,
             );
           } else {
             await logPlatform(
               platform.id, platform.userId, 'warn',
               'sync.debug',
-              'openxbl /account: could not extract xuid — skipping stats probe',
+              'openxbl /account: could not extract xuid — skipping achievements probe',
             );
           }
         } catch (err) {
