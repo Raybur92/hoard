@@ -1,7 +1,7 @@
-# touch 2026-05-26 round 3 — OpenXBL parser fixed. Live diagnostic
-# revealed the response is wrapped under `content` (was assuming flat)
-# and lastTimePlayed lives under titleHistory (was assuming root).
-# Parser now matches verified shape; diagnostic removed.
+# touch 2026-05-26 round 4 — Xbox playtime probe. Library import
+# working (188 games landed); next: empirically verify OpenXBL Stats
+# endpoint to see if per-title playtime is actually exposed before
+# scoping the playtime side-pass.
 
 [build]
 builder = "nixpacks"

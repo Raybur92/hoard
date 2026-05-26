@@ -289,6 +289,67 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         const creds = platform.credentials as { apiKey?: string } | null;
         if (!creds?.apiKey) throw new Error('Xbox credentials missing');
         syncedGames = await syncXboxLibrary({ apiKey: creds.apiKey });
+
+        // TEMP DIAGNOSTIC (2026-05-26 round 3) — scout the OpenXBL Stats
+        // endpoint to see if per-title playtime is actually exposed
+        // (Andrea pushed back on the "no playtime" claim citing OpenXBL
+        // docs). Two-step pattern: /account → discover xuid → /stats
+        // for Forza Horizon 5 (titleId=2030093255, picked as a probe
+        // title from her library). Self-clears: this whole block runs
+        // once next sync, logs the result, then we delete it.
+        try {
+          const headers = {
+            'X-Authorization': creds.apiKey,
+            Accept: 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
+          };
+
+          // Step 1: discover xuid via /account
+          const accountRes = await fetch('https://xbl.io/api/v2/account', { headers });
+          const accountText = await accountRes.text();
+          await logPlatform(
+            platform.id, platform.userId, 'info',
+            'sync.debug',
+            `openxbl /account status=${accountRes.status} body=${accountText.slice(0, 800)}`,
+          );
+
+          // Try to extract xuid for step 2. OpenXBL /account returns
+          // {profileUsers: [{id: xuid, ...}]} based on the documented shape.
+          let xuid: string | null = null;
+          try {
+            const parsed = JSON.parse(accountText) as {
+              profileUsers?: Array<{ id?: string }>;
+            };
+            xuid = parsed.profileUsers?.[0]?.id ?? null;
+          } catch { /* malformed — leave xuid null */ }
+
+          if (xuid) {
+            // Step 2: fetch stats for one title (Forza Horizon 5)
+            const titleId = '2030093255';
+            const statsRes = await fetch(
+              `https://xbl.io/api/v2/${xuid}/stats/${titleId}`,
+              { headers },
+            );
+            const statsText = await statsRes.text();
+            await logPlatform(
+              platform.id, platform.userId, 'info',
+              'sync.debug',
+              `openxbl /stats/${titleId} status=${statsRes.status} body=${statsText.slice(0, 1500)}`,
+            );
+          } else {
+            await logPlatform(
+              platform.id, platform.userId, 'warn',
+              'sync.debug',
+              'openxbl /account: could not extract xuid — skipping stats probe',
+            );
+          }
+        } catch (err) {
+          await logPlatform(
+            platform.id, platform.userId, 'warn',
+            'sync.debug',
+            `openxbl stats probe failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
       // GG — stub returns [] until fully implemented (next sub-unit
       // after Xbox sync stabilises).
