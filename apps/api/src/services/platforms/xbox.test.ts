@@ -13,21 +13,26 @@ function notOk(status = 500): Response {
 }
 
 describe('syncXboxLibrary', () => {
-  it('maps OpenXBL titleHistory entries to SyncedGame[] with platformCode=XB', async () => {
+  it('maps OpenXBL titleHistory entries (wrapped under content) to SyncedGame[] with platformCode=XB', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(
       ok({
-        titles: [
-          {
-            titleId: 'TID-1',
-            name: 'Halo Infinite',
-            lastTimePlayed: '2026-04-01T12:00:00Z',
-          },
-          {
-            titleId: 'TID-2',
-            name: 'Forza Horizon 5',
-            lastTimePlayed: '2026-03-15T08:30:00Z',
-          },
-        ],
+        content: {
+          xuid: '2535463549504134',
+          titles: [
+            {
+              titleId: 'TID-1',
+              name: 'Halo Infinite',
+              type: 'Game',
+              titleHistory: { lastTimePlayed: '2026-04-01T12:00:00Z' },
+            },
+            {
+              titleId: 'TID-2',
+              name: 'Forza Horizon 5',
+              type: 'Game',
+              titleHistory: { lastTimePlayed: '2026-03-15T08:30:00Z' },
+            },
+          ],
+        },
       }),
     );
 
@@ -44,13 +49,15 @@ describe('syncXboxLibrary', () => {
     expect(out[1]?.igdbSearchTitle).toBe('Forza Horizon 5');
   });
 
-  it('sets hasBeenPlayed=false when lastTimePlayed is missing or null (game owned but never launched)', async () => {
+  it('sets hasBeenPlayed=false when titleHistory.lastTimePlayed is missing or null', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(
       ok({
-        titles: [
-          { titleId: 'TID-3', name: 'Untouched Game', lastTimePlayed: null },
-          { titleId: 'TID-4', name: 'Another Untouched Game' /* no lastTimePlayed */ },
-        ],
+        content: {
+          titles: [
+            { titleId: 'TID-3', name: 'Untouched Game', type: 'Game', titleHistory: { lastTimePlayed: null } },
+            { titleId: 'TID-4', name: 'Another Untouched Game', type: 'Game' /* no titleHistory */ },
+          ],
+        },
       }),
     );
 
@@ -66,11 +73,13 @@ describe('syncXboxLibrary', () => {
   it('drops titles missing the `name` field (defensive — without it we can\'t IGDB-match)', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(
       ok({
-        titles: [
-          { titleId: 'TID-5', name: 'Valid Game', lastTimePlayed: '2026-01-01T00:00:00Z' },
-          { titleId: 'TID-6' /* no name */ },
-          { titleId: 'TID-7', name: '' /* empty name */ },
-        ],
+        content: {
+          titles: [
+            { titleId: 'TID-5', name: 'Valid Game', type: 'Game', titleHistory: { lastTimePlayed: '2026-01-01T00:00:00Z' } },
+            { titleId: 'TID-6' /* no name */, type: 'Game' },
+            { titleId: 'TID-7', name: '', type: 'Game' /* empty name */ },
+          ],
+        },
       }),
     );
 
@@ -79,18 +88,42 @@ describe('syncXboxLibrary', () => {
     expect(out[0]?.igdbSearchTitle).toBe('Valid Game');
   });
 
-  it('returns [] when OpenXBL responds with no `titles` field', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue(ok({}));
+  it('drops non-Game `type` values (Xbox title history can include apps like Netflix)', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({
+        content: {
+          titles: [
+            { titleId: 'TID-G', name: 'Real Game', type: 'Game', titleHistory: { lastTimePlayed: '2026-04-01T00:00:00Z' } },
+            { titleId: 'TID-A', name: 'Netflix', type: 'App' },
+            { titleId: 'TID-Unknown', name: 'No-type Game' /* no type field — keep as defensive */ },
+          ],
+        },
+      }),
+    );
+
+    const out = await syncXboxLibrary({ apiKey: 'fake-key' });
+    // Real Game + No-type Game (kept defensively when type is undefined).
+    // Netflix dropped because type='App'.
+    expect(out.map((g) => g.igdbSearchTitle)).toEqual(['Real Game', 'No-type Game']);
+  });
+
+  it('returns [] when content.titles is missing', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(ok({ content: { xuid: 'X' } }));
     expect(await syncXboxLibrary({ apiKey: 'fake-key' })).toEqual([]);
   });
 
-  it('returns [] when titles is an empty array', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue(ok({ titles: [] }));
+  it('returns [] when content.titles is an empty array', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(ok({ content: { titles: [] } }));
     expect(await syncXboxLibrary({ apiKey: 'fake-key' })).toEqual([]);
+  });
+
+  it('throws when the response is missing the content wrapper entirely (unexpected shape)', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(ok({ titles: [] }));  // old flat shape — should fail loudly
+    await expect(syncXboxLibrary({ apiKey: 'fake-key' })).rejects.toThrow(/unexpected response shape/);
   });
 
   it('passes the API key as X-Authorization header (not Authorization) + a valid Accept-Language', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue(ok({ titles: [] }));
+    (global.fetch as jest.Mock).mockResolvedValue(ok({ content: { titles: [] } }));
     await syncXboxLibrary({ apiKey: 'my-secret-key' });
     const call = (global.fetch as jest.Mock).mock.calls[0];
     expect(call[0]).toBe('https://xbl.io/api/v2/player/titleHistory');
@@ -118,9 +151,13 @@ describe('syncXboxLibrary', () => {
 
   it('does NOT treat code=200 in the response body as an error (success envelope)', async () => {
     // If OpenXBL ever starts wrapping success responses with an
-    // explicit code=200 field, the parser should still process titles.
+    // explicit code=200 field alongside content, the parser should
+    // still process titles.
     (global.fetch as jest.Mock).mockResolvedValue(
-      ok({ code: 200, titles: [{ titleId: 'T1', name: 'OK Game', lastTimePlayed: '2026-04-01T00:00:00Z' }] }),
+      ok({
+        code: 200,
+        content: { titles: [{ titleId: 'T1', name: 'OK Game', type: 'Game', titleHistory: { lastTimePlayed: '2026-04-01T00:00:00Z' } }] },
+      }),
     );
     const out = await syncXboxLibrary({ apiKey: 'fake-key' });
     expect(out).toHaveLength(1);

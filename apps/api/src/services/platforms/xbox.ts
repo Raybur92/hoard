@@ -4,11 +4,17 @@
 // POST /api/platforms/xbox/connect; it gets persisted on
 // Platform.credentials as `{ apiKey }`.
 //
-// API shape (per OpenXBL docs as of 2026-05-25):
+// API shape (verified via live diagnostic 2026-05-26):
 //   GET https://xbl.io/api/v2/player/titleHistory
-//   Header: X-Authorization: {apiKey}
-//   Response: { titles: [{ titleId, name, displayImage, lastTimePlayed,
-//                         achievement?: { ... } }] }
+//   Headers: X-Authorization: {apiKey}, Accept-Language: en-US,en;q=0.9
+//   Success response: { content: { xuid: string, titles: [{
+//     titleId, name, type ("Game" / "App"), displayImage,
+//     titleHistory: { lastTimePlayed, visible, canHide },
+//     achievement: { currentAchievements, totalAchievements,
+//                    currentGamerscore, totalGamerscore, ... },
+//     ...
+//   }] } }
+//   Error response:   { content: "<string>", code: <non-200> }
 //
 // OpenXBL does NOT surface per-title playtime minutes in titleHistory
 // (or in any reliably-documented endpoint). To preserve the engagement
@@ -25,11 +31,15 @@
 // pattern and write them into the same UserGame.achievements* columns
 // PSN trophies + Steam achievements already populate.
 //
-// Smoke test note (2026-05-25): implementation was not exercised against
-// a real OpenXBL key during development — verify response shape +
-// endpoint paths post-deploy. If `/player/titleHistory` requires xuid
-// in the path instead of the "me" form, switch to the 2-step pattern
-// (call /account first to discover xuid, then /{xuid}/title-history).
+// Smoke-tested against Andrea's real OpenXBL key 2026-05-26:
+//   round 1 — sync.debug captured {code: 400, content: "...invalid
+//             locale value: *"} → fixed by setting Accept-Language.
+//   round 2 — Accept-Language landed, sync went from 1s → 3s confirming
+//             the real network call now succeeds. But syncedGames came
+//             back empty because my assumed flat shape was wrong.
+//   round 3 — diagnostic surfaced the actual wrapped shape:
+//             {content: {xuid, titles: [{name, type, titleHistory:
+//             {lastTimePlayed}, ...}]}}. Parser updated to match.
 
 import type { PlatformCode } from '@hoard/types';
 import type { SyncedGame } from './steam';
@@ -48,18 +58,33 @@ const OPENXBL_BASE = 'https://xbl.io/api/v2';
 interface OpenXblTitle {
   titleId?: string;
   name?: string;
+  // `type` is "Game" for actual games and other values like "App" for
+  // non-game things in title history (rare but real — defensive filter).
+  type?: string;
   displayImage?: string;
-  lastTimePlayed?: string | null;
+  // Per the live response (2026-05-26): lastTimePlayed is nested under
+  // titleHistory, NOT at the title root. The earlier guess was wrong;
+  // ground truth from the OpenXBL diagnostic confirmed the shape.
+  titleHistory?: {
+    lastTimePlayed?: string | null;
+    visible?: boolean;
+    canHide?: boolean;
+  };
+}
+
+interface OpenXblTitleHistoryContent {
+  xuid?: string;
+  titles?: OpenXblTitle[];
 }
 
 interface OpenXblTitleHistoryResponse {
-  titles?: OpenXblTitle[];
-  // OpenXBL wraps app-level errors as HTTP 200 with body
-  // {code: <non-200>, content: <string>}. Detect via the `code` field
-  // being present and non-200; the parser throws so the orchestrator
-  // logs a real `sync.error` instead of silently producing 0 games.
+  // OpenXBL wraps all responses in `content`:
+  //   - Success envelope: content is an object ({xuid, titles}).
+  //   - Error envelope:   content is a string description + code is set.
+  // The `code` check below handles the error case; success path digs
+  // into content.titles.
+  content?: OpenXblTitleHistoryContent | string;
   code?: number;
-  content?: string;
 }
 
 export async function syncXboxLibrary(credentials: XboxCredentials): Promise<SyncedGame[]> {
@@ -99,24 +124,41 @@ export async function syncXboxLibrary(credentials: XboxCredentials): Promise<Syn
   // so the orchestrator logs `sync.error` instead of silently mapping
   // to zero titles.
   if (typeof data.code === 'number' && data.code !== 200) {
-    throw new Error(`OpenXBL app-level error code=${data.code} content=${data.content ?? '(none)'}`);
+    const contentStr = typeof data.content === 'string' ? data.content : JSON.stringify(data.content ?? '(none)');
+    throw new Error(`OpenXBL app-level error code=${data.code} content=${contentStr}`);
   }
 
-  const titles = data.titles ?? [];
+  // Success envelope: content is the wrapping object with titles. If
+  // OpenXBL ever returns a string content WITHOUT a code field, treat
+  // it as malformed (rather than crash) — caller's outer try/catch
+  // logs sync.error.
+  const content = data.content;
+  if (content === undefined || typeof content === 'string') {
+    throw new Error('OpenXBL API: unexpected response shape (content missing or not an object)');
+  }
+
+  const titles = content.titles ?? [];
   return titles
-    // Defensive: drop rows missing the title name — without it we can't
-    // even attempt an IGDB match, and an empty-name SyncedGame would
-    // spam logPlatform with "library: 0 imported, N skipped" noise.
-    .filter((t): t is OpenXblTitle & { name: string } => typeof t.name === 'string' && t.name.length > 0)
-    .map((t) => ({
-      igdbSearchTitle: t.name,
-      platformCode: 'XB' as PlatformCode,
-      // OpenXBL doesn't surface per-title playtime minutes — see file
-      // header comment. hasBeenPlayed carries the engagement signal.
-      playtimeMinutes: 0,
-      lastPlayedAt: t.lastTimePlayed ? new Date(t.lastTimePlayed) : null,
-      hasBeenPlayed: !!t.lastTimePlayed,
-    }));
+    // Defensive: drop rows missing `name` (can't IGDB-match without it),
+    // AND drop non-Game `type` values (Xbox title history occasionally
+    // includes apps — Netflix, browser, etc. — that would IGDB-fail
+    // and just inflate the skipped count).
+    .filter((t): t is OpenXblTitle & { name: string } =>
+      typeof t.name === 'string' && t.name.length > 0 && (t.type === undefined || t.type === 'Game'),
+    )
+    .map((t) => {
+      // lastTimePlayed lives under titleHistory in the OpenXBL response.
+      const lastTimePlayed = t.titleHistory?.lastTimePlayed ?? null;
+      return {
+        igdbSearchTitle: t.name,
+        platformCode: 'XB' as PlatformCode,
+        // OpenXBL doesn't surface per-title playtime minutes — see file
+        // header comment. hasBeenPlayed carries the engagement signal.
+        playtimeMinutes: 0,
+        lastPlayedAt: lastTimePlayed ? new Date(lastTimePlayed) : null,
+        hasBeenPlayed: !!lastTimePlayed,
+      };
+    });
 }
 
 export { SyncedGame };

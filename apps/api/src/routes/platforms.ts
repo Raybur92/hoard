@@ -289,36 +289,6 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         const creds = platform.credentials as { apiKey?: string } | null;
         if (!creds?.apiKey) throw new Error('Xbox credentials missing');
         syncedGames = await syncXboxLibrary({ apiKey: creds.apiKey });
-
-        // TEMP DIAGNOSTIC (2026-05-26 round 2) — Accept-Language fix
-        // landed (sync timing jumped from ~1s to ~3s, real network call
-        // is happening) but syncedGames still came back empty. Re-grab
-        // the raw response when titles=0 so we can see what shape
-        // OpenXBL is returning. Self-clears once we have a non-empty
-        // sync — this branch only runs on the "still broken" path.
-        if (syncedGames.length === 0) {
-          try {
-            const debugRes = await fetch('https://xbl.io/api/v2/player/titleHistory', {
-              headers: {
-                'X-Authorization': creds.apiKey,
-                Accept: 'application/json',
-                'Accept-Language': 'en-US,en;q=0.9',
-              },
-            });
-            const debugText = await debugRes.text();
-            await logPlatform(
-              platform.id, platform.userId, 'info',
-              'sync.debug',
-              `openxbl status=${debugRes.status} body=${debugText.slice(0, 1500)}`,
-            );
-          } catch (err) {
-            await logPlatform(
-              platform.id, platform.userId, 'warn',
-              'sync.debug',
-              `openxbl debug fetch failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }
       }
       // GG — stub returns [] until fully implemented (next sub-unit
       // after Xbox sync stabilises).
