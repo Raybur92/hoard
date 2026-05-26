@@ -242,6 +242,17 @@ export function LibraryDesktop() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
+
+  // Reset platform filter whenever the route's status param changes
+  // (including back to the shelves view where statusParam is undefined).
+  // Without this, the SAME LibraryDesktop component instance is reused
+  // across /library and /library/:status routes (React Router 6 doesn't
+  // unmount on param changes), so the filter sticks across navigations
+  // and silently filters the shelves view too — where there's no chip
+  // strip to reset it from. Reported 2026-05-25.
+  useEffect(() => {
+    setPlatFilter('all');
+  }, [statusParam]);
   // Sort persists in URL so filtered single-shelf views (`/library/Backlog?sort=playtime`)
   // are shareable. Only consumed on the filtered view — shelves view dropped
   // the sort control in PR A (D4): it operated on top-12 per shelf only.

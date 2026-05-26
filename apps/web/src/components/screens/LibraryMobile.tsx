@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
@@ -163,6 +163,13 @@ export function LibraryMobile() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
+
+  // Reset platform filter whenever the route's status param changes
+  // (including back to the shelves view where statusParam is undefined).
+  // Same fix as LibraryDesktop — see the explanatory comment there.
+  useEffect(() => {
+    setPlatFilter('all');
+  }, [statusParam]);
   const [searchParams, setSearchParams] = useSearchParams();
   const sortBy: SortBy = (() => {
     const v = searchParams.get('sort');
