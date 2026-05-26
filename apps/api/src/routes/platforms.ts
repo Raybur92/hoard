@@ -313,14 +313,16 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
             `openxbl /account status=${accountRes.status} body=${accountText.slice(0, 800)}`,
           );
 
-          // Try to extract xuid for step 2. OpenXBL /account returns
-          // {profileUsers: [{id: xuid, ...}]} based on the documented shape.
+          // Try to extract xuid for step 2. OpenXBL wraps EVERYTHING
+          // under `content` (verified via round-3 diagnostic for title
+          // history — same pattern here for /account). Shape:
+          //   {content: {profileUsers: [{id: xuid, settings: [...], ...}]}}
           let xuid: string | null = null;
           try {
             const parsed = JSON.parse(accountText) as {
-              profileUsers?: Array<{ id?: string }>;
+              content?: { profileUsers?: Array<{ id?: string }> };
             };
-            xuid = parsed.profileUsers?.[0]?.id ?? null;
+            xuid = parsed.content?.profileUsers?.[0]?.id ?? null;
           } catch { /* malformed — leave xuid null */ }
 
           if (xuid) {

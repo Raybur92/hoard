@@ -1,7 +1,5 @@
-# touch 2026-05-26 round 4 — Xbox playtime probe. Library import
-# working (188 games landed); next: empirically verify OpenXBL Stats
-# endpoint to see if per-title playtime is actually exposed before
-# scoping the playtime side-pass.
+# touch 2026-05-26 round 4b — fix xuid extraction in /account probe
+# (response is wrapped under `content`, same as title-history).
 
 [build]
 builder = "nixpacks"
