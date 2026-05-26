@@ -204,6 +204,13 @@ model Game {
   steamAppId           Int?     @unique
   hltbId               Int?
   gogAppId             Int?
+  // Xbox's per-title identifier from OpenXBL /player/titleHistory.
+  // Captured during library sync (Xbox sub-unit #4.x). Used by the
+  // playtime side-pass which calls POST /v2/player/stats with a batched
+  // {xuids, stats: [{name: "MinutesPlayed", titleId}]} body — needs the
+  // titleId to bind playtime back to the right Game. Same shape as
+  // steamAppId above.
+  xboxTitleId          Int?     @unique
   // PSN's stable per-title identifier. Captured during trophy sync (T2 in
   // docs/TROPHIES_PLAN.md). Lets future PSN syncs rebind by stable PSN
   // identity instead of fuzzy title-matching — partially closes the
