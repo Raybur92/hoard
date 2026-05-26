@@ -149,11 +149,19 @@ export async function syncXboxLibrary(credentials: XboxCredentials): Promise<Syn
     .map((t) => {
       // lastTimePlayed lives under titleHistory in the OpenXBL response.
       const lastTimePlayed = t.titleHistory?.lastTimePlayed ?? null;
+      // titleId from OpenXBL is a numeric string ("2030093255"); convert
+      // to Int for Game.xboxTitleId. Defensive: only include when the
+      // parse yields a finite integer.
+      const titleIdNum = t.titleId !== undefined ? Number(t.titleId) : NaN;
+      const xboxTitleId = Number.isInteger(titleIdNum) && titleIdNum > 0 ? titleIdNum : undefined;
       return {
         igdbSearchTitle: t.name,
         platformCode: 'XB' as PlatformCode,
-        // OpenXBL doesn't surface per-title playtime minutes — see file
-        // header comment. hasBeenPlayed carries the engagement signal.
+        ...(xboxTitleId !== undefined ? { xboxTitleId } : {}),
+        // Library sync sets playtime=0; the playtime side-pass
+        // (xboxPlaytime.ts, sub-units 4.3+4.4) calls POST /v2/player/stats
+        // post-import to fill in real MinutesPlayed values.
+        // hasBeenPlayed carries the engagement signal in the meantime.
         playtimeMinutes: 0,
         lastPlayedAt: lastTimePlayed ? new Date(lastTimePlayed) : null,
         hasBeenPlayed: !!lastTimePlayed,

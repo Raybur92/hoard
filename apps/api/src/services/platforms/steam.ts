@@ -3,6 +3,11 @@ import type { PlatformCode } from '@hoard/types';
 export interface SyncedGame {
   igdbSearchTitle: string;
   steamAppId?: number;
+  // Xbox's OpenXBL per-title identifier (Xbox sub-unit #4.2). Captured
+  // by syncXboxLibrary; persisted into Game.xboxTitleId by syncRunner
+  // so the playtime side-pass (POST /v2/player/stats) can bind each
+  // returned MinutesPlayed value back to the correct Game.
+  xboxTitleId?: number;
   platformCode: PlatformCode;
   playtimeMinutes: number;
   lastPlayedAt: Date | null;

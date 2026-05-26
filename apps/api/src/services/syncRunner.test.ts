@@ -260,4 +260,62 @@ describe('runSync', () => {
     expect(result.imported).toBe(0);
     expect(prisma.game.findUnique).not.toHaveBeenCalled();
   });
+
+  // Sub-unit #4.2 — xboxTitleId threading
+  it('persists xboxTitleId on Game create when SyncedGame carries it', async () => {
+    const xboxSyncedGame: SyncedGame = {
+      ...syncedGame,
+      platformCode: 'XB',
+      xboxTitleId: 2030093255,
+    };
+
+    await runSync('user-1', [xboxSyncedGame]);
+
+    expect(prisma.game.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ xboxTitleId: 2030093255 }),
+        update: expect.objectContaining({ xboxTitleId: 2030093255 }),
+      }),
+    );
+  });
+
+  it('reuses an existing Game on xboxTitleId P2002 collision (parallel to steamAppId recovery)', async () => {
+    const existingGame = { ...mockGame, id: 'game-existing-xb', xboxTitleId: 2030093255 };
+    (prisma.game.upsert as jest.Mock).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { modelName: 'Game', target: ['xboxTitleId'] },
+      }),
+    );
+    (prisma.game.findUnique as jest.Mock).mockResolvedValue(existingGame);
+
+    const result = await runSync('user-1', [{ ...syncedGame, xboxTitleId: 2030093255 }]);
+
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(prisma.game.findUnique).toHaveBeenCalledWith({ where: { xboxTitleId: 2030093255 } });
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ gameId: 'game-existing-xb' }),
+      }),
+    );
+  });
+
+  it('still throws on xboxTitleId P2002 when the synced row has no xboxTitleId', async () => {
+    (prisma.game.upsert as jest.Mock).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { modelName: 'Game', target: ['xboxTitleId'] },
+      }),
+    );
+
+    // No xboxTitleId on the synced row → recovery path doesn't engage.
+    const result = await runSync('user-1', [syncedGame]);
+
+    expect(result.skipped).toBe(1);
+    expect(result.imported).toBe(0);
+    expect(prisma.game.findUnique).not.toHaveBeenCalled();
+  });
 });

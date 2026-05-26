@@ -13,20 +13,20 @@ function notOk(status = 500): Response {
 }
 
 describe('syncXboxLibrary', () => {
-  it('maps OpenXBL titleHistory entries (wrapped under content) to SyncedGame[] with platformCode=XB', async () => {
+  it('maps OpenXBL titleHistory entries (wrapped under content) to SyncedGame[] with platformCode=XB and xboxTitleId', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(
       ok({
         content: {
           xuid: '2535463549504134',
           titles: [
             {
-              titleId: 'TID-1',
+              titleId: '1234567890',
               name: 'Halo Infinite',
               type: 'Game',
               titleHistory: { lastTimePlayed: '2026-04-01T12:00:00Z' },
             },
             {
-              titleId: 'TID-2',
+              titleId: '2030093255',
               name: 'Forza Horizon 5',
               type: 'Game',
               titleHistory: { lastTimePlayed: '2026-03-15T08:30:00Z' },
@@ -42,11 +42,34 @@ describe('syncXboxLibrary', () => {
     expect(out[0]).toEqual({
       igdbSearchTitle: 'Halo Infinite',
       platformCode: 'XB',
+      xboxTitleId: 1234567890,
       playtimeMinutes: 0,
       lastPlayedAt: new Date('2026-04-01T12:00:00Z'),
       hasBeenPlayed: true,
     });
-    expect(out[1]?.igdbSearchTitle).toBe('Forza Horizon 5');
+    expect(out[1]?.xboxTitleId).toBe(2030093255);
+  });
+
+  it('omits xboxTitleId when titleId is missing, malformed, or non-integer', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({
+        content: {
+          titles: [
+            { name: 'A', type: 'Game' /* no titleId */ },
+            { titleId: 'not-a-number', name: 'B', type: 'Game' },
+            { titleId: '0', name: 'C', type: 'Game' /* zero — treat as invalid */ },
+            { titleId: '-1', name: 'D', type: 'Game' /* negative */ },
+          ],
+        },
+      }),
+    );
+
+    const out = await syncXboxLibrary({ apiKey: 'fake-key' });
+
+    expect(out).toHaveLength(4);
+    for (const g of out) {
+      expect(g).not.toHaveProperty('xboxTitleId');
+    }
   });
 
   it('sets hasBeenPlayed=false when titleHistory.lastTimePlayed is missing or null', async () => {

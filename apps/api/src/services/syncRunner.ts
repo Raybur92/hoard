@@ -101,6 +101,7 @@ export async function runSync(
       // are corrected via the in-app [wrong game?] remap UI, not silently
       // rebound by sync.
       const steamAppId = sg.steamAppId ?? null;
+      const xboxTitleId = sg.xboxTitleId ?? null;
       let game;
       try {
         game = await prisma.game.upsert({
@@ -112,6 +113,7 @@ export async function runSync(
             genres: igdbGame.genres,
             coverUrl: igdbGame.coverUrl,
             ...(steamAppId ? { steamAppId } : {}),
+            ...(xboxTitleId ? { xboxTitleId } : {}),
           },
           create: {
             igdbId: igdbGame.igdbId,
@@ -121,17 +123,26 @@ export async function runSync(
             genres: igdbGame.genres,
             coverUrl: igdbGame.coverUrl,
             steamAppId,
+            xboxTitleId,
           },
         });
       } catch (err) {
-        const isSteamAppIdCollision =
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002' &&
-          Array.isArray(err.meta?.target) &&
-          (err.meta.target as string[]).includes('steamAppId') &&
-          steamAppId !== null;
-        if (!isSteamAppIdCollision) throw err;
-        const existing = await prisma.game.findUnique({ where: { steamAppId } });
+        // Same P2002 recovery as steamAppId — if another Game row already
+        // owns the platform-side id (e.g. the IGDB matcher picked a
+        // different IGDB id for the same game on a re-sync), reuse the
+        // existing row instead of failing the whole sync.
+        const isP2002 = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+        const target = (isP2002 && Array.isArray(err.meta?.target)) ? (err.meta.target as string[]) : [];
+        const isSteamAppIdCollision = target.includes('steamAppId') && steamAppId !== null;
+        const isXboxTitleIdCollision = target.includes('xboxTitleId') && xboxTitleId !== null;
+        if (!isSteamAppIdCollision && !isXboxTitleIdCollision) throw err;
+        // TS can't narrow either id to non-null through the disjunctive
+        // guard above, so each branch asserts. The asserts are safe
+        // because the isXxxCollision flags already include the non-null
+        // check inline.
+        const existing = isSteamAppIdCollision
+          ? await prisma.game.findUnique({ where: { steamAppId: steamAppId! } })
+          : await prisma.game.findUnique({ where: { xboxTitleId: xboxTitleId! } });
         if (!existing) throw err;
         game = existing;
       }
