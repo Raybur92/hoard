@@ -1,8 +1,7 @@
-# touch 2026-05-25 — force Railway redeploy. Xbox sync OpenXBL fetch
-# now sets Accept-Language explicitly (Node/undici defaults to `*`,
-# which OpenXBL app-level rejects with HTTP-200-but-code-400 envelope).
-# Watch Paths config still suspect; bumping this comment is the
-# cheapest force-trigger until the dashboard is healthy enough to audit.
+# touch 2026-05-26 — force Railway redeploy. Accept-Language fix
+# landed (sync timing went 1s → 3s) but library still importing 0
+# games; re-adding the OpenXBL response diagnostic gated on titles=0
+# so we can see the actual response shape.
 
 [build]
 builder = "nixpacks"

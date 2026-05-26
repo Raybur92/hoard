@@ -97,9 +97,14 @@ export function PlatformLogTab({ code }: { code: string }) {
 }
 
 function formatStamp(iso: string): string {
-  // [YYYY-MM-DD HH:MM:SS] — drop fractional seconds + Z. ISO format is
-  // stable across server formatters, so a simple slice is enough.
-  return iso.slice(0, 19).replace('T', ' ');
+  // [YYYY-MM-DD HH:MM:SS] in the user's LOCAL timezone. The server emits
+  // ISO 8601 with a `Z` (UTC); the prior implementation just sliced the
+  // string and rendered UTC, which was off by ~2h for European users.
+  // Use Date getters (which return local-time components) + zero-padding.
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso.slice(0, 19).replace('T', ' ');
+  const pad = (n: number): string => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function levelColor(level: PlatformLogEntry['level']): string {
