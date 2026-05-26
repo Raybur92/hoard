@@ -21,8 +21,10 @@ jest.mock('@hoard/db', () => ({
       // F1-PR5 rewrite uses findUnique → create-or-update branching.
       // The legacy `upsert` mock stays for any pre-PR5 helper that may
       // still use it; the new methods cover the conflict-matrix path.
+      // findMany added for Xbox sub-unit #4.4's playtime side-pass.
       upsert: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },

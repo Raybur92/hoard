@@ -13,6 +13,7 @@ import { getReleaseDetails } from '../services/igdb';
 import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { syncXboxLibrary } from '../services/platforms/xbox';
+import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -264,10 +265,12 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
 
     try {
       let syncedGames: Awaited<ReturnType<typeof syncSteamLibrary>> = [];
-      // Captured for the inline trophy fetch (PSN) and background
-      // achievement fetch (Steam) below — same creds, no need to re-read.
+      // Captured for the inline trophy fetch (PSN), background
+      // achievement fetch (Steam), and background playtime side-pass
+      // (Xbox) below — same creds, no need to re-read.
       let psnNpsso: string | null = null;
       let steamId: string | null = null;
+      let xboxApiKey: string | null = null;
 
       if (code === 'ST') {
         const creds = platform.credentials as { steamId?: string } | null;
@@ -288,103 +291,8 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         // without taking down the whole sync flow.
         const creds = platform.credentials as { apiKey?: string } | null;
         if (!creds?.apiKey) throw new Error('Xbox credentials missing');
+        xboxApiKey = creds.apiKey;
         syncedGames = await syncXboxLibrary({ apiKey: creds.apiKey });
-
-        // TEMP DIAGNOSTIC (2026-05-26 round 3) — scout the OpenXBL Stats
-        // endpoint to see if per-title playtime is actually exposed
-        // (Andrea pushed back on the "no playtime" claim citing OpenXBL
-        // docs). Two-step pattern: /account → discover xuid → /stats
-        // for Forza Horizon 5 (titleId=2030093255, picked as a probe
-        // title from her library). Self-clears: this whole block runs
-        // once next sync, logs the result, then we delete it.
-        try {
-          const headers = {
-            'X-Authorization': creds.apiKey,
-            Accept: 'application/json',
-            'Accept-Language': 'en-US,en;q=0.9',
-          };
-
-          // Step 1: discover xuid via /account
-          const accountRes = await fetch('https://xbl.io/api/v2/account', { headers });
-          const accountText = await accountRes.text();
-          await logPlatform(
-            platform.id, platform.userId, 'info',
-            'sync.debug',
-            `openxbl /account status=${accountRes.status} body=${accountText.slice(0, 800)}`,
-          );
-
-          // Try to extract xuid for step 2. OpenXBL wraps EVERYTHING
-          // under `content` (verified via round-3 diagnostic for title
-          // history — same pattern here for /account). Shape:
-          //   {content: {profileUsers: [{id: xuid, settings: [...], ...}]}}
-          let xuid: string | null = null;
-          try {
-            const parsed = JSON.parse(accountText) as {
-              content?: { profileUsers?: Array<{ id?: string }> };
-            };
-            xuid = parsed.content?.profileUsers?.[0]?.id ?? null;
-          } catch { /* malformed — leave xuid null */ }
-
-          if (xuid) {
-            // Step 2 — capture the v3 achievements response. The body
-            // can be large (Andrea has 9850 gamerscore = ~few hundred
-            // achievements, each ~700 chars → response could be 200KB+).
-            // Previous 3000-char truncation only showed the start of
-            // content.achievements[], possibly missing sibling fields
-            // like content.stats that the OpenAPI spec claims exist.
-            // Log size + last 2500 chars too so we can see what comes
-            // AFTER the achievements array.
-            const achRes = await fetch(
-              `https://xbl.io/api/v3/achievements/player/${xuid}`,
-              { headers },
-            );
-            const achText = await achRes.text();
-            await logPlatform(
-              platform.id, platform.userId, 'info',
-              'sync.debug',
-              `openxbl /v3/achievements/player status=${achRes.status} size=${achText.length} start=${achText.slice(0, 1500)}`,
-            );
-            await logPlatform(
-              platform.id, platform.userId, 'info',
-              'sync.debug',
-              `openxbl /v3/achievements/player end=${achText.slice(Math.max(0, achText.length - 2500))}`,
-            );
-
-            // Step 3 — also probe POST /v2/player/stats with the docs-
-            // suggested body shape. If `stats` works, we'll know the
-            // accepted stat-name format (MinutesPlayed vs minutes vs ...)
-            // and titleId requirements.
-            const statsBody = {
-              xuids: [xuid],
-              stats: [
-                { name: 'MinutesPlayed', titleId: '2030093255' }, // Forza Horizon 5
-              ],
-            };
-            const statsRes = await fetch('https://xbl.io/api/v2/player/stats', {
-              method: 'POST',
-              headers: { ...headers, 'Content-Type': 'application/json' },
-              body: JSON.stringify(statsBody),
-            });
-            const statsText = await statsRes.text();
-            await logPlatform(
-              platform.id, platform.userId, 'info',
-              'sync.debug',
-              `openxbl POST /v2/player/stats status=${statsRes.status} body=${statsText.slice(0, 1500)}`,
-            );
-          } else {
-            await logPlatform(
-              platform.id, platform.userId, 'warn',
-              'sync.debug',
-              'openxbl /account: could not extract xuid — skipping probes',
-            );
-          }
-        } catch (err) {
-          await logPlatform(
-            platform.id, platform.userId, 'warn',
-            'sync.debug',
-            `openxbl stats probe failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
       }
       // GG — stub returns [] until fully implemented (next sub-unit
       // after Xbox sync stabilises).
@@ -501,6 +409,32 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           } catch (err) {
             console.error(`[sync ST] achievement background pass failed:`, err);
             await logPlatform(pid, uid, 'warn', 'achievements.failed', 'achievement background pass failed');
+          }
+        })();
+      }
+
+      // Xbox sub-unit #4.4 — playtime side-pass. Mirrors the Steam
+      // achievements pattern: fires AFTER syncStatus flips to 'ok' so
+      // the user's UI shows the library immediately; playtime trickles
+      // in within ~5s (one batched POST /v2/player/stats + N row
+      // updates). Failures degrade gracefully — the library still
+      // shows owned + 0h. See xboxPlaytime.ts for the implementation.
+      if (code === 'XB' && xboxApiKey) {
+        const key = xboxApiKey;
+        const uid = platform.userId;
+        const pid = platform.id;
+        void (async () => {
+          try {
+            const r = await applyXboxPlaytimeBackground(uid, { apiKey: key });
+            await logPlatform(
+              pid, uid, 'info',
+              'playtime.applied',
+              `playtime: ${r.updated} updated, ${r.missing} missing`,
+              r,
+            );
+          } catch (err) {
+            console.error(`[sync XB] playtime background pass failed:`, err);
+            await logPlatform(pid, uid, 'warn', 'playtime.failed', 'playtime background pass failed');
           }
         })();
       }

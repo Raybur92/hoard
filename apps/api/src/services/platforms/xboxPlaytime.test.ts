@@ -1,6 +1,17 @@
-import { getXboxPlaytimes } from './xboxPlaytime';
+jest.mock('@hoard/db', () => ({
+  prisma: {
+    userGame: {
+      findMany: jest.fn(),
+      update: jest.fn(),
+    },
+  },
+}));
+
+import { getXboxPlaytimes, applyXboxPlaytimeBackground } from './xboxPlaytime';
+import { prisma } from '@hoard/db';
 
 beforeEach(() => {
+  jest.resetAllMocks();
   global.fetch = jest.fn() as typeof global.fetch;
 });
 
@@ -201,5 +212,119 @@ describe('getXboxPlaytimes', () => {
     (global.fetch as jest.Mock).mockResolvedValue(ok({ content: { statlistscollection: [] }, code: 200 }));
     const out = await getXboxPlaytimes({ apiKey: 'k' }, 'X', [100]);
     expect(out.size).toBe(0);
+  });
+});
+
+/* ── applyXboxPlaytimeBackground (orchestrator) ── */
+
+/** Helper — minimal mocked /account response shape (wrapped under content). */
+const ACCOUNT_OK = ok({
+  content: {
+    profileUsers: [{ id: '2535463549504134' }],
+  },
+});
+
+/** Helper — build a mocked UserGame row with the prisma select shape. */
+function ug(id: string, xboxTitleId: number | null, existingPlaytime: Record<string, number> = {}) {
+  return {
+    id,
+    playtimeByPlatform: existingPlaytime,
+    game: { xboxTitleId },
+  };
+}
+
+describe('applyXboxPlaytimeBackground', () => {
+  it('discovers xuid, fetches batched playtimes, writes minutes into playtimeByPlatform.XB', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      ug('ug-1', 2030093255),
+      ug('ug-2', 1634930870),
+    ]);
+    // 1st fetch: /account (xuid discovery). 2nd: /v2/player/stats.
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(ACCOUNT_OK)
+      .mockResolvedValueOnce(ok(makeOkResponse([
+        { titleid: '2030093255', value: '10219' },
+        { titleid: '1634930870', value: '347' },
+      ])));
+
+    const result = await applyXboxPlaytimeBackground('user-1', { apiKey: 'k' });
+
+    expect(result).toEqual({ updated: 2, missing: 0 });
+    expect(prisma.userGame.update).toHaveBeenCalledTimes(2);
+    // Each update sets ONLY the XB slot — other slots would be preserved.
+    expect(prisma.userGame.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ug-1' },
+        data: { playtimeByPlatform: { XB: 10219 } },
+      }),
+    );
+    expect(prisma.userGame.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ug-2' },
+        data: { playtimeByPlatform: { XB: 347 } },
+      }),
+    );
+  });
+
+  it('preserves existing playtimes on other platforms when updating XB', async () => {
+    // UserGame already has ST + PS playtime from prior syncs.
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      ug('ug-multi', 100, { ST: 5000, PS: 1200 }),
+    ]);
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(ACCOUNT_OK)
+      .mockResolvedValueOnce(ok(makeOkResponse([{ titleid: '100', value: '600' }])));
+
+    await applyXboxPlaytimeBackground('user-1', { apiKey: 'k' });
+
+    expect(prisma.userGame.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { playtimeByPlatform: { ST: 5000, PS: 1200, XB: 600 } },
+      }),
+    );
+  });
+
+  it('counts UserGames OpenXBL did NOT return a stat for as "missing"', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      ug('ug-1', 100),
+      ug('ug-2', 200),
+      ug('ug-3', 300),
+    ]);
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(ACCOUNT_OK)
+      .mockResolvedValueOnce(ok(makeOkResponse([
+        { titleid: '100', value: '600' },
+        // 200 + 300 omitted — OpenXBL doesn't have MinutesPlayed for them
+      ])));
+
+    const result = await applyXboxPlaytimeBackground('user-1', { apiKey: 'k' });
+
+    expect(result).toEqual({ updated: 1, missing: 2 });
+    expect(prisma.userGame.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns {updated: 0, missing: 0} when no Xbox UserGames exist (empty library)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
+    // /account still fires before findMany returns 0; but stats call should NOT.
+    (global.fetch as jest.Mock).mockResolvedValueOnce(ACCOUNT_OK);
+
+    const result = await applyXboxPlaytimeBackground('user-1', { apiKey: 'k' });
+
+    expect(result).toEqual({ updated: 0, missing: 0 });
+    expect(prisma.userGame.update).not.toHaveBeenCalled();
+    // Only the xuid discovery call fired (1 fetch total).
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when xuid cannot be discovered from /account (caller logs + degrades)', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(notOk(401));
+
+    await expect(applyXboxPlaytimeBackground('user-1', { apiKey: 'k' })).rejects.toThrow(/could not discover xuid/i);
+    expect(prisma.userGame.findMany).not.toHaveBeenCalled();
+  });
+
+  it('throws when the API key is missing', async () => {
+    await expect(applyXboxPlaytimeBackground('user-1', { apiKey: '' })).rejects.toThrow(/api key missing/i);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

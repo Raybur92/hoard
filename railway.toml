@@ -1,6 +1,7 @@
-# touch 2026-05-26 sub-unit #4.2 — thread xboxTitleId through
-# SyncedGame + syncXboxLibrary + syncRunner. Pre-req for #4.3's
-# batched MinutesPlayed lookup.
+# touch 2026-05-26 sub-unit #4.4 — wire applyXboxPlaytimeBackground
+# into the Xbox sync flow. Fire-and-forget mirror of Steam's
+# achievements pass; library lands fast, playtime trickles in within
+# seconds. Diagnostic block removed (we have ground truth now).
 
 [build]
 builder = "nixpacks"

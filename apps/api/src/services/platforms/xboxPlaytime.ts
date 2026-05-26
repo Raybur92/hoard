@@ -41,6 +41,7 @@
 // semantics so the caller can decide between "leave existing playtime
 // alone" and "default to 0".
 
+import { prisma } from '@hoard/db';
 import type { XboxCredentials } from './xbox';
 
 const OPENXBL_BASE = 'https://xbl.io/api/v2';
@@ -156,4 +157,112 @@ export async function getXboxPlaytimes(
     }
   }
   return out;
+}
+
+/**
+ * Discover the user's xuid from their OpenXBL API key via GET /account.
+ * Returns null on any failure — the caller treats that as "skip the
+ * playtime side-pass," same way Steam achievements skip when an API
+ * call fails.
+ */
+async function discoverXuid(apiKey: string): Promise<string | null> {
+  let res: Response;
+  try {
+    res = await fetch(`${OPENXBL_BASE}/account`, {
+      headers: {
+        'X-Authorization': apiKey,
+        Accept: 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  let data: { content?: { profileUsers?: Array<{ id?: string }> } };
+  try {
+    data = await res.json() as typeof data;
+  } catch {
+    return null;
+  }
+  return data.content?.profileUsers?.[0]?.id ?? null;
+}
+
+export interface XboxPlaytimeResult {
+  /** Number of UserGames updated with a real MinutesPlayed value. */
+  updated: number;
+  /** UserGames with an xboxTitleId that OpenXBL didn't return a stat for. */
+  missing: number;
+}
+
+/**
+ * Background pass: discovers xuid, fetches MinutesPlayed for every
+ * UserGame in the user's library whose Game has an xboxTitleId, and
+ * writes the minutes into playtimeByPlatform.XB.
+ *
+ * Fire-and-forget design (caller doesn't await it for the main sync
+ * response). All failures degrade gracefully — the library sync's
+ * "owned + 0h playtime" state is the natural fallback.
+ *
+ * Other platform keys in playtimeByPlatform (ST, PS) are preserved
+ * via the spread — only the XB slot is touched.
+ */
+export async function applyXboxPlaytimeBackground(
+  userId: string,
+  credentials: Pick<XboxCredentials, 'apiKey'>,
+): Promise<XboxPlaytimeResult> {
+  const apiKey = credentials.apiKey;
+  if (!apiKey) throw new Error('Xbox API key missing');
+
+  const xuid = await discoverXuid(apiKey);
+  if (!xuid) {
+    throw new Error('Xbox playtime: could not discover xuid from /account');
+  }
+
+  // Pull every UserGame whose Game has an Xbox titleId. After
+  // sub-unit #4.2's threading lands, this is the entire Xbox library
+  // for the user.
+  const userGames = await prisma.userGame.findMany({
+    where: { userId, game: { xboxTitleId: { not: null } } },
+    select: {
+      id: true,
+      playtimeByPlatform: true,
+      game: { select: { xboxTitleId: true } },
+    },
+  });
+
+  if (userGames.length === 0) {
+    return { updated: 0, missing: 0 };
+  }
+
+  // titleId → UserGame lookup
+  const byTitleId = new Map<number, typeof userGames[number]>();
+  for (const ug of userGames) {
+    if (ug.game.xboxTitleId !== null) {
+      byTitleId.set(ug.game.xboxTitleId, ug);
+    }
+  }
+
+  const playtimes = await getXboxPlaytimes(
+    { apiKey },
+    xuid,
+    [...byTitleId.keys()],
+  );
+
+  let updated = 0;
+  for (const [titleId, minutes] of playtimes.entries()) {
+    const ug = byTitleId.get(titleId);
+    if (!ug) continue;
+    const existing = (ug.playtimeByPlatform ?? {}) as Record<string, number>;
+    // Only touch the XB slot. Other platforms (a multi-platform game
+    // owned on both Xbox AND Steam, for example) keep their playtimes.
+    await prisma.userGame.update({
+      where: { id: ug.id },
+      data: { playtimeByPlatform: { ...existing, XB: minutes } },
+    });
+    updated += 1;
+  }
+
+  const missing = byTitleId.size - updated;
+  return { updated, missing };
 }
