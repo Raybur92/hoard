@@ -1,5 +1,6 @@
-# touch 2026-05-26 round 5 — probe v3 achievements endpoint
-# (OpenAPI spec mentions minutesPlayed in stats decoration there).
+# touch 2026-05-26 round 6 — wider playtime probe: full v3 achievements
+# response (start+size+end) + POST /v2/player/stats with MinutesPlayed
+# stat name. Belt-and-suspenders against the OpenAPI spec's hint.
 
 [build]
 builder = "nixpacks"

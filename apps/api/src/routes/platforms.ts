@@ -326,11 +326,14 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           } catch { /* malformed — leave xuid null */ }
 
           if (xuid) {
-            // Step 2: per OpenXBL OpenAPI spec, the v3 achievements
-            // endpoint includes `minutesPlayed` in the stats decoration
-            // alongside achievement data — single call per user returns
-            // playtime + achievements for the whole library. That's the
-            // path forward; here we just sample the response shape.
+            // Step 2 — capture the v3 achievements response. The body
+            // can be large (Andrea has 9850 gamerscore = ~few hundred
+            // achievements, each ~700 chars → response could be 200KB+).
+            // Previous 3000-char truncation only showed the start of
+            // content.achievements[], possibly missing sibling fields
+            // like content.stats that the OpenAPI spec claims exist.
+            // Log size + last 2500 chars too so we can see what comes
+            // AFTER the achievements array.
             const achRes = await fetch(
               `https://xbl.io/api/v3/achievements/player/${xuid}`,
               { headers },
@@ -339,13 +342,40 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
             await logPlatform(
               platform.id, platform.userId, 'info',
               'sync.debug',
-              `openxbl /v3/achievements/player status=${achRes.status} body=${achText.slice(0, 3000)}`,
+              `openxbl /v3/achievements/player status=${achRes.status} size=${achText.length} start=${achText.slice(0, 1500)}`,
+            );
+            await logPlatform(
+              platform.id, platform.userId, 'info',
+              'sync.debug',
+              `openxbl /v3/achievements/player end=${achText.slice(Math.max(0, achText.length - 2500))}`,
+            );
+
+            // Step 3 — also probe POST /v2/player/stats with the docs-
+            // suggested body shape. If `stats` works, we'll know the
+            // accepted stat-name format (MinutesPlayed vs minutes vs ...)
+            // and titleId requirements.
+            const statsBody = {
+              xuids: [xuid],
+              stats: [
+                { name: 'MinutesPlayed', titleId: '2030093255' }, // Forza Horizon 5
+              ],
+            };
+            const statsRes = await fetch('https://xbl.io/api/v2/player/stats', {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify(statsBody),
+            });
+            const statsText = await statsRes.text();
+            await logPlatform(
+              platform.id, platform.userId, 'info',
+              'sync.debug',
+              `openxbl POST /v2/player/stats status=${statsRes.status} body=${statsText.slice(0, 1500)}`,
             );
           } else {
             await logPlatform(
               platform.id, platform.userId, 'warn',
               'sync.debug',
-              'openxbl /account: could not extract xuid — skipping achievements probe',
+              'openxbl /account: could not extract xuid — skipping probes',
             );
           }
         } catch (err) {
