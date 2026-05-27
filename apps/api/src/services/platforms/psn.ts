@@ -48,11 +48,19 @@ export async function syncPsnLibrary(credentials: PsnCredentials): Promise<Synce
     });
 
     for (const t of res.titles) {
+      // N-series: capture the Sony "concept ID" — single identifier across
+      // all regional variants of a game. Maps to IGDB external_games
+      // (category 36 = Playstation Store) for stable-id lookup before
+      // title search.
+      const psnConceptId = typeof t.concept?.id === 'number' && t.concept.id > 0
+        ? t.concept.id
+        : undefined;
       games.push({
         igdbSearchTitle: cleanPsnTitle(t.name),
         platformCode: 'PS' as PlatformCode,
         playtimeMinutes: t.playDuration ? parseIso8601Duration(t.playDuration) : 0,
         lastPlayedAt: t.lastPlayedDateTime ? new Date(t.lastPlayedDateTime) : null,
+        ...(psnConceptId !== undefined ? { psnConceptId } : {}),
       });
     }
 

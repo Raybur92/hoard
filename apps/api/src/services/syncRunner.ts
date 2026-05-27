@@ -1,7 +1,15 @@
 import { prisma } from '@hoard/db';
 import { Prisma } from '@prisma/client';
 import type { PlatformCode } from '@hoard/types';
-import { searchGames, getGameBySteamId, getTimeToBeat, searchGameLocalizations } from './igdb';
+import {
+  searchGames,
+  getGameBySteamId,
+  getGameByPsnConceptId,
+  getGameByXboxTitleId,
+  getGameByGogAppId,
+  getTimeToBeat,
+  searchGameLocalizations,
+} from './igdb';
 import { pickBestMatch } from './igdbMatch';
 import { fetchHltbWithFallback } from './hltb';
 import { promoteWishlistOnOwnership } from '../lib/promoteWishlist';
@@ -83,14 +91,27 @@ export async function runSync(
 
   for (const sg of syncedGames) {
     try {
-      // Look up IGDB via Steam App ID first (exact match), fall back to text
-      // search with a smart matcher. The matcher scores top-N candidates by
-      // title similarity + platform agreement + popularity so we don't pick
-      // an obscure name-collision (Korean MMO "Ragnarok: War of Gods" beating
-      // "God of War Ragnarök") or an early-access sequel (Slay the Spire 2
-      // beating Slay the Spire) just because IGDB's relevance search ranked
-      // them first. See apps/api/src/services/igdbMatch.ts for the algorithm.
+      // N-series resolution order — try the stable platform-side ID
+      // (Steam appid / PSN conceptId / Xbox titleId / GOG appid) FIRST
+      // via IGDB external_games. Bypasses fuzzy title matching entirely,
+      // which is critical for non-English platform accounts where the
+      // sync returns localized titles (Andrea's Italian PSN reporting
+      // "LEGO Batman: L'Eredità del Cavaliere Oscuro" against IGDB's
+      // canonical English "Legacy of the Dark Knight"). If no platform
+      // ID is available OR the lookup misses (IGDB doesn't have an
+      // external_games row for this UID), fall back to text search with
+      // the smart matcher (igdbMatch.ts), then to the L-series
+      // localization fallback for any remaining localized titles.
       let igdbGame = sg.steamAppId ? await getGameBySteamId(sg.steamAppId) : null;
+      if (!igdbGame && sg.psnConceptId) {
+        igdbGame = await getGameByPsnConceptId(sg.psnConceptId);
+      }
+      if (!igdbGame && sg.xboxTitleId) {
+        igdbGame = await getGameByXboxTitleId(sg.xboxTitleId);
+      }
+      if (!igdbGame && sg.gogAppId) {
+        igdbGame = await getGameByGogAppId(sg.gogAppId);
+      }
       if (!igdbGame) {
         const results = await searchGames(sg.igdbSearchTitle);
         igdbGame = pickBestMatch(sg.igdbSearchTitle, results, sg.platformCode);
@@ -126,10 +147,11 @@ export async function runSync(
       // rebound by sync.
       const steamAppId = sg.steamAppId ?? null;
       const xboxTitleId = sg.xboxTitleId ?? null;
-      // gogAppId is NOT @unique on the schema (unlike steamAppId +
-      // xboxTitleId) because HLTB lookups already populate it as a
-      // side-effect via codepotatoes.de — making it unique now would
-      // risk P2002 collisions with the existing data. Persisted on
+      const psnConceptId = sg.psnConceptId ?? null;
+      // gogAppId is NOT @unique on the schema (unlike steamAppId,
+      // xboxTitleId, psnConceptId) because HLTB lookups already populate
+      // it as a side-effect via codepotatoes.de — making it unique now
+      // would risk P2002 collisions with the existing data. Persisted on
       // upsert so the sync path keeps it fresh, but no recovery branch.
       const gogAppId = sg.gogAppId ?? null;
       let game;
@@ -144,6 +166,7 @@ export async function runSync(
             coverUrl: igdbGame.coverUrl,
             ...(steamAppId ? { steamAppId } : {}),
             ...(xboxTitleId ? { xboxTitleId } : {}),
+            ...(psnConceptId ? { psnConceptId } : {}),
             ...(gogAppId ? { gogAppId } : {}),
           },
           create: {
@@ -155,26 +178,30 @@ export async function runSync(
             coverUrl: igdbGame.coverUrl,
             steamAppId,
             xboxTitleId,
+            psnConceptId,
             gogAppId,
           },
         });
       } catch (err) {
-        // Same P2002 recovery as steamAppId — if another Game row already
-        // owns the platform-side id (e.g. the IGDB matcher picked a
-        // different IGDB id for the same game on a re-sync), reuse the
-        // existing row instead of failing the whole sync.
+        // Same P2002 recovery as steamAppId/xboxTitleId — if another Game
+        // row already owns the platform-side id (e.g. the IGDB matcher
+        // picked a different IGDB id for the same game on a re-sync),
+        // reuse the existing row instead of failing the whole sync.
         const isP2002 = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
         const target = (isP2002 && Array.isArray(err.meta?.target)) ? (err.meta.target as string[]) : [];
         const isSteamAppIdCollision = target.includes('steamAppId') && steamAppId !== null;
         const isXboxTitleIdCollision = target.includes('xboxTitleId') && xboxTitleId !== null;
-        if (!isSteamAppIdCollision && !isXboxTitleIdCollision) throw err;
-        // TS can't narrow either id to non-null through the disjunctive
+        const isPsnConceptIdCollision = target.includes('psnConceptId') && psnConceptId !== null;
+        if (!isSteamAppIdCollision && !isXboxTitleIdCollision && !isPsnConceptIdCollision) throw err;
+        // TS can't narrow any id to non-null through the disjunctive
         // guard above, so each branch asserts. The asserts are safe
         // because the isXxxCollision flags already include the non-null
         // check inline.
         const existing = isSteamAppIdCollision
           ? await prisma.game.findUnique({ where: { steamAppId: steamAppId! } })
-          : await prisma.game.findUnique({ where: { xboxTitleId: xboxTitleId! } });
+          : isXboxTitleIdCollision
+            ? await prisma.game.findUnique({ where: { xboxTitleId: xboxTitleId! } })
+            : await prisma.game.findUnique({ where: { psnConceptId: psnConceptId! } });
         if (!existing) throw err;
         game = existing;
       }

@@ -13,6 +13,12 @@ export interface SyncedGame {
   // shape as steamAppId / xboxTitleId — stable per-title identity
   // used for re-sync rebind without re-running IGDB matching.
   gogAppId?: number;
+  // Sony's "concept ID" (N-series). Captured by syncPsnLibrary from
+  // psn-api's `titles[].concept.id`. Persisted into Game.psnConceptId
+  // by syncRunner so non-English PSN sync titles resolve correctly via
+  // IGDB's external_games (category 36) without going through fuzzy
+  // title matching. Same shape as steamAppId / xboxTitleId.
+  psnConceptId?: number;
   platformCode: PlatformCode;
   playtimeMinutes: number;
   lastPlayedAt: Date | null;

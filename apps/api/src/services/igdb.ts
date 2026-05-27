@@ -55,6 +55,9 @@ const ONE_DAY = 24 * 60 * 60 * 1000;
 const searchCache = makeCache<IgdbSearchResult[]>(FIVE_MIN);
 const gameCache = makeCache<IgdbSearchResult>(ONE_DAY);
 const steamCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
+const psnConceptCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
+const xboxTitleCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
+const gogAppCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const upcomingCache = makeCache<IgdbUpcomingRelease[]>(ONE_DAY);
 
 /* ── IGDB raw types ── */
@@ -195,12 +198,19 @@ interface IgdbRawLocalization {
   game: number;
 }
 export async function searchGameLocalizations(query: string): Promise<IgdbSearchResult[]> {
+  // L-FIX: IGDB rejects `search "..."` on game_localizations with a 400
+  // ("Searchable endpoints: Characters, Collections, Games, Platforms,
+  // Themes"). Use a case-insensitive wildcard substring instead. Escape
+  // any internal double quotes so the where clause stays valid; IGDB
+  // tolerates apostrophes and Unicode characters inside double-quoted
+  // strings as long as they aren't `"`.
+  const safe = query.replace(/"/g, '\\"');
   let localizations: IgdbRawLocalization[];
   try {
     localizations = await igdbPost(
       'game_localizations',
-      `search "${query}";
-fields id, name, game;
+      `fields id, name, game;
+where name ~ *"${safe}"*;
 limit 20;`,
     ) as unknown as IgdbRawLocalization[];
   } catch {
@@ -403,13 +413,30 @@ limit ${limit};`;
   return mapped;
 }
 
-export async function getGameBySteamId(steamAppId: number): Promise<IgdbSearchResult | null> {
-  const key = `steam_${steamAppId}`;
-  const cached = steamCache.get(key);
-  if (cached !== undefined) return cached;
-
+/**
+ * Shared core for the platform-id → IGDB Game resolution path. Hits
+ * IGDB's external_games endpoint with a (uid, category) filter and
+ * joins through to the parent game in a single query.
+ *
+ * IGDB external_games category reference:
+ *   1   Steam
+ *   5   GOG
+ *   31  Xbox Marketplace
+ *   36  Playstation Store
+ *   54  Xbox Live
+ *
+ * `categories` accepts either a single category number or an array
+ * (e.g. Xbox spans 31 AND 54 — query both at once).
+ */
+async function getGameByExternalUid(
+  categories: number | number[],
+  uid: string,
+): Promise<IgdbSearchResult | null> {
   const token = await getToken();
   const clientId = process.env['TWITCH_CLIENT_ID'] ?? '';
+  const catFilter = Array.isArray(categories)
+    ? `category = (${categories.join(',')})`
+    : `category = ${categories}`;
   const res = await fetch('https://api.igdb.com/v4/external_games', {
     method: 'POST',
     headers: {
@@ -417,16 +444,83 @@ export async function getGameBySteamId(steamAppId: number): Promise<IgdbSearchRe
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'text/plain',
     },
-    body: `fields game.id, game.name, game.first_release_date, game.cover.url, game.genres.name, game.involved_companies.company.name, game.involved_companies.developer;
-where uid = "${steamAppId}" & category = 1;
+    body: `fields game.id, game.name, game.first_release_date, game.cover.url, game.genres.name, game.involved_companies.company.name, game.involved_companies.developer, game.platforms.name, game.total_rating_count;
+where uid = "${uid}" & ${catFilter};
 limit 1;`,
   });
   if (!res.ok) throw new Error(`IGDB external_games failed: ${res.status}`);
 
   const data = await res.json() as IgdbRawExternalGame[];
   const raw = data[0]?.game;
-  const result = raw ? mapToSearchResult(raw) : null;
+  return raw ? mapToSearchResult(raw) : null;
+}
+
+export async function getGameBySteamId(steamAppId: number): Promise<IgdbSearchResult | null> {
+  const key = `steam_${steamAppId}`;
+  const cached = steamCache.get(key);
+  if (cached !== undefined) return cached;
+  const result = await getGameByExternalUid(1, String(steamAppId));
   steamCache.set(key, result);
+  return result;
+}
+
+/**
+ * N-series — match a PSN game by Sony's "concept ID". Returned by
+ * psn-api as `titles[].concept.id` and mapped to IGDB via external_games
+ * with category = 36 (Playstation Store). Bypasses fuzzy title matching
+ * entirely — crucial for non-English PSN accounts where the title comes
+ * back localized (Italian "L'Eredità del Cavaliere Oscuro" vs IGDB's
+ * canonical English "Legacy of the Dark Knight").
+ */
+export async function getGameByPsnConceptId(conceptId: number): Promise<IgdbSearchResult | null> {
+  const key = `psn_${conceptId}`;
+  const cached = psnConceptCache.get(key);
+  if (cached !== undefined) return cached;
+  let result: IgdbSearchResult | null;
+  try {
+    result = await getGameByExternalUid(36, String(conceptId));
+  } catch {
+    return null; // graceful degradation — sync falls through to title search
+  }
+  psnConceptCache.set(key, result);
+  return result;
+}
+
+/**
+ * N-series — match an Xbox game by OpenXBL's titleId. IGDB tracks Xbox
+ * games across two external_games categories (31 = Marketplace, 54 =
+ * Xbox Live); querying both at once covers older + newer titles in
+ * one shot.
+ */
+export async function getGameByXboxTitleId(xboxTitleId: number): Promise<IgdbSearchResult | null> {
+  const key = `xbox_${xboxTitleId}`;
+  const cached = xboxTitleCache.get(key);
+  if (cached !== undefined) return cached;
+  let result: IgdbSearchResult | null;
+  try {
+    result = await getGameByExternalUid([31, 54], String(xboxTitleId));
+  } catch {
+    return null;
+  }
+  xboxTitleCache.set(key, result);
+  return result;
+}
+
+/**
+ * N-series — match a GOG game by GOG's product id. IGDB external_games
+ * category 5 = GOG.
+ */
+export async function getGameByGogAppId(gogAppId: number): Promise<IgdbSearchResult | null> {
+  const key = `gog_${gogAppId}`;
+  const cached = gogAppCache.get(key);
+  if (cached !== undefined) return cached;
+  let result: IgdbSearchResult | null;
+  try {
+    result = await getGameByExternalUid(5, String(gogAppId));
+  } catch {
+    return null;
+  }
+  gogAppCache.set(key, result);
   return result;
 }
 

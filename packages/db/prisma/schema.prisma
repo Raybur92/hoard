@@ -216,6 +216,15 @@ model Game {
   // identity instead of fuzzy title-matching — partially closes the
   // "store platform-side IDs" gap from sync-quality decision #33.
   psnNpCommunicationId String?  @unique
+  // Sony's "concept ID" — single identifier across all regional variants
+  // of a game (multiple titleIds like PPSA20549_00, PPSA20599_00 roll up
+  // to one conceptId). Captured during library sync via psn-api's
+  // `concept.id` field. Maps to IGDB's external_games.uid where
+  // category = 36 (Playstation Store). Used by the N-series Sony-id-first
+  // resolution path in syncRunner so non-English PSN sync titles (Italian,
+  // Chinese, etc.) match correctly without going through fuzzy title
+  // search — same pattern as steamAppId → external_games.
+  psnConceptId         Int?     @unique
   title                String
   developer            String?
   releaseYear          Int?

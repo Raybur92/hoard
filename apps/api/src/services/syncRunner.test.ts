@@ -18,6 +18,9 @@ jest.mock('@hoard/db', () => ({
 jest.mock('./igdb', () => ({
   searchGames: jest.fn(),
   getGameBySteamId: jest.fn(),
+  getGameByPsnConceptId: jest.fn(),
+  getGameByXboxTitleId: jest.fn(),
+  getGameByGogAppId: jest.fn(),
   getTimeToBeat: jest.fn().mockResolvedValue(null),
   searchGameLocalizations: jest.fn().mockResolvedValue([]),
 }));
@@ -29,7 +32,14 @@ jest.mock('./hltb', () => ({
 import { runSync } from './syncRunner';
 import { prisma } from '@hoard/db';
 import { Prisma } from '@prisma/client';
-import { searchGames, searchGameLocalizations } from './igdb';
+import {
+  searchGames,
+  searchGameLocalizations,
+  getGameByPsnConceptId,
+  getGameByXboxTitleId,
+  getGameByGogAppId,
+  getGameBySteamId,
+} from './igdb';
 import type { SyncedGame } from './platforms/steam';
 
 const mockIgdbResult = {
@@ -56,6 +66,10 @@ beforeEach(() => {
   jest.resetAllMocks();
   (searchGames as jest.Mock).mockResolvedValue([mockIgdbResult]);
   (searchGameLocalizations as jest.Mock).mockResolvedValue([]);
+  (getGameBySteamId as jest.Mock).mockResolvedValue(null);
+  (getGameByPsnConceptId as jest.Mock).mockResolvedValue(null);
+  (getGameByXboxTitleId as jest.Mock).mockResolvedValue(null);
+  (getGameByGogAppId as jest.Mock).mockResolvedValue(null);
   (prisma.game.upsert as jest.Mock).mockResolvedValue(mockGame);
   (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(null);
   (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-1' });
@@ -428,5 +442,137 @@ describe('runSync', () => {
     expect(result.skipped).toBe(1);
     expect(result.skippedTitles).toEqual(['Truly Unmatchable Game']);
     expect(searchGameLocalizations).toHaveBeenCalledWith('Truly Unmatchable Game');
+  });
+
+  /* ── N-series: platform-id lookup via IGDB external_games ── */
+
+  it('N: resolves PSN games by psnConceptId BEFORE title search (Lego Batman Italian case)', async () => {
+    // Italian title that would never match via searchGames.
+    (searchGames as jest.Mock).mockResolvedValue([]);
+    (searchGameLocalizations as jest.Mock).mockResolvedValue([]);
+    (getGameByPsnConceptId as jest.Mock).mockResolvedValue({
+      ...mockIgdbResult,
+      igdbId: 361855,
+      title: 'LEGO Batman: Legacy of the Dark Knight',
+      platforms: ['PlayStation 5'],
+    });
+
+    const result = await runSync('user-1', [
+      {
+        igdbSearchTitle: "LEGO Batman: L'Eredità del Cavaliere Oscuro",
+        platformCode: 'PS',
+        playtimeMinutes: 240,
+        lastPlayedAt: new Date('2026-05-27'),
+        psnConceptId: 10008537,
+      },
+    ]);
+
+    expect(result.imported).toBe(1);
+    expect(getGameByPsnConceptId).toHaveBeenCalledWith(10008537);
+    // Title search shouldn't even be reached — Sony-id resolution succeeded.
+    expect(searchGames).not.toHaveBeenCalled();
+    expect(searchGameLocalizations).not.toHaveBeenCalled();
+    // Game persisted with the canonical English title + psnConceptId column.
+    expect(prisma.game.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { igdbId: 361855 },
+        create: expect.objectContaining({
+          title: 'LEGO Batman: Legacy of the Dark Knight',
+          psnConceptId: 10008537,
+        }),
+      }),
+    );
+  });
+
+  it('N: resolves Xbox games by xboxTitleId BEFORE title search', async () => {
+    (searchGames as jest.Mock).mockResolvedValue([]);
+    (getGameByXboxTitleId as jest.Mock).mockResolvedValue({
+      ...mockIgdbResult,
+      igdbId: 555,
+      title: 'Forza Horizon 5',
+    });
+
+    await runSync('user-1', [
+      {
+        igdbSearchTitle: 'Forza Horizon 5: Premium Edition',
+        platformCode: 'XB',
+        playtimeMinutes: 600,
+        lastPlayedAt: new Date('2026-05-27'),
+        xboxTitleId: 2030093255,
+      },
+    ]);
+
+    expect(getGameByXboxTitleId).toHaveBeenCalledWith(2030093255);
+    expect(searchGames).not.toHaveBeenCalled();
+  });
+
+  it('N: resolves GOG games by gogAppId BEFORE title search', async () => {
+    (searchGames as jest.Mock).mockResolvedValue([]);
+    (getGameByGogAppId as jest.Mock).mockResolvedValue({
+      ...mockIgdbResult,
+      igdbId: 777,
+      title: 'The Witcher 3: Wild Hunt',
+    });
+
+    await runSync('user-1', [
+      {
+        igdbSearchTitle: 'Wiedźmin 3: Dziki Gon',
+        platformCode: 'GG',
+        playtimeMinutes: 1000,
+        lastPlayedAt: new Date('2026-05-27'),
+        gogAppId: 1207664663,
+      },
+    ]);
+
+    expect(getGameByGogAppId).toHaveBeenCalledWith(1207664663);
+    expect(searchGames).not.toHaveBeenCalled();
+  });
+
+  it('N: falls through to title search when platform-id lookup returns null (IGDB has no external_games row yet)', async () => {
+    (getGameByPsnConceptId as jest.Mock).mockResolvedValue(null);
+    (searchGames as jest.Mock).mockResolvedValue([mockIgdbResult]);
+
+    await runSync('user-1', [
+      { ...syncedGame, platformCode: 'PS', psnConceptId: 999999 },
+    ]);
+
+    // Tried PSN-id first, then fell through to title search.
+    expect(getGameByPsnConceptId).toHaveBeenCalledWith(999999);
+    expect(searchGames).toHaveBeenCalled();
+  });
+
+  it('N: P2002 recovery — psnConceptId collision reuses existing Game row', async () => {
+    const existingGame = { ...mockGame, id: 'game-existing', psnConceptId: 10008537 };
+    (getGameByPsnConceptId as jest.Mock).mockResolvedValue({
+      ...mockIgdbResult,
+      igdbId: 361855,
+      title: 'LEGO Batman: Legacy of the Dark Knight',
+    });
+    (prisma.game.upsert as jest.Mock).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { modelName: 'Game', target: ['psnConceptId'] },
+      }),
+    );
+    (prisma.game.findUnique as jest.Mock).mockResolvedValue(existingGame);
+
+    const result = await runSync('user-1', [
+      {
+        igdbSearchTitle: "LEGO Batman: L'Eredità del Cavaliere Oscuro",
+        platformCode: 'PS',
+        playtimeMinutes: 240,
+        lastPlayedAt: new Date('2026-05-27'),
+        psnConceptId: 10008537,
+      },
+    ]);
+
+    expect(result.imported).toBe(1);
+    expect(prisma.game.findUnique).toHaveBeenCalledWith({ where: { psnConceptId: 10008537 } });
+    expect(prisma.userGame.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ gameId: 'game-existing' }),
+      }),
+    );
   });
 });

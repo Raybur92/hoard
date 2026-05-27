@@ -1,4 +1,13 @@
-import { searchGames, getGame, getUpcomingReleases, searchGameLocalizations, clearCaches } from './igdb';
+import {
+  searchGames,
+  getGame,
+  getUpcomingReleases,
+  searchGameLocalizations,
+  getGameByPsnConceptId,
+  getGameByXboxTitleId,
+  getGameByGogAppId,
+  clearCaches,
+} from './igdb';
 
 // Mock environment variables
 process.env['TWITCH_CLIENT_ID'] = 'test-client-id';
@@ -221,5 +230,89 @@ describe('searchGameLocalizations (L-series)', () => {
 
     const results = await searchGameLocalizations('q');
     expect(results).toEqual([]);
+  });
+});
+
+describe('N-series external_games helpers', () => {
+  it('getGameByPsnConceptId queries category=36 + returns mapped result', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockImplementationOnce(async (_url, init: { body: string }) => {
+        // Verify the body specifies category 36 + the conceptId as uid.
+        expect(init.body).toContain('category = 36');
+        expect(init.body).toContain('uid = "10008537"');
+        return {
+          ok: true,
+          json: async () => [{
+            game: {
+              id: 361855,
+              name: 'LEGO Batman: Legacy of the Dark Knight',
+              first_release_date: 1735689600,
+              platforms: [{ id: 167, name: 'PlayStation 5' }],
+              involved_companies: [{ company: { name: 'TT Games' }, developer: true }],
+            },
+          }],
+        };
+      });
+
+    const result = await getGameByPsnConceptId(10008537);
+    expect(result).toMatchObject({
+      igdbId: 361855,
+      title: 'LEGO Batman: Legacy of the Dark Knight',
+      developer: 'TT Games',
+      platforms: ['PlayStation 5'],
+    });
+  });
+
+  it('getGameByXboxTitleId queries both Xbox categories (31, 54) in one call', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockImplementationOnce(async (_url, init: { body: string }) => {
+        expect(init.body).toContain('category = (31,54)');
+        expect(init.body).toContain('uid = "2030093255"');
+        return {
+          ok: true,
+          json: async () => [{
+            game: { id: 444, name: 'Forza Horizon 5' },
+          }],
+        };
+      });
+
+    const result = await getGameByXboxTitleId(2030093255);
+    expect(result?.igdbId).toBe(444);
+  });
+
+  it('getGameByGogAppId queries category=5', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockImplementationOnce(async (_url, init: { body: string }) => {
+        expect(init.body).toContain('category = 5');
+        expect(init.body).toContain('uid = "1207664663"');
+        return {
+          ok: true,
+          json: async () => [{
+            game: { id: 555, name: 'The Witcher 3: Wild Hunt' },
+          }],
+        };
+      });
+
+    const result = await getGameByGogAppId(1207664663);
+    expect(result?.igdbId).toBe(555);
+  });
+
+  it('returns null when IGDB has no external_games row for the uid (empty response)', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    expect(await getGameByPsnConceptId(999999)).toBeNull();
+  });
+
+  it('returns null on IGDB error (graceful degradation — syncRunner falls through to title search)', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+
+    expect(await getGameByPsnConceptId(123)).toBeNull();
   });
 });
