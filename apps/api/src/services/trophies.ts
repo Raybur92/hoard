@@ -1,6 +1,6 @@
 import { prisma } from '@hoard/db';
 import type { PsnTrophyTitle } from './platforms/psn';
-import { applyAutoCompleteRule } from '../lib/achievements';
+import { applyAutoCompleteRule, promoteWishlistOnEngagement } from '../lib/achievements';
 
 /**
  * Title normalization for the title-fallback match (T-D5).
@@ -119,7 +119,12 @@ export async function applyPsnTrophyAggregates(
       });
     }
 
-    const newStatus = applyAutoCompleteRule(userGame.status, percent);
+    // P-series: try the Wishlist promotion first (covers the new-release
+    // case where trophies pop before getUserPlayedGames surfaces playtime),
+    // fall back to the auto-complete rule for non-Wishlist statuses.
+    const newStatus =
+      promoteWishlistOnEngagement(userGame.status, earned, percent) ??
+      applyAutoCompleteRule(userGame.status, percent);
 
     await prisma.userGame.update({
       where: { id: userGame.id },
@@ -133,7 +138,7 @@ export async function applyPsnTrophyAggregates(
     });
 
     matched++;
-    if (newStatus) autoCompleted++;
+    if (newStatus === 'Completed') autoCompleted++;
   }
 
   return { matched, autoCompleted, missed };

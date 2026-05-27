@@ -357,11 +357,17 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
             result,
           );
         } catch (err) {
+          // P5: surface the actual exception in the activity log so
+          // failures are diagnosable without Railway log access. The
+          // generic message hid which game / API call / status code was
+          // responsible; now both message and details capture it.
+          const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[sync PS] trophy fetch failed (library import succeeded):`, err);
           await logPlatform(
             platform.id, platform.userId, 'warn',
             'trophies.failed',
-            'trophy fetch failed — library import still succeeded',
+            `trophy fetch failed: ${errMsg.slice(0, 200)}`,
+            { error: errMsg.slice(0, 1000) },
           );
         }
       }

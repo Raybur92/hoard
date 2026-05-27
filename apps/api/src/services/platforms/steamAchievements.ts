@@ -1,5 +1,5 @@
 import { prisma } from '@hoard/db';
-import { applyAutoCompleteRule } from '../../lib/achievements';
+import { applyAutoCompleteRule, promoteWishlistOnEngagement } from '../../lib/achievements';
 
 /**
  * T3 of the trophies workstream (`docs/TROPHIES_PLAN.md`).
@@ -130,13 +130,18 @@ export async function triggerSteamAchievementsBackground(
 
   // Filter to UserGames where:
   //   1. The Game has a steamAppId (sync-able + we can look it up).
-  //   2. The user has Steam playtime on this row (otherwise the game came
-  //      from a different platform — the achievements aren't this user's
-  //      Steam progress for it, even if the Game has a steamAppId).
+  //   2. Either the user has Steam playtime on this row (sync surfaced the
+  //      game already, achievements are this user's Steam progress), OR
+  //      the row is a Wishlist (Steam wishlist import set steamAppId; we
+  //      want achievements to drive CM13 promotion when Steam playtime
+  //      lags behind achievement evidence — same gap as PSN trophies vs
+  //      getUserPlayedGames). Achievements still wouldn't fire for a
+  //      Wishlist on a different platform's game (no steamAppId → filtered
+  //      out above).
   const candidates = userGames.filter((ug) => {
     if (ug.game.steamAppId === null) return false;
     const ptbp = (ug.playtimeByPlatform ?? {}) as Record<string, number>;
-    return ptbp['ST'] !== undefined;
+    return ptbp['ST'] !== undefined || ug.status === 'Wishlist';
   });
 
   let fetched = 0;
@@ -151,7 +156,12 @@ export async function triggerSteamAchievementsBackground(
         skipped++;
       } else {
         const percent = ach.total > 0 ? Math.round((ach.earned / ach.total) * 100) : null;
-        const newStatus = applyAutoCompleteRule(ug.status, percent);
+        // P-series: Wishlist promotion via achievements (covers the case
+        // where Steam achievements pop before Steam playtime increments).
+        // Falls back to T-D2 auto-complete rule for non-Wishlist statuses.
+        const newStatus =
+          promoteWishlistOnEngagement(ug.status, ach.earned, percent) ??
+          applyAutoCompleteRule(ug.status, percent);
         await prisma.userGame.update({
           where: { id: ug.id },
           data: {
@@ -163,7 +173,7 @@ export async function triggerSteamAchievementsBackground(
           },
         });
         fetched++;
-        if (newStatus) autoCompleted++;
+        if (newStatus === 'Completed') autoCompleted++;
       }
     } catch (err) {
       errors++;

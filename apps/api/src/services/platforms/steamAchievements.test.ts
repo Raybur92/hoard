@@ -142,6 +142,21 @@ describe('triggerSteamAchievementsBackground — candidate filter', () => {
     expect(result.candidates).toBe(1);
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it('includes Wishlist UserGames that have a steamAppId but no ST playtime (P-series CM13 driver)', async () => {
+    // Closes the gap where Steam achievements pop before Steam playtime
+    // increments. The Wishlist row has steamAppId from Steam wishlist
+    // import; achievements drive the CM13 promotion via P-series.
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-wishlist', steamAppId: 300, status: 'Wishlist', ptbp: {} }),
+    ]);
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({ playerstats: { success: true, achievements: [{ apiname: 'A', achieved: 1 }] } }),
+    );
+
+    const result = await triggerSteamAchievementsBackground('user-1', 'SID');
+    expect(result.candidates).toBe(1);
+  });
 });
 
 describe('triggerSteamAchievementsBackground — write + auto-complete', () => {
@@ -170,6 +185,53 @@ describe('triggerSteamAchievementsBackground — write + auto-complete', () => {
     expect(data.achievementsEarned).toBe(3);
     expect(data.achievementsTotal).toBe(3);
     expect(data.achievementsPercent).toBe(100);
+    expect(data.status).toBe('Completed');
+  });
+
+  it('promotes Wishlist → OnHold at partial achievement progress (P-series)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-wl', steamAppId: 200, status: 'Wishlist', ptbp: {} }),
+    ]);
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({
+        playerstats: {
+          success: true,
+          achievements: [
+            { apiname: 'A1', achieved: 1 },
+            { apiname: 'A2', achieved: 0 },
+            { apiname: 'A3', achieved: 0 },
+          ],
+        },
+      }),
+    );
+
+    const result = await triggerSteamAchievementsBackground('user-1', 'SID');
+    expect(result.fetched).toBe(1);
+    expect(result.autoCompleted).toBe(0); // not Completed, just OnHold
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.status).toBe('OnHold');
+    expect(data.achievementsPercent).toBe(33);
+  });
+
+  it('promotes Wishlist → Completed at 100% (P-series folds in T-D2)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-wl', steamAppId: 200, status: 'Wishlist', ptbp: {} }),
+    ]);
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({
+        playerstats: {
+          success: true,
+          achievements: [
+            { apiname: 'A1', achieved: 1 },
+            { apiname: 'A2', achieved: 1 },
+          ],
+        },
+      }),
+    );
+
+    const result = await triggerSteamAchievementsBackground('user-1', 'SID');
+    expect(result.autoCompleted).toBe(1);
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
     expect(data.status).toBe('Completed');
   });
 

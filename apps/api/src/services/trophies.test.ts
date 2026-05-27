@@ -156,14 +156,57 @@ describe('applyPsnTrophyAggregates — auto-complete (T-D2)', () => {
     expect(data.status).toBeUndefined(); // not present in update body
   });
 
-  it('preserves Wishlist at 100%', async () => {
+  it('promotes Wishlist → Completed at 100% (P-series — folds in CM13 + T-D2)', async () => {
+    // Behaviour change vs T-D2 baseline: under P-series, a Wishlist
+    // UserGame that gets ANY earned-trophy evidence is promoted. At 100%
+    // we fold the auto-complete in so the user doesn't transit via OnHold.
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
       makeUg({ id: 'ug-1', npId: 'NPWR12345_00', status: 'Wishlist' }),
     ]);
 
     const result = await applyPsnTrophyAggregates('user-1', [makeTrophy()]);
 
-    expect(result.autoCompleted).toBe(0);
+    expect(result.autoCompleted).toBe(1);
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.status).toBe('Completed');
+  });
+
+  it('promotes Wishlist → OnHold at partial trophy progress (P-series — Andrea\'s Lego Batman case)', async () => {
+    // Under T-D2 baseline this stayed Wishlist (applyAutoCompleteRule
+    // returned null below 100%). Under P-series the promoteWishlistOnEngagement
+    // path fires whenever earned > 0, flipping to OnHold.
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-1', npId: 'NPWR12345_00', status: 'Wishlist' }),
+    ]);
+
+    const result = await applyPsnTrophyAggregates('user-1', [
+      makeTrophy({
+        earned: { bronze: 14, silver: 2, gold: 0, platinum: 0 }, // 16/48 ≈ 33%
+      }),
+    ]);
+
+    expect(result.matched).toBe(1);
+    expect(result.autoCompleted).toBe(0); // not Completed, just OnHold
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.status).toBe('OnHold');
+    expect(data.achievementsEarned).toBe(16);
+    expect(data.achievementsPercent).toBe(33);
+  });
+
+  it('preserves Wishlist when no trophies earned yet (no engagement signal)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-1', npId: 'NPWR12345_00', status: 'Wishlist' }),
+    ]);
+
+    const result = await applyPsnTrophyAggregates('user-1', [
+      makeTrophy({
+        earned: { bronze: 0, silver: 0, gold: 0, platinum: 0 }, // 0/48
+      }),
+    ]);
+
+    expect(result.matched).toBe(1);
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.status).toBeUndefined(); // status not in update body
   });
 
   it('does NOT auto-complete below 100% even on auto-complete-eligible status', async () => {

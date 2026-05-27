@@ -43,6 +43,7 @@
 
 import { prisma } from '@hoard/db';
 import type { XboxCredentials } from './xbox';
+import { promoteWishlistOnOwnership } from '../../lib/promoteWishlist';
 
 const OPENXBL_BASE = 'https://xbl.io/api/v2';
 
@@ -227,6 +228,7 @@ export async function applyXboxPlaytimeBackground(
     select: {
       id: true,
       playtimeByPlatform: true,
+      status: true,
       game: { select: { xboxTitleId: true } },
     },
   });
@@ -256,9 +258,21 @@ export async function applyXboxPlaytimeBackground(
     const existing = (ug.playtimeByPlatform ?? {}) as Record<string, number>;
     // Only touch the XB slot. Other platforms (a multi-platform game
     // owned on both Xbox AND Steam, for example) keep their playtimes.
+    const merged = { ...existing, XB: minutes };
+    // P-series CM13 re-check: this side-pass runs AFTER syncRunner's
+    // initial CM13 evaluation, which fired with playtime=0 because
+    // syncXboxLibrary doesn't surface minutes. Now that we have real
+    // minutes, re-evaluate the Wishlist promotion. Total across all
+    // platforms because a Wishlist promotion only cares about the
+    // engagement-positive signal, not which platform provided it.
+    const totalMinutes = Object.values(merged).reduce<number>((s, m) => s + (m ?? 0), 0);
+    const promoteToStatus = promoteWishlistOnOwnership(ug.status, totalMinutes);
     await prisma.userGame.update({
       where: { id: ug.id },
-      data: { playtimeByPlatform: { ...existing, XB: minutes } },
+      data: {
+        playtimeByPlatform: merged,
+        ...(promoteToStatus ? { status: promoteToStatus } : {}),
+      },
     });
     updated += 1;
   }

@@ -31,3 +31,41 @@ export function applyAutoCompleteRule(
   }
   return null;
 }
+
+/**
+ * P-series CM13-on-trophy-evidence rule.
+ *
+ * Sister of `promoteWishlistOnOwnership` (apps/api/src/lib/promoteWishlist.ts),
+ * but uses trophy/achievement evidence as the engagement signal instead of
+ * playtime minutes. Sony's `getUserTitles` (trophy API) surfaces new-release
+ * engagement near-instantly, while `getUserPlayedGames` (playtime API)
+ * lags by 24–72h. The playtime-driven CM13 path in syncRunner therefore
+ * misses Wishlist promotions on freshly-launched games even when trophies
+ * have already popped.
+ *
+ * This helper fires for the trophy/achievement aggregator paths:
+ * - applyPsnTrophyAggregates (PSN trophies)
+ * - triggerSteamAchievementsBackground (Steam achievements)
+ *
+ * Behaviour:
+ * - existing status ≠ Wishlist → undefined (preserves the user's library state)
+ * - earned ≤ 0 → undefined (no evidence — game is in the trophy list but
+ *   user hasn't popped a trophy yet, which can happen for games tracked
+ *   without play. Conservative: don't promote without an earned trophy.)
+ * - earned > 0 + percent === 100 → 'Completed' (folds in T-D2 auto-complete
+ *   so a Wishlist game the user already 100%'d doesn't transit via OnHold)
+ * - earned > 0 + percent < 100 → 'OnHold' (standard CM13 promotion)
+ *
+ * Used in companion to applyAutoCompleteRule — callers prefer this result
+ * when it fires (Wishlist case), fall back to applyAutoCompleteRule for
+ * non-Wishlist statuses (Backlog/OnHold/Playing → Completed at 100%).
+ */
+export function promoteWishlistOnEngagement(
+  currentStatus: PrismaGameStatus,
+  earned: number,
+  percent: number | null,
+): PrismaGameStatus | null {
+  if (currentStatus !== 'Wishlist') return null;
+  if (earned <= 0) return null;
+  return percent === 100 ? 'Completed' : 'OnHold';
+}

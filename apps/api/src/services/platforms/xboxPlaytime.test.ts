@@ -225,10 +225,16 @@ const ACCOUNT_OK = ok({
 });
 
 /** Helper — build a mocked UserGame row with the prisma select shape. */
-function ug(id: string, xboxTitleId: number | null, existingPlaytime: Record<string, number> = {}) {
+function ug(
+  id: string,
+  xboxTitleId: number | null,
+  existingPlaytime: Record<string, number> = {},
+  status: string = 'Backlog',
+) {
   return {
     id,
     playtimeByPlatform: existingPlaytime,
+    status,
     game: { xboxTitleId },
   };
 }
@@ -326,5 +332,73 @@ describe('applyXboxPlaytimeBackground', () => {
   it('throws when the API key is missing', async () => {
     await expect(applyXboxPlaytimeBackground('user-1', { apiKey: '' })).rejects.toThrow(/api key missing/i);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('promotes Wishlist → OnHold when the side-pass surfaces playtime > 0 (P-series)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      ug('ug-wl', 100, {}, 'Wishlist'),
+    ]);
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(ACCOUNT_OK)
+      .mockResolvedValueOnce(ok(makeOkResponse([{ titleid: '100', value: '47' }])));
+
+    await applyXboxPlaytimeBackground('user-1', { apiKey: 'k' });
+
+    expect(prisma.userGame.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ug-wl' },
+        data: { playtimeByPlatform: { XB: 47 }, status: 'OnHold' },
+      }),
+    );
+  });
+
+  it('keeps Wishlist as-is when the side-pass returns 0 minutes (no engagement evidence)', async () => {
+    // Edge case: title appears in the stats response but with value=0.
+    // promoteWishlistOnOwnership returns undefined for total=0, so status
+    // stays Wishlist. The data payload doesn't include status at all.
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      ug('ug-wl', 100, {}, 'Wishlist'),
+    ]);
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(ACCOUNT_OK)
+      .mockResolvedValueOnce(ok(makeOkResponse([{ titleid: '100', value: '0' }])));
+
+    await applyXboxPlaytimeBackground('user-1', { apiKey: 'k' });
+
+    // Wait — promoteWishlistOnOwnership returns 'Backlog' for total === 0,
+    // not undefined. That's the per-helper contract: Wishlist + 0 playtime
+    // = "ownership without engagement" → Backlog. The Xbox side-pass
+    // running with value=0 is the same shape: we DO want to promote out
+    // of Wishlist (the user owns the game per Xbox library import) but
+    // there's no playtime evidence yet.
+    expect(prisma.userGame.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ug-wl' },
+        data: { playtimeByPlatform: { XB: 0 }, status: 'Backlog' },
+      }),
+    );
+  });
+
+  it('does not change status for non-Wishlist UserGames (preserves user library state)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      ug('ug-1', 100, { XB: 0 }, 'OnHold'),
+      ug('ug-2', 200, {}, 'Backlog'),
+      ug('ug-3', 300, {}, 'Dropped'),
+    ]);
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(ACCOUNT_OK)
+      .mockResolvedValueOnce(ok(makeOkResponse([
+        { titleid: '100', value: '500' },
+        { titleid: '200', value: '0' },
+        { titleid: '300', value: '1200' },
+      ])));
+
+    await applyXboxPlaytimeBackground('user-1', { apiKey: 'k' });
+
+    // status not in the update data for non-Wishlist rows
+    const updateCalls = (prisma.userGame.update as jest.Mock).mock.calls;
+    for (const call of updateCalls) {
+      expect(call[0].data.status).toBeUndefined();
+    }
   });
 });
