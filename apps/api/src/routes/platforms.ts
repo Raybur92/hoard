@@ -336,8 +336,17 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         const SAMPLE = 10;
         const skippedSample = r.skippedTitles.slice(0, SAMPLE);
         const errorSample = r.errorTitles.slice(0, SAMPLE);
+        // Format each skipped title with its captured platform-side ID
+        // so we can tell whether the gap is upstream-Sony ("no concept
+        // returned") or middle-IGDB ("concept returned but no
+        // external_games row").
         const skippedSuffix = r.skipped > 0
-          ? ` (skipped: ${skippedSample.map((t) => `"${t}"`).join(', ')}${r.skippedTitles.length > SAMPLE ? `, +${r.skippedTitles.length - SAMPLE} more` : ''})`
+          ? ` (skipped: ${skippedSample.map((t) => {
+              const ids = r.skippedIds[t];
+              if (!ids) return `"${t}" [no platform id]`;
+              const parts = Object.entries(ids).map(([k, v]) => `${k}=${v}`).join(',');
+              return `"${t}" [${parts}]`;
+            }).join(' | ')}${r.skippedTitles.length > SAMPLE ? `, +${r.skippedTitles.length - SAMPLE} more` : ''})`
           : '';
         // Errored titles now include their failure reason (first ~50 chars)
         // so we can diagnose without Railway log access.
@@ -354,6 +363,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
             skippedTitles: r.skippedTitles,
             errorTitles: r.errorTitles,
             errorMessages: r.errorMessages,
+            skippedIds: r.skippedIds,
           },
         );
       }

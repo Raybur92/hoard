@@ -107,6 +107,19 @@ limit 5;`,
   );
   console.log(JSON.stringify(p3, null, 2));
 
+  // Probe 3b — alternative_names (IGDB stores alt titles here, including
+  // some localizations + working titles + regional variants — separate
+  // from the game_localizations endpoint).
+  console.log('\n--- Probe 3b: alternative_names / where name ~ *"..."* ---');
+  const p3b = await igdbPost(
+    'alternative_names',
+    `fields id, name, game, comment;
+where name ~ *"${safeQuery}"*;
+limit 20;`,
+    token,
+  );
+  console.log(JSON.stringify(p3b, null, 2));
+
   // Probe 4 — games endpoint with a wildcard name search.
   console.log('\n--- Probe 4: games / where name ~ *"<first-two-words>"* ---');
   // Extract the first two non-trivial words from the query for a broad probe.

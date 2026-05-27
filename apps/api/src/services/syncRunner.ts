@@ -31,6 +31,13 @@ export interface SyncResult {
    *  errorTitles. Diagnostic — surfaces the actual failure reason in the
    *  activity log so we don't need Railway access to know what's wrong. */
   errorMessages: Record<string, string>;
+  /** Platform-side IDs that were available when a title hit the skipped
+   *  path. Tells us whether the upstream platform API surfaced its
+   *  stable identifier — if `psnConceptId` is in the map for a skipped
+   *  PSN title, that means psn-api gave us one but the IGDB
+   *  external_games lookup missed (gap is IGDB-side). If it's absent,
+   *  psn-api itself didn't return a concept (gap is Sony-side). */
+  skippedIds: Record<string, { psnConceptId?: number; xboxTitleId?: number; gogAppId?: number; steamAppId?: number }>;
 }
 
 // Stay comfortably under the IGDB 4 req/s rate limit
@@ -93,6 +100,12 @@ export async function runSync(
   const skippedTitles: string[] = [];
   const errorTitles: string[] = [];
   const errorMessages: Record<string, string> = {};
+  // Per-title diagnostic — captures platform-side IDs for skipped/errored
+  // games so the activity log can show "Lego Batman" → psnConceptId X.
+  // Tells us whether the gap is "psn-api didn't return concept.id" vs
+  // "IGDB doesn't have external_games for this concept" without needing
+  // to run separate diagnostic scripts.
+  const skippedIds: Record<string, { psnConceptId?: number; xboxTitleId?: number; gogAppId?: number; steamAppId?: number }> = {};
 
   for (const sg of syncedGames) {
     try {
@@ -138,6 +151,17 @@ export async function runSync(
       if (!igdbGame) {
         skipped++;
         skippedTitles.push(sg.igdbSearchTitle);
+        // Capture platform-side IDs for this skipped title so the
+        // activity log can show what psn-api/openxbl/gog actually
+        // returned. If psnConceptId is undefined → psn-api didn't
+        // report a concept for this game. If it's present → the IGDB
+        // external_games lookup missed (no row for this concept).
+        const ids: typeof skippedIds[string] = {};
+        if (sg.psnConceptId !== undefined) ids.psnConceptId = sg.psnConceptId;
+        if (sg.xboxTitleId !== undefined) ids.xboxTitleId = sg.xboxTitleId;
+        if (sg.gogAppId !== undefined) ids.gogAppId = sg.gogAppId;
+        if (sg.steamAppId !== undefined) ids.steamAppId = sg.steamAppId;
+        if (Object.keys(ids).length > 0) skippedIds[sg.igdbSearchTitle] = ids;
         continue;
       }
 
@@ -284,5 +308,5 @@ export async function runSync(
     }
   }
 
-  return { imported, skipped, skippedTitles, errorTitles, errorMessages };
+  return { imported, skipped, skippedTitles, errorTitles, errorMessages, skippedIds };
 }
