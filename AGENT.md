@@ -165,9 +165,12 @@ Platform
 
 Game
   id, igdbId (unique), title, developer
-  steamAppId (unique, nullable) — populated during Steam sync; used for HLTB lookups
+  steamAppId (unique, nullable) — populated during Steam sync; used for HLTB lookups + N-series IGDB external_games resolution
   hltbId (nullable) — HLTB internal game id; captured from codepotatoes.de payload; enables real HLTB deep-link
-  gogAppId (nullable) — captured from codepotatoes.de payload; future GOG sync key
+  gogAppId (nullable, NOT unique — HLTB sets it too) — populated during GOG sync; used for N-series external_games resolution
+  xboxTitleId (unique, nullable) — populated during Xbox sync; used by playtime side-pass + N-series external_games resolution
+  psnNpCommunicationId (unique, nullable) — captured during PSN trophy sync; primary-match key for trophy aggregator (T-D5)
+  psnConceptId (unique, nullable) — Sony "concept ID" capturing regional variants under one identifier; populated during PSN sync; used by N-series external_games resolution (decision #40)
   releaseYear, genres: String[]
   coverUrl (from IGDB), metadata: JSON  [metadata field is currently unused — flagged for cleanup]
 
@@ -328,6 +331,42 @@ The closed-beta admin panel can permanently delete other users via `DELETE /api/
 (d) **Active sessions invalidate naturally via the `requireUser`/`requireActive` DB-lookup path — no JWT blacklist or session-table cleanup.** Hoard's auth model is JWT-cookie-only with no `Session` table. When a User row is deleted, every subsequent request from a still-valid JWT (up to 7 days remaining) hits `requireUser` (cheap JWT decode, sets `req.userId`) → `requireActive` (`prisma.user.findUnique` against `req.userId`) → returns `null` → middleware returns 401. Frontend `RequireAuth` reads the 401 as unauthed and redirects to `/login`. The deleted user can't re-auth (their User row is gone) and the cookie naturally expires. **Property verified per-route:** the four `requireActive`-exempt routes (per the closed-beta gate audit in I2's §4) — `GET /api/auth/me`, `DELETE /api/auth/me`, `POST /api/auth/redeem-invite`, `POST /api/auth/request-access` — each do their own internal `prisma.user.findUnique`/`.update`/`.delete` against `req.userId`. `GET /auth/me` returns 404 cleanly on the deleted-user case; the other three throw `P2025 RecordNotFound` → 500 (clean-for-security but minor UX wart, tracked as deferred work in `docs/ADMIN_POLISH_PLAN.md` §4 as a ~15-line catch-and-404 fix for a future auth-correctness pass). No remediation in A1 scope.
 
 The combined effect: single-admin closed-beta has a complete destructive-action loop (hard-delete with cascade + audit-row preservation + accident-resistance via typed-confirm of `displayIdentity` + self-protection + natural session invalidation) without adding new infrastructure. Deletion is supported; demotion is not (per I-D8). The `/admin` panel UI lives at `apps/web/src/components/screens/AdminScreen.tsx`; the destructive flow uses the shared `ConfirmModal` (`apps/web/src/components/modals/ConfirmModal.tsx`, promoted from inline-in-SettingsDesktop in A1 commit 3) with the `'delete-user'` variant.
+
+**40. Sync resolution order is platform-id → title-search → localization-fallback, for ALL synced platforms (sync resolution overhaul — 2026-05-27)**
+
+Every synced platform (Steam, PSN, Xbox, GOG) follows the same resolution chain inside `syncRunner.ts` per-game:
+
+1. **Stable platform-side ID lookup via IGDB `external_games`** — Steam appid (`getGameBySteamId`), PSN concept ID (`getGameByPsnConceptId`), Xbox titleId (`getGameByXboxTitleId`), GOG product id (`getGameByGogAppId`). Each calls the shared `getGameByExternalUid(urlPattern, uid)` helper. This is the **only** path that survives non-English account locales (Italian PSN reports "LEGO Batman: L'Eredità del Cavaliere Oscuro" but the stable concept ID 10008537 maps directly to IGDB game 361855 regardless of locale).
+2. **Title text search + smart matcher** (`searchGames` + `pickBestMatch`) — fallback when no platform-side ID is available OR the IGDB external_games row doesn't exist. The smart matcher scores by title similarity + platform agreement + popularity to avoid name-collision picks (decision #32).
+3. **IGDB `game_localizations` wildcard fallback** (`searchGameLocalizations`) — tertiary path for cases where IGDB has a regional localization row even though the canonical title doesn't match. Coverage is sparse (community-maintained), so this catches a long tail rather than a majority.
+
+The order is fixed; new platforms must slot their platform-id helper into step 1 to inherit the same correctness properties. If a future contributor wants to add Epic Games Store sync, the pattern is: capture Epic's stable ID at sync time, add `getGameByEpicId(epicId)` calling `getGameByExternalUid('epicgames.com', String(epicId))`, wire into syncRunner's step-1 chain.
+
+**41. IGDB `external_games` filters use URL-pattern matching, NOT the `category` enum (sync resolution overhaul — 2026-05-27)**
+
+Critical operational pattern. IGDB is migrating from the legacy `category` enum (1=Steam, 5=GOG, 36=PSN, 31/54=Xbox) to a newer `external_game_source` schema. Many current rows have `category` set to NULL even when the row exists — LEGO Batman: Legacy of the Dark Knight's PSN row (`uid="10008537"`) is a confirmed example (verified 2026-05-27 via `scripts/probe-igdb-external-games.ts`).
+
+Filtering by `category = 36` returned `[]` for that row despite the row existing. Filtering by `url ~ *"store.playstation.com"*` returned it correctly.
+
+**Always filter `external_games` by URL pattern**, never by `category`. Stable patterns by storefront:
+- Steam: `store.steampowered.com`
+- PSN: `store.playstation.com`
+- GOG: `gog.com`
+- Xbox: `microsoft.com` (covers Microsoft Store + xbox.com under Microsoft's domain)
+
+If IGDB ever fully deprecates `category`, the URL-pattern filters keep working without code changes. The shared `getGameByExternalUid` helper takes the URL pattern as its first argument.
+
+**42. Trophy/achievement signals are first-class engagement evidence for CM13, alongside playtime (P-series — 2026-05-27)**
+
+CM13 wishlist auto-promote previously only fired on playtime > 0. Sony's `getUserPlayedGames` and Steam's `playtime_forever` both lag 24-72h on new releases — a user can wishlist a game, play it for hours, earn trophies, and the playtime API still reports `PT0S`. CM13 was invisible to this state.
+
+Two helpers now share the CM13 outcome rules:
+- `promoteWishlistOnOwnership(status, totalPlaytimeMinutes)` — playtime path (used by syncRunner + manual-add).
+- `promoteWishlistOnEngagement(status, earned, percent)` — trophy/achievement path. Returns `Completed` at 100% (folds in T-D2), `OnHold` for `earned > 0` below 100%, null otherwise. Used by `applyPsnTrophyAggregates`, `triggerSteamAchievementsBackground`, and `applyXboxPlaytimeBackground` (which re-evaluates after surfacing minutes post-syncRunner).
+
+The trigger condition stays `existingStatus === 'Wishlist'`. The change is conceptual: CM13 isn't "ownership detection via playtime" but "ownership detection via ANY engagement evidence." Future engagement-signal additions (e.g. screenshots, presence detection) should follow the same pattern — call into a CM13-shaped helper that returns one of `OnHold | Completed | null`.
+
+Mirrors CM13 amendment 2026-05-27 in `docs/CONCEPTUAL_MODEL.md`.
 
 ---
 
