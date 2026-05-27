@@ -93,6 +93,33 @@ async function main(): Promise<void> {
     token,
   );
   console.log(JSON.stringify(external, null, 2));
+
+  // 3 — Direct probe replicating what getGameByPsnConceptId runs in prod.
+  // Asks for the PSN row by uid + category=36 (what our code filters by).
+  // If this returns empty, our filter is wrong; if non-empty, the problem
+  // is elsewhere (rate limit, cache, etc.).
+  const psnRow = (external as Array<{ url?: string; uid?: string }> | { error: string })
+    ?? null;
+  if (Array.isArray(psnRow)) {
+    const psn = psnRow.find((r) => r.url?.includes('store.playstation.com'));
+    if (psn?.uid) {
+      console.log(`\n--- Probe: SAME query as getGameByPsnConceptId for uid=${psn.uid} ---`);
+      const directProbe = await igdbPost(
+        'external_games',
+        `fields game.id, game.name; where uid = "${psn.uid}" & category = 36; limit 1;`,
+        token,
+      );
+      console.log(JSON.stringify(directProbe, null, 2));
+
+      console.log(`\n--- Same probe but WITHOUT category filter (uid alone) ---`);
+      const noCat = await igdbPost(
+        'external_games',
+        `fields category, uid, name, url, game.id, game.name; where uid = "${psn.uid}"; limit 10;`,
+        token,
+      );
+      console.log(JSON.stringify(noCat, null, 2));
+    }
+  }
 }
 
 main().catch((err) => {
