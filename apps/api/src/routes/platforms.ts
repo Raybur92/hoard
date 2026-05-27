@@ -14,6 +14,7 @@ import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam'
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { syncXboxLibrary } from '../services/platforms/xbox';
 import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime';
+import { exchangeGogCode, computeExpiresAt } from '../services/platforms/gog';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -514,6 +515,67 @@ router.post('/platforms/xbox/connect', requireUser, requireActive, async (req: R
   } catch (err) {
     console.error('[xbox/connect] db error:', err);
     res.status(500).json({ error: 'Failed to save Xbox API key — database error' });
+  }
+});
+
+// POST /api/platforms/gog/connect — exchange OAuth code for tokens.
+//
+// User flow:
+//   1. Frontend renders a button linking to getGogAuthUrl() (new tab).
+//   2. User signs in to GOG; GOG redirects to Galaxy's hardcoded
+//      success page (`embed.gog.com/on_login_success?code=XXXX&...`).
+//   3. User copies the `code=` value, pastes it into Hoard.
+//   4. Frontend POSTs the code here.
+//   5. We exchange via exchangeGogCode and store {accessToken,
+//      refreshToken, expiresAt} on Platform.credentials.
+//
+// GOG access tokens expire in ~1h; refresh tokens are long-lived.
+// Sync orchestration (sub-unit #5.3) will auto-refresh expired tokens
+// using the stored refresh_token.
+router.post('/platforms/gog/connect', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const schema = z.object({ code: z.string().min(1).max(2048) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Missing or malformed OAuth code' });
+    return;
+  }
+
+  // Exchange the code for tokens BEFORE touching the DB — if GOG
+  // rejects it, we don't want a half-written Platform row.
+  let tokens: Awaited<ReturnType<typeof exchangeGogCode>>;
+  try {
+    tokens = await exchangeGogCode(parsed.data.code);
+  } catch (err) {
+    console.error('[gog/connect] token exchange failed:', err);
+    res.status(400).json({
+      error: 'GOG rejected the authorization code. Codes are single-use and expire fast — start the connect flow over.',
+    });
+    return;
+  }
+
+  const credentials = {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresAt: computeExpiresAt(tokens.expiresIn),
+  };
+
+  try {
+    const upserted = await prisma.platform.upsert({
+      where: { userId_code: { userId: req.userId, code: 'GG' } },
+      update: { credentials, syncStatus: 'ok' },
+      create: {
+        userId: req.userId,
+        code: 'GG',
+        syncable: true,
+        credentials,
+        syncStatus: 'ok',
+      },
+    });
+    await logEvent(req.userId, 'platform.connected', { code: 'GG' });
+    res.json({ ok: true, platformId: upserted.id });
+  } catch (err) {
+    console.error('[gog/connect] db error:', err);
+    res.status(500).json({ error: 'Failed to save GOG credentials — database error' });
   }
 });
 

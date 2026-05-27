@@ -46,6 +46,17 @@ jest.mock('../services/igdb', () => ({
   getReleaseDetails: jest.fn(),
 }));
 
+// Sub-unit #5.1 — the gog/connect route exchanges the OAuth code via
+// exchangeGogCode. Mock at module level so tests don't make real
+// network calls to auth.gog.com.
+jest.mock('../services/platforms/gog', () => {
+  const actual = jest.requireActual('../services/platforms/gog');
+  return {
+    ...actual,
+    exchangeGogCode: jest.fn(),
+  };
+});
+
 jest.mock('../middleware/user', () => ({
   requireUser: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
   requireAuth: (req: Request, _res: Response, next: NextFunction) => { (req as Request & { userId: string }).userId = 'test-user-id'; next(); },
@@ -176,6 +187,100 @@ describe('POST /api/platforms/xbox/connect', () => {
     expect(prisma.platform.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ code: 'XB' }),
+      }),
+    );
+  });
+});
+
+/* ── POST /api/platforms/gog/connect ── */
+
+import { exchangeGogCode as mockedExchangeGogCode } from '../services/platforms/gog';
+
+describe('POST /api/platforms/gog/connect', () => {
+  it('returns 400 when the OAuth code is missing or empty', async () => {
+    const res = await request(app).post('/api/platforms/gog/connect').send({});
+    expect(res.status).toBe(400);
+
+    const res2 = await request(app).post('/api/platforms/gog/connect').send({ code: '' });
+    expect(res2.status).toBe(400);
+
+    expect(mockedExchangeGogCode).not.toHaveBeenCalled();
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when GOG rejects the code (single-use, fast expiry — common error)', async () => {
+    (mockedExchangeGogCode as jest.Mock).mockRejectedValue(
+      new Error('GOG token exchange failed: 400 invalid_grant'),
+    );
+
+    const res = await request(app)
+      .post('/api/platforms/gog/connect')
+      .send({ code: 'stale-or-reused-code' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/single-use|expire|start.*over/i);
+    // No DB write when token exchange failed.
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+  });
+
+  it('exchanges the code, persists tokens + expiresAt, and returns 200 on success', async () => {
+    (mockedExchangeGogCode as jest.Mock).mockResolvedValue({
+      accessToken: 'AT',
+      refreshToken: 'RT',
+      expiresIn: 3600,
+    });
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-gg-1' });
+
+    const res = await request(app)
+      .post('/api/platforms/gog/connect')
+      .send({ code: 'fresh-oauth-code' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.platformId).toBe('plat-gg-1');
+
+    expect(mockedExchangeGogCode).toHaveBeenCalledWith('fresh-oauth-code');
+    expect(prisma.platform.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_code: { userId: 'test-user-id', code: 'GG' } },
+        create: expect.objectContaining({
+          code: 'GG',
+          syncable: true,
+          syncStatus: 'ok',
+          credentials: expect.objectContaining({
+            accessToken: 'AT',
+            refreshToken: 'RT',
+            expiresAt: expect.any(String),
+          }),
+        }),
+      }),
+    );
+
+    // expiresAt is an ISO string ~60s before now+3600s (safety margin).
+    const credentials = (prisma.platform.upsert as jest.Mock).mock.calls[0][0].create.credentials;
+    const expiresAt = new Date(credentials.expiresAt as string).getTime();
+    expect(expiresAt).toBeGreaterThan(Date.now() + 3500 * 1000);
+    expect(expiresAt).toBeLessThan(Date.now() + 3600 * 1000);
+  });
+
+  it('upsert update path overwrites credentials + flips syncStatus to ok (reconnect after refresh-token expiry)', async () => {
+    (mockedExchangeGogCode as jest.Mock).mockResolvedValue({
+      accessToken: 'AT-2',
+      refreshToken: 'RT-2',
+      expiresIn: 3600,
+    });
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-gg-1' });
+
+    await request(app)
+      .post('/api/platforms/gog/connect')
+      .send({ code: 'reconnect-code' });
+
+    expect(prisma.platform.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          credentials: expect.objectContaining({ accessToken: 'AT-2', refreshToken: 'RT-2' }),
+          syncStatus: 'ok',
+        }),
       }),
     );
   });
