@@ -260,4 +260,32 @@ export async function syncGogLibrary(credentials: GogCredentials): Promise<Synce
     }));
 }
 
+/**
+ * Fetch the authenticated user's GOG username via the public
+ * `/userData.json` endpoint on embed.gog.com. Same auth shape as
+ * `getFilteredProducts` (Bearer access token). Used to populate
+ * Platform.credentials.username for the "signed in as X" UI.
+ *
+ * Fail-silent: any non-2xx / malformed JSON / network error returns
+ * null. Decorative metadata — must not block connect or sync. Does
+ * NOT proactively refresh the access token; callers running the sync
+ * already pass a freshened token via ensureFreshGogCredentials.
+ */
+export async function getGogUsername(accessToken: string): Promise<string | null> {
+  if (!accessToken) return null;
+  try {
+    const res = await fetch(`${EMBED_BASE}/userData.json`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+    if (!res?.ok) return null;
+    const data = await res.json() as { username?: string };
+    return data.username && data.username.length > 0 ? data.username : null;
+  } catch {
+    return null;
+  }
+}
+
 export { SyncedGame };

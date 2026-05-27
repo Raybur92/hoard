@@ -1,4 +1,4 @@
-import { syncXboxLibrary } from './xbox';
+import { syncXboxLibrary, getXboxGamertag } from './xbox';
 
 beforeEach(() => {
   global.fetch = jest.fn() as typeof global.fetch;
@@ -209,5 +209,50 @@ describe('syncXboxLibrary', () => {
       json: async () => { throw new Error('Unexpected token'); },
     } as unknown as Response);
     await expect(syncXboxLibrary({ apiKey: 'fake-key' })).rejects.toThrow(/malformed/i);
+  });
+});
+
+describe('getXboxGamertag', () => {
+  it('extracts Gamertag from settings array under content.profileUsers[0]', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({
+        content: {
+          profileUsers: [
+            {
+              id: '2535463549504134',
+              settings: [
+                { id: 'GameDisplayName', value: 'Andrea' },
+                { id: 'Gamertag', value: 'BedKarma' },
+                { id: 'TenureLevel', value: '10' },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const r = await getXboxGamertag('fake-key');
+    expect(r).toBe('BedKarma');
+  });
+
+  it('returns null when the Gamertag setting is missing', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({ content: { profileUsers: [{ id: 'X', settings: [{ id: 'TenureLevel', value: '10' }] }] } }),
+    );
+    expect(await getXboxGamertag('fake-key')).toBeNull();
+  });
+
+  it('returns null on non-2xx, malformed JSON, network error, and missing key', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(notOk(401));
+    expect(await getXboxGamertag('fake-key')).toBeNull();
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true, status: 200, json: async () => { throw new Error('bad json'); },
+    } as unknown as Response);
+    expect(await getXboxGamertag('fake-key')).toBeNull();
+
+    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('ECONNRESET'));
+    expect(await getXboxGamertag('fake-key')).toBeNull();
+
+    expect(await getXboxGamertag('')).toBeNull();
   });
 });

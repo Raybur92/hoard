@@ -10,11 +10,11 @@ import type { PlatformStatusResponse, PlatformDetail, PlatformLogResponse, Platf
 import { mapUserGame } from '../lib/mappers';
 import { promoteWishlistOnOwnership } from '../lib/promoteWishlist';
 import { getReleaseDetails } from '../services/igdb';
-import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam';
-import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
-import { syncXboxLibrary } from '../services/platforms/xbox';
+import { syncSteamLibrary, getSteamWishlist, getSteamUsername } from '../services/platforms/steam';
+import { syncPsnLibrary, getPsnTrophyTitles, getPsnUsername } from '../services/platforms/psn';
+import { syncXboxLibrary, getXboxGamertag } from '../services/platforms/xbox';
 import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime';
-import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary, getGogAuthUrl } from '../services/platforms/gog';
+import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary, getGogAuthUrl, getGogUsername } from '../services/platforms/gog';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -267,11 +267,13 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
     try {
       let syncedGames: Awaited<ReturnType<typeof syncSteamLibrary>> = [];
       // Captured for the inline trophy fetch (PSN), background
-      // achievement fetch (Steam), and background playtime side-pass
-      // (Xbox) below — same creds, no need to re-read.
+      // achievement fetch (Steam), background playtime side-pass
+      // (Xbox), and the post-sync username backfill block below —
+      // same creds, no need to re-read.
       let psnNpsso: string | null = null;
       let steamId: string | null = null;
       let xboxApiKey: string | null = null;
+      let gogAccessToken: string | null = null;
 
       if (code === 'ST') {
         const creds = platform.credentials as { steamId?: string } | null;
@@ -312,11 +314,14 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           expiresAt: creds.expiresAt,
         });
         if (fresh.accessToken !== creds.accessToken) {
+          // Merge with existing credentials so we don't clobber decorative
+          // fields like `username` that the refresh result doesn't carry.
           await prisma.platform.update({
             where: { id: platform.id },
-            data: { credentials: fresh as unknown as Prisma.InputJsonValue },
+            data: { credentials: { ...creds, ...fresh } as Prisma.InputJsonValue },
           });
         }
+        gogAccessToken = fresh.accessToken;
         syncedGames = await syncGogLibrary(fresh);
       }
 
@@ -381,6 +386,42 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
       // in admin view if it ever happens.
       if (wasFirstSync) {
         await logEvent(platform.userId, 'sync.first', { code, gamesImported });
+      }
+
+      // Username backfill — populates Platform.credentials.username for
+      // already-connected platforms whose connect endpoint pre-dated the
+      // username-capture work (Steam 2024, PSN/Xbox before #6.2). Runs
+      // AFTER syncStatus flips to 'ok' so it can't race with the in-sync
+      // writes; fail-silent because the username is decorative.
+      //
+      // Each branch re-reads the platform row before writing so a fresh
+      // refresh (GOG) or any other concurrent credential update can't be
+      // clobbered.
+      const initialCreds = (platform.credentials as Record<string, unknown> | null) ?? {};
+      if (!initialCreds['username']) {
+        let username: string | null = null;
+        try {
+          if (code === 'ST' && steamId) username = await getSteamUsername(steamId);
+          else if (code === 'PS' && psnNpsso) username = await getPsnUsername(psnNpsso);
+          else if (code === 'XB' && xboxApiKey) username = await getXboxGamertag(xboxApiKey);
+          else if (code === 'GG' && gogAccessToken) username = await getGogUsername(gogAccessToken);
+        } catch (err) {
+          console.error(`[sync ${code}] username backfill fetch failed:`, err);
+        }
+        if (username) {
+          try {
+            const latest = await prisma.platform.findUnique({ where: { id: platform.id } });
+            const latestCreds = (latest?.credentials as Record<string, unknown> | null) ?? {};
+            if (!latestCreds['username']) {
+              await prisma.platform.update({
+                where: { id: platform.id },
+                data: { credentials: { ...latestCreds, username } as Prisma.InputJsonValue },
+              });
+            }
+          } catch (err) {
+            console.error(`[sync ${code}] username backfill write failed:`, err);
+          }
+        }
       }
 
       // T3 — background pass over every Steam-platformed UserGame to fetch
@@ -483,14 +524,22 @@ router.post('/platforms/psn/connect', requireUser, requireActive, async (req: Re
   }
 
   try {
+    // Capture the PSN onlineId for the "signed in as X" UI. Fail-silent —
+    // if the fetch errors, the connect still succeeds; sync-time backfill
+    // will retry on the next sync.
+    const username = await getPsnUsername(parsed.data.npsso);
+    const credentials = {
+      npsso: parsed.data.npsso,
+      ...(username ? { username } : {}),
+    };
     const upserted = await prisma.platform.upsert({
       where: { userId_code: { userId: req.userId, code: 'PS' } },
-      update: { credentials: { npsso: parsed.data.npsso }, syncStatus: 'ok', lastSyncAt: new Date() },
+      update: { credentials, syncStatus: 'ok', lastSyncAt: new Date() },
       create: {
         userId: req.userId,
         code: 'PS',
         syncable: true,
-        credentials: { npsso: parsed.data.npsso },
+        credentials,
         syncStatus: 'ok',
         lastSyncAt: new Date(),
       },
@@ -515,14 +564,20 @@ router.post('/platforms/xbox/connect', requireUser, requireActive, async (req: R
   }
 
   try {
+    // Capture the Xbox Gamertag for the "signed in as X" UI. Fail-silent.
+    const username = await getXboxGamertag(parsed.data.apiKey);
+    const credentials = {
+      apiKey: parsed.data.apiKey,
+      ...(username ? { username } : {}),
+    };
     const upserted = await prisma.platform.upsert({
       where: { userId_code: { userId: req.userId, code: 'XB' } },
-      update: { credentials: { apiKey: parsed.data.apiKey }, syncStatus: 'ok' },
+      update: { credentials, syncStatus: 'ok' },
       create: {
         userId: req.userId,
         code: 'XB',
         syncable: true,
-        credentials: { apiKey: parsed.data.apiKey },
+        credentials,
         syncStatus: 'ok',
       },
     });
@@ -590,10 +645,13 @@ router.post('/platforms/gog/connect', requireUser, requireActive, async (req: Re
     return;
   }
 
+  // Capture the GOG username for the "signed in as X" UI. Fail-silent.
+  const username = await getGogUsername(tokens.accessToken);
   const credentials = {
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     expiresAt: computeExpiresAt(tokens.expiresIn),
+    ...(username ? { username } : {}),
   };
 
   try {

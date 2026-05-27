@@ -392,14 +392,23 @@ router.get('/auth/steam/callback', async (req: Request, res: Response): Promise<
         where: { id: currentUserId },
         data: { steamId },
       });
+      // Persist the Steam personaname (already fetched above as
+      // displayName) for the "signed in as X" UI. STEAM_API_KEY is the
+      // gate — if it's unset, displayName falls back to "Steam:<id>"
+      // which isn't useful as a user-facing handle, so we skip
+      // persistence in that case and let the sync-time backfill retry.
+      const steamCreds: { steamId: string; username?: string } = { steamId };
+      if (STEAM_API_KEY && displayName !== `Steam:${steamId}`) {
+        steamCreds.username = displayName;
+      }
       await prisma.platform.upsert({
         where: { userId_code: { userId: currentUserId, code: 'ST' } },
-        update: { credentials: { steamId }, syncStatus: 'ok', lastSyncAt: new Date() },
+        update: { credentials: steamCreds, syncStatus: 'ok', lastSyncAt: new Date() },
         create: {
           userId: currentUserId,
           code: 'ST',
           syncable: true,
-          credentials: { steamId },
+          credentials: steamCreds,
           syncStatus: 'ok',
           lastSyncAt: new Date(),
         },

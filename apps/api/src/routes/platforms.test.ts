@@ -156,6 +156,9 @@ describe('POST /api/platforms/psn/connect', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+    // getPsnUsername short-circuits to null in this test env (psn-api
+    // calls fail through to the fail-silent catch), so credentials stay
+    // npsso-only — no username field added.
     expect(prisma.platform.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ code: 'PS', credentials: { npsso: NPSSO_64 } }),

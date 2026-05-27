@@ -73,6 +73,34 @@ export async function syncSteamLibrary(credentials: SteamCredentials): Promise<S
 }
 
 /**
+ * Fetch the user's Steam `personaname` (handle shown on their profile)
+ * via the public `ISteamUser/GetPlayerSummaries/v2` endpoint. Used to
+ * populate Platform.credentials.username for the "signed in as X" UI.
+ *
+ * Fail-silent: any non-2xx / network error / missing-key returns null.
+ * Decorative metadata — must not block connect or sync.
+ *
+ * Same endpoint auth.ts already calls for User.name on Steam OpenID
+ * register/login; extracted here so the connect/sync paths can reuse it.
+ */
+export async function getSteamUsername(steamId: string): Promise<string | null> {
+  if (!steamId) return null;
+  const apiKey = process.env['STEAM_API_KEY'];
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(
+      `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${apiKey}&steamids=${steamId}`,
+    );
+    if (!res?.ok) return null;
+    const data = await res.json() as { response?: { players?: Array<{ personaname?: string }> } };
+    const name = data.response?.players?.[0]?.personaname;
+    return name && name.length > 0 ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch the user's Steam wishlist via the public `IWishlistService/GetWishlist`
  * endpoint. Same public-profile caveat as `GetPlayerAchievements` (T-D7) —
  * if the user's Steam wishlist visibility is private, the response is

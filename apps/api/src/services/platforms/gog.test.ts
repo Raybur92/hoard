@@ -5,6 +5,7 @@ import {
   computeExpiresAt,
   ensureFreshGogCredentials,
   syncGogLibrary,
+  getGogUsername,
   GOG_GALAXY_REDIRECT_URI,
 } from './gog';
 
@@ -304,5 +305,30 @@ describe('syncGogLibrary', () => {
   it('throws on a network error', async () => {
     (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('ECONNRESET'));
     await expect(syncGogLibrary(FRESH_CREDS)).rejects.toThrow(/network error/i);
+  });
+});
+
+describe('getGogUsername', () => {
+  it('extracts username from embed.gog.com/userData.json', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(ok({ username: 'BedKarma' }));
+    expect(await getGogUsername('fake-access')).toBe('BedKarma');
+  });
+
+  it('returns null on missing username, non-2xx, malformed JSON, network error, or empty token', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(ok({ otherField: 'X' }));
+    expect(await getGogUsername('fake-access')).toBeNull();
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce(notOk(401));
+    expect(await getGogUsername('fake-access')).toBeNull();
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true, status: 200, json: async () => { throw new Error('bad json'); },
+    } as unknown as Response);
+    expect(await getGogUsername('fake-access')).toBeNull();
+
+    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('ECONNRESET'));
+    expect(await getGogUsername('fake-access')).toBeNull();
+
+    expect(await getGogUsername('')).toBeNull();
   });
 });

@@ -170,3 +170,37 @@ export async function syncXboxLibrary(credentials: XboxCredentials): Promise<Syn
 }
 
 export { SyncedGame };
+
+/**
+ * Fetch the user's Xbox gamertag from OpenXBL's /account endpoint.
+ * Used to populate Platform.credentials.username so the UI can show
+ * "signed in as <gamertag>". Fail-silent: any non-2xx, malformed JSON,
+ * or network error returns null — username is decorative, must not
+ * block the connect handshake or sync flow.
+ *
+ * OpenXBL response shape (wrapped under `content` like every other
+ * endpoint — see syncXboxLibrary header comment): the gamertag lives
+ * in `profileUsers[0].settings` as an array of `{id: "Gamertag", value}`
+ * pairs. Defensive parsing handles missing/empty arrays.
+ */
+export async function getXboxGamertag(apiKey: string): Promise<string | null> {
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(`${OPENXBL_BASE}/account`, {
+      headers: {
+        'X-Authorization': apiKey,
+        Accept: 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    if (!res?.ok) return null;
+    const data = await res.json() as {
+      content?: { profileUsers?: Array<{ settings?: Array<{ id?: string; value?: string }> }> };
+    };
+    const settings = data.content?.profileUsers?.[0]?.settings ?? [];
+    const gamertag = settings.find((s) => s.id === 'Gamertag')?.value;
+    return gamertag && gamertag.length > 0 ? gamertag : null;
+  } catch {
+    return null;
+  }
+}

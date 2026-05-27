@@ -3,6 +3,7 @@ import {
   exchangeCodeForAccessToken,
   getUserPlayedGames,
   getUserTitles,
+  getProfileFromUserName,
 } from 'psn-api';
 import type { PlatformCode } from '@hoard/types';
 import type { SyncedGame } from './steam';
@@ -128,3 +129,28 @@ export async function getPsnTrophyTitles(npssoToken: string): Promise<PsnTrophyT
 
 export { SyncedGame };
 export type { PlatformCode };
+
+/**
+ * Fetch the authenticated user's PSN onlineId (handle) via psn-api's
+ * `getProfileFromUserName(auth, 'me')`. The magic 'me' username resolves
+ * to the account that owns the access token.
+ *
+ * Fail-silent: any error (bad NPSSO, network, PSN downtime) returns null.
+ * Username is decorative — must not block connect or sync.
+ *
+ * This re-does the NPSSO → access-token dance, which is one extra round
+ * trip on connect. Acceptable cost vs. threading the existing auth
+ * context through every caller; PSN sync also re-auths each run today.
+ */
+export async function getPsnUsername(npssoToken: string): Promise<string | null> {
+  if (!npssoToken) return null;
+  try {
+    const accessCode = await exchangeNpssoForCode(npssoToken);
+    const { accessToken } = await exchangeCodeForAccessToken(accessCode);
+    const profile = await getProfileFromUserName({ accessToken }, 'me');
+    const onlineId = profile?.profile?.onlineId;
+    return onlineId && onlineId.length > 0 ? onlineId : null;
+  } catch {
+    return null;
+  }
+}

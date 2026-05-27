@@ -1,4 +1,4 @@
-import { getSteamWishlist } from './steam';
+import { getSteamWishlist, getSteamUsername } from './steam';
 
 beforeEach(() => {
   process.env['STEAM_API_KEY'] = 'test-key';
@@ -63,5 +63,33 @@ describe('getSteamWishlist', () => {
     expect(out).toHaveLength(1);
     expect(out[0]?.addedAt).toBeInstanceOf(Date);
     expect(out[0]?.priority).toBe(0); // default when missing
+  });
+});
+
+describe('getSteamUsername', () => {
+  it('extracts personaname from GetPlayerSummaries response', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({ response: { players: [{ personaname: 'BedKarma' }] } }),
+    );
+    expect(await getSteamUsername('76561198000000001')).toBe('BedKarma');
+  });
+
+  it('returns null when STEAM_API_KEY is missing, on non-2xx, malformed JSON, network error, or empty steamId', async () => {
+    delete process.env['STEAM_API_KEY'];
+    expect(await getSteamUsername('76561198000000001')).toBeNull();
+
+    process.env['STEAM_API_KEY'] = 'test-key';
+    (global.fetch as jest.Mock).mockResolvedValueOnce(notOk(500));
+    expect(await getSteamUsername('76561198000000001')).toBeNull();
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true, status: 200, json: async () => { throw new Error('bad json'); },
+    } as unknown as Response);
+    expect(await getSteamUsername('76561198000000001')).toBeNull();
+
+    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('ECONNRESET'));
+    expect(await getSteamUsername('76561198000000001')).toBeNull();
+
+    expect(await getSteamUsername('')).toBeNull();
   });
 });
