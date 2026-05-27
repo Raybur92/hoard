@@ -14,7 +14,7 @@ import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam'
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { syncXboxLibrary } from '../services/platforms/xbox';
 import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime';
-import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary } from '../services/platforms/gog';
+import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary, getGogAuthUrl } from '../services/platforms/gog';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -532,6 +532,26 @@ router.post('/platforms/xbox/connect', requireUser, requireActive, async (req: R
   } catch (err) {
     console.error('[xbox/connect] db error:', err);
     res.status(500).json({ error: 'Failed to save Xbox API key — database error' });
+  }
+});
+
+// GET /api/platforms/gog/auth-url — build the Galaxy OAuth start URL.
+//
+// Server-side because the GOG_CLIENT_ID env var lives on the API only
+// (per gog.ts header — keeps Galaxy credentials out of the frontend
+// bundle). Frontend opens the returned URL in a new tab to start the
+// paste-code flow.
+//
+// Throws 500 if GOG_CLIENT_ID isn't configured — `requireEnv` inside
+// `getGogAuthUrl` surfaces the missing-var error so deployment misconfig
+// fails loud instead of producing a malformed URL.
+router.get('/platforms/gog/auth-url', requireUser, requireActive, (_req: Request, res: Response): void => {
+  try {
+    const url = getGogAuthUrl();
+    res.json({ url });
+  } catch (err) {
+    console.error('[gog/auth-url] config error:', err);
+    res.status(500).json({ error: 'GOG OAuth is not configured on the server' });
   }
 });
 

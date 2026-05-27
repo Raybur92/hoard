@@ -17,7 +17,7 @@ const PLATFORM_CONNECT_PATH: Record<string, string | null> = {
   st: '/api/auth/steam',
   ps: '/settings/platforms/ps/connect',
   xb: null,
-  gg: null,
+  gg: '/settings/platforms/gg/connect',
   nt: null,
   ep: null,
 };
@@ -212,12 +212,24 @@ export function PlatformDetailMobile() {
           ) : (() => {
             const connectPath = PLATFORM_CONNECT_PATH[code.toLowerCase()];
             const isApiConnect = connectPath?.startsWith('/api/') ?? false;
-            return isApiConnect ? (
-              <Btn variant="primary" style={{ width: '100%' }}
-                onClick={() => { window.location.href = `${API_BASE}${connectPath!}`; }}>
-                <Icon name="link" size={11} /> connect {name}
-              </Btn>
-            ) : (
+            const isSpaConnect = connectPath?.startsWith('/settings/') ?? false;
+            if (isApiConnect) {
+              return (
+                <Btn variant="primary" style={{ width: '100%' }}
+                  onClick={() => { window.location.href = `${API_BASE}${connectPath!}`; }}>
+                  <Icon name="link" size={11} /> connect {name}
+                </Btn>
+              );
+            }
+            if (isSpaConnect) {
+              return (
+                <Btn variant="primary" style={{ width: '100%' }}
+                  onClick={() => navigate(connectPath!)}>
+                  <Icon name="link" size={11} /> connect {name}
+                </Btn>
+              );
+            }
+            return (
               <Btn variant="primary" style={{ width: '100%' }}>
                 <Icon name="link" size={11} /> connect {name}
               </Btn>

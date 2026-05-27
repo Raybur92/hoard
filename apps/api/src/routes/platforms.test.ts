@@ -192,6 +192,35 @@ describe('POST /api/platforms/xbox/connect', () => {
   });
 });
 
+/* ── GET /api/platforms/gog/auth-url ── */
+
+describe('GET /api/platforms/gog/auth-url', () => {
+  const ORIGINAL_CLIENT_ID = process.env['GOG_CLIENT_ID'];
+  afterEach(() => {
+    if (ORIGINAL_CLIENT_ID === undefined) delete process.env['GOG_CLIENT_ID'];
+    else process.env['GOG_CLIENT_ID'] = ORIGINAL_CLIENT_ID;
+  });
+
+  it('returns the Galaxy auth URL when GOG_CLIENT_ID is configured', async () => {
+    process.env['GOG_CLIENT_ID'] = 'test-galaxy-id';
+    const res = await request(app).get('/api/platforms/gog/auth-url');
+    expect(res.status).toBe(200);
+    expect(typeof res.body.url).toBe('string');
+    // URL should start with the Galaxy auth host and carry the configured
+    // client_id + Galaxy's hardcoded redirect URI.
+    expect(res.body.url).toMatch(/^https:\/\/auth\.gog\.com\/auth\?/);
+    expect(res.body.url).toContain('client_id=test-galaxy-id');
+    expect(res.body.url).toContain('redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient');
+  });
+
+  it('returns 500 when GOG_CLIENT_ID is missing (deployment misconfig)', async () => {
+    delete process.env['GOG_CLIENT_ID'];
+    const res = await request(app).get('/api/platforms/gog/auth-url');
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/not configured/i);
+  });
+});
+
 /* ── POST /api/platforms/gog/connect ── */
 
 import { exchangeGogCode as mockedExchangeGogCode } from '../services/platforms/gog';

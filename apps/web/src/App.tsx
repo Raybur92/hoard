@@ -36,6 +36,8 @@ const PlatformDetailDesktop = lazyNamed(() => import('./components/screens/Platf
 const PlatformDetailMobile  = lazyNamed(() => import('./components/screens/PlatformDetailMobile'),  'PlatformDetailMobile');
 const PsnGuidedFlowDesktop  = lazyNamed(() => import('./components/screens/PsnGuidedFlowDesktop'),  'PsnGuidedFlowDesktop');
 const PsnGuidedFlowMobile   = lazyNamed(() => import('./components/screens/PsnGuidedFlowMobile'),   'PsnGuidedFlowMobile');
+const GogGuidedFlowDesktop  = lazyNamed(() => import('./components/screens/GogGuidedFlowDesktop'),  'GogGuidedFlowDesktop');
+const GogGuidedFlowMobile   = lazyNamed(() => import('./components/screens/GogGuidedFlowMobile'),   'GogGuidedFlowMobile');
 const AdminScreen           = lazyNamed(() => import('./components/screens/AdminScreen'),           'AdminScreen');
 
 function SuspenseFallback() {
@@ -95,9 +97,13 @@ export default function App() {
                 <Route path="/admin"                            element={<AdminScreen />} />
               </Route>
 
-              {/* Authed + active full-screen routes (no app shell) */}
+              {/* Authed + active full-screen routes (no app shell).
+                  Explicit per-platform routes so each guided flow is its
+                  own bundle and routing is unambiguous — adding XB or
+                  another flow later is one more `<Route>`. */}
               <Route element={<RequireAuth><RequireActive><Outlet /></RequireActive></RequireAuth>}>
-                <Route path="/settings/platforms/:code/connect" element={desktop ? <PsnGuidedFlowDesktop />  : <PsnGuidedFlowMobile />} />
+                <Route path="/settings/platforms/ps/connect" element={desktop ? <PsnGuidedFlowDesktop /> : <PsnGuidedFlowMobile />} />
+                <Route path="/settings/platforms/gg/connect" element={desktop ? <GogGuidedFlowDesktop /> : <GogGuidedFlowMobile />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

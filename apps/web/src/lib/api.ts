@@ -421,6 +421,26 @@ export const api = {
     return r;
   },
 
+  // GOG sub-unit #5.4 — Galaxy OAuth paste-code flow.
+  //
+  // gogAuthUrl() returns the GOG login URL the user opens in a new tab.
+  // GOG redirects them to Galaxy's hardcoded success page where the URL
+  // carries a `code=...` query param the user copies back into Hoard.
+  // Built server-side because GOG_CLIENT_ID lives on the API.
+  //
+  // connectGog(code) exchanges the pasted code for tokens. The server
+  // returns 400 if GOG rejects the code (single-use, fast expiry); the
+  // guided-flow component surfaces a friendly "start over" message.
+  gogAuthUrl: async () => {
+    return get<{ url: string }>('/api/platforms/gog/auth-url');
+  },
+  connectGog: async (code: string) => {
+    const r = await post<void>('/api/platforms/gog/connect', { code });
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
+
   // manual games (Nintendo / Epic)
   addManualGame: async (body: ManualAddBody) => {
     const r = await post<UserGameDetail>('/api/games/manual', body);

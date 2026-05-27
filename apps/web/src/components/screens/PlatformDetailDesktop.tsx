@@ -24,7 +24,7 @@ const PLATFORM_INFO: Record<string, {
   st: { name: 'ST', fullName: 'Steam',             syncable: true,  authMethod: 'OAuth · Steam OpenID',       connectPath: '/api/auth/steam' },
   ps: { name: 'PS', fullName: 'PlayStation Network',syncable: true,  authMethod: 'NPSSO token',                connectPath: '/settings/platforms/ps/connect' },
   xb: { name: 'XB', fullName: 'Xbox',              syncable: true,  authMethod: 'OpenXBL API key',            connectPath: null },
-  gg: { name: 'GG', fullName: 'GOG',               syncable: true,  authMethod: 'OAuth · community API',      connectPath: null },
+  gg: { name: 'GG', fullName: 'GOG',               syncable: true,  authMethod: 'OAuth · Galaxy credentials', connectPath: '/settings/platforms/gg/connect' },
   nt: { name: 'NT', fullName: 'Nintendo',           syncable: false, authMethod: 'no public api',              connectPath: null },
   ep: { name: 'EP', fullName: 'Epic Games',         syncable: false, authMethod: 'manual import only',         connectPath: null },
 };
@@ -289,6 +289,13 @@ function ConnectButton({ info, code, npssoInput: _npssoInput, setNpssoInput: _se
         }}
       >
         <Icon name="key" size={11} /> connect via api key ↓
+      </Btn>
+    );
+  }
+  if (code.toLowerCase() === 'gg') {
+    return (
+      <Btn sm variant="primary" onClick={() => navigate('/settings/platforms/gg/connect')}>
+        <Icon name="key" size={11} /> connect via oauth →
       </Btn>
     );
   }
