@@ -162,6 +162,14 @@ export async function triggerSteamAchievementsBackground(
         const newStatus =
           promoteWishlistOnEngagement(ug.status, ach.earned, percent) ??
           applyAutoCompleteRule(ug.status, percent);
+        // P-FIX-2: writing achievement data is hard evidence the user
+        // owns the game on Steam. Backfill `playtimeByPlatform.ST = 0`
+        // when absent so the Library platform filter + cover tag work.
+        // Preserves existing ST playtime if syncSteamLibrary wrote it.
+        const existingPtbp = (ug.playtimeByPlatform ?? {}) as Record<string, number>;
+        const ptbpWithSt = existingPtbp['ST'] === undefined
+          ? { ...existingPtbp, ST: 0 }
+          : null;
         await prisma.userGame.update({
           where: { id: ug.id },
           data: {
@@ -170,6 +178,7 @@ export async function triggerSteamAchievementsBackground(
             achievementsPercent: percent,
             achievementsUpdatedAt: new Date(),
             ...(newStatus ? { status: newStatus } : {}),
+            ...(ptbpWithSt ? { playtimeByPlatform: ptbpWithSt } : {}),
           },
         });
         fetched++;

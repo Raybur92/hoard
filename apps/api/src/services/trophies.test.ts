@@ -13,6 +13,7 @@ jest.mock('@hoard/db', () => ({
 import { applyPsnTrophyAggregates, __testing } from './trophies';
 import type { PsnTrophyTitle } from './platforms/psn';
 import { prisma } from '@hoard/db';
+import { Prisma } from '@prisma/client';
 
 const { normalize } = __testing;
 
@@ -260,5 +261,71 @@ describe('applyPsnTrophyAggregates — aggregate math', () => {
 
     expect(result.matched).toBe(0); // skipped — no update
     expect(prisma.userGame.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyPsnTrophyAggregates — P-FIX-1 + P-FIX-2', () => {
+  it('catches P2002 on Game.update and continues with the trophy data write (cross-region npId collision)', async () => {
+    // Two title-fallback matches landing on different Games but sharing
+    // a single npCommunicationId (Sony returns same npId across regions /
+    // DLC packs sometimes). Previously, the second Game.update aborted
+    // the whole loop with P2002. P-FIX-1 catches + skips the npId
+    // persistence, lets the trophy data still write.
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-a', gameId: 'game-a', gameTitle: 'Slay the Spire' }),
+      makeUg({ id: 'ug-b', gameId: 'game-b', gameTitle: 'Slay the Spire EU' }),
+    ]);
+    // First Game.update succeeds; second throws P2002.
+    (prisma.game.update as jest.Mock)
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: '6.0.0',
+          meta: { modelName: 'Game', target: ['psnNpCommunicationId'] },
+        }),
+      );
+
+    const result = await applyPsnTrophyAggregates('user-1', [
+      makeTrophy({ npCommunicationId: 'NPWR_SAME_00', cleanedTitle: 'Slay the Spire' }),
+      makeTrophy({ npCommunicationId: 'NPWR_SAME_00', cleanedTitle: 'Slay the Spire EU' }),
+    ]);
+
+    // Both UserGames get trophy data written (the loop didn't abort).
+    expect(prisma.userGame.update).toHaveBeenCalledTimes(2);
+    expect(result.matched).toBe(2);
+  });
+
+  it('re-throws non-P2002 errors on Game.update (preserves error visibility for other failures)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-1' }),
+    ]);
+    (prisma.game.update as jest.Mock).mockRejectedValue(new Error('DB connection lost'));
+
+    await expect(applyPsnTrophyAggregates('user-1', [makeTrophy()])).rejects.toThrow(/DB connection lost/);
+  });
+
+  it('backfills playtimeByPlatform.PS = 0 when a trophy match lands on a UserGame with no PS entry yet', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-1', npId: 'NPWR12345_00' }),
+    ]);
+
+    await applyPsnTrophyAggregates('user-1', [makeTrophy()]);
+
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.playtimeByPlatform).toEqual({ PS: 0 });
+  });
+
+  it('preserves existing PS playtime when backfilling (doesn\'t clobber syncPsnLibrary\'s real minutes)', async () => {
+    const ug = makeUg({ id: 'ug-1', npId: 'NPWR12345_00' }) as MockUserGame & { playtimeByPlatform: Record<string, number> };
+    ug.playtimeByPlatform = { PS: 4200, ST: 100 };
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([ug]);
+
+    await applyPsnTrophyAggregates('user-1', [makeTrophy()]);
+
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    // PS already had real minutes — playtimeByPlatform NOT written
+    // (avoids stomping on syncPsnLibrary's authoritative value).
+    expect(data.playtimeByPlatform).toBeUndefined();
   });
 });

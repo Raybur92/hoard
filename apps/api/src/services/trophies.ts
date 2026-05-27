@@ -1,4 +1,5 @@
 import { prisma } from '@hoard/db';
+import { Prisma } from '@prisma/client';
 import type { PsnTrophyTitle } from './platforms/psn';
 import { applyAutoCompleteRule, promoteWishlistOnEngagement } from '../lib/achievements';
 
@@ -113,10 +114,28 @@ export async function applyPsnTrophyAggregates(
     const percent = Math.round((earned / total) * 100);
 
     if (isFirstMatch) {
-      await prisma.game.update({
-        where: { id: userGame.game.id },
-        data: { psnNpCommunicationId: trophy.npCommunicationId },
-      });
+      // P-FIX-1: PSN occasionally returns multiple trophy titles sharing
+      // the same npCommunicationId across regions / DLC packs. Two such
+      // titles can title-fallback to different Games, and the second
+      // Game.update would collide on `Game.psnNpCommunicationId @unique`
+      // → P2002 → previously aborted the whole trophy loop. Catch and
+      // skip: the npId association just doesn't land on this Game (a
+      // future sync's primary-match path may pick the correct one).
+      try {
+        await prisma.game.update({
+          where: { id: userGame.game.id },
+          data: { psnNpCommunicationId: trophy.npCommunicationId },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
+          // Skip npId persistence — trophy data still writes below.
+        } else {
+          throw err;
+        }
+      }
     }
 
     // P-series: try the Wishlist promotion first (covers the new-release
@@ -126,6 +145,17 @@ export async function applyPsnTrophyAggregates(
       promoteWishlistOnEngagement(userGame.status, earned, percent) ??
       applyAutoCompleteRule(userGame.status, percent);
 
+    // P-FIX-2: PSN trophy aggregation is hard evidence that the user
+    // owns the game on PSN. Write `playtimeByPlatform.PS = 0` if not
+    // already present so the Library platform-filter ("filter by PS")
+    // surfaces the game AND the Library cover tag (which reads
+    // entries[0] of playtimeByPlatform) labels it correctly. Doesn't
+    // overwrite existing PS playtime if syncPsnLibrary already wrote it.
+    const existingPtbp = (userGame.playtimeByPlatform ?? {}) as Record<string, number>;
+    const ptbpWithPs = existingPtbp.PS === undefined
+      ? { ...existingPtbp, PS: 0 }
+      : null;
+
     await prisma.userGame.update({
       where: { id: userGame.id },
       data: {
@@ -134,6 +164,7 @@ export async function applyPsnTrophyAggregates(
         achievementsPercent: percent,
         achievementsUpdatedAt: trophy.lastUpdatedAt ?? new Date(),
         ...(newStatus ? { status: newStatus } : {}),
+        ...(ptbpWithPs ? { playtimeByPlatform: ptbpWithPs } : {}),
       },
     });
 

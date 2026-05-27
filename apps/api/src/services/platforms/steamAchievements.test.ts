@@ -235,6 +235,33 @@ describe('triggerSteamAchievementsBackground — write + auto-complete', () => {
     expect(data.status).toBe('Completed');
   });
 
+  it('P-FIX-2: backfills playtimeByPlatform.ST = 0 when achievements land on a UserGame with no ST entry', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-wl', steamAppId: 200, status: 'Wishlist', ptbp: {} }),
+    ]);
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({ playerstats: { success: true, achievements: [{ apiname: 'A', achieved: 1 }] } }),
+    );
+
+    await triggerSteamAchievementsBackground('user-1', 'SID');
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.playtimeByPlatform).toEqual({ ST: 0 });
+  });
+
+  it('P-FIX-2: preserves existing ST playtime when backfilling (doesn\'t clobber syncSteamLibrary minutes)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({ id: 'ug-1', steamAppId: 100, status: 'Playing', ptbp: { ST: 7200 } }),
+    ]);
+    (global.fetch as jest.Mock).mockResolvedValue(
+      ok({ playerstats: { success: true, achievements: [{ apiname: 'A', achieved: 1 }] } }),
+    );
+
+    await triggerSteamAchievementsBackground('user-1', 'SID');
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    // ST already in ptbp — don't rewrite playtimeByPlatform at all.
+    expect(data.playtimeByPlatform).toBeUndefined();
+  });
+
   it('preserves Dropped at 100% (T-D2 user-decision rule)', async () => {
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
       makeUg({ id: 'ug-1', status: 'Dropped' }),
