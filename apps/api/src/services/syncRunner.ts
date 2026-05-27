@@ -102,6 +102,12 @@ export async function runSync(
       // rebound by sync.
       const steamAppId = sg.steamAppId ?? null;
       const xboxTitleId = sg.xboxTitleId ?? null;
+      // gogAppId is NOT @unique on the schema (unlike steamAppId +
+      // xboxTitleId) because HLTB lookups already populate it as a
+      // side-effect via codepotatoes.de — making it unique now would
+      // risk P2002 collisions with the existing data. Persisted on
+      // upsert so the sync path keeps it fresh, but no recovery branch.
+      const gogAppId = sg.gogAppId ?? null;
       let game;
       try {
         game = await prisma.game.upsert({
@@ -114,6 +120,7 @@ export async function runSync(
             coverUrl: igdbGame.coverUrl,
             ...(steamAppId ? { steamAppId } : {}),
             ...(xboxTitleId ? { xboxTitleId } : {}),
+            ...(gogAppId ? { gogAppId } : {}),
           },
           create: {
             igdbId: igdbGame.igdbId,
@@ -124,6 +131,7 @@ export async function runSync(
             coverUrl: igdbGame.coverUrl,
             steamAppId,
             xboxTitleId,
+            gogAppId,
           },
         });
       } catch (err) {

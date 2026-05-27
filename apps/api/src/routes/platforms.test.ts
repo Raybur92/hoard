@@ -539,6 +539,37 @@ describe('POST /api/platforms/:code/sync', () => {
     // The route does not 400/404 the XB code — confirms it's recognised
     // as a syncable platform with real implementation behind it.
   });
+
+  // GOG sync sub-unit #5.3 — verify the GG branch is reachable + routes
+  // through ensureFreshGogCredentials + syncGogLibrary. Token has a
+  // future expiresAt so the refresh path is short-circuited (the real
+  // `ensureFreshGogCredentials` is used via jest.requireActual at the
+  // top of this file). syncGogLibrary then runs and fetches the empty
+  // products list via the mocked global.fetch.
+  it('accepts GG sync against a connected platform with valid OAuth tokens', async () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-gg-1',
+      code: 'GG',
+      syncable: true,
+      credentials: {
+        accessToken: 'fake-gog-access',
+        refreshToken: 'fake-gog-refresh',
+        expiresAt: future,
+      },
+      lastSyncAt: null,
+    });
+    (prisma.platform.update as jest.Mock).mockResolvedValue({});
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ products: [], totalPages: 1 }),
+    });
+
+    const res = await request(app).post('/api/platforms/gg/sync');
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('syncing');
+  });
 });
 
 /* ── POST /api/games/manual ── */

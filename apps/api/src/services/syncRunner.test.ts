@@ -318,4 +318,25 @@ describe('runSync', () => {
     expect(result.imported).toBe(0);
     expect(prisma.game.findUnique).not.toHaveBeenCalled();
   });
+
+  // Sub-unit #5.3 — gogAppId threading. Unlike steamAppId/xboxTitleId,
+  // Game.gogAppId is NOT @unique on the schema (HLTB lookups populate
+  // it as a side-effect via codepotatoes.de), so there's no P2002
+  // recovery branch — gogAppId just rides along on the upsert.
+  it('persists gogAppId on Game upsert when SyncedGame carries it', async () => {
+    const gogSyncedGame: SyncedGame = {
+      ...syncedGame,
+      platformCode: 'GG',
+      gogAppId: 1207658691,
+    };
+
+    await runSync('user-1', [gogSyncedGame]);
+
+    expect(prisma.game.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ gogAppId: 1207658691 }),
+        update: expect.objectContaining({ gogAppId: 1207658691 }),
+      }),
+    );
+  });
 });

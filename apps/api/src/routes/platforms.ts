@@ -14,7 +14,7 @@ import { syncSteamLibrary, getSteamWishlist } from '../services/platforms/steam'
 import { syncPsnLibrary, getPsnTrophyTitles } from '../services/platforms/psn';
 import { syncXboxLibrary } from '../services/platforms/xbox';
 import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime';
-import { exchangeGogCode, computeExpiresAt } from '../services/platforms/gog';
+import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary } from '../services/platforms/gog';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -294,9 +294,31 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         if (!creds?.apiKey) throw new Error('Xbox credentials missing');
         xboxApiKey = creds.apiKey;
         syncedGames = await syncXboxLibrary({ apiKey: creds.apiKey });
+      } else if (code === 'GG') {
+        // GOG sync via embed.gog.com /account/getFilteredProducts.
+        // Auto-refresh on expiry: ensureFreshGogCredentials returns
+        // the same object identity when the token is still valid, and
+        // a NEW object when it had to be refreshed. We persist only on
+        // refresh so we don't write to the DB on every sync.
+        const creds = platform.credentials as
+          | { accessToken?: string; refreshToken?: string; expiresAt?: string }
+          | null;
+        if (!creds?.accessToken || !creds?.refreshToken || !creds?.expiresAt) {
+          throw new Error('GOG credentials missing');
+        }
+        const fresh = await ensureFreshGogCredentials({
+          accessToken: creds.accessToken,
+          refreshToken: creds.refreshToken,
+          expiresAt: creds.expiresAt,
+        });
+        if (fresh.accessToken !== creds.accessToken) {
+          await prisma.platform.update({
+            where: { id: platform.id },
+            data: { credentials: fresh as unknown as Prisma.InputJsonValue },
+          });
+        }
+        syncedGames = await syncGogLibrary(fresh);
       }
-      // GG — stub returns [] until fully implemented (next sub-unit
-      // after Xbox sync stabilises).
 
       if (syncedGames.length > 0) {
         const r = await runSync(platform.userId, syncedGames);
@@ -307,16 +329,11 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           `library: ${r.imported} imported, ${r.skipped} skipped`,
           { imported: r.imported, skipped: r.skipped },
         );
-      } else if (code === 'GG') {
-        // XB no longer falls through here — it has real sync support.
-        // An empty XB result is "user has no games", not "sync not
-        // implemented", and should look like a normal zero-game sync.
-        await logPlatform(
-          platform.id, platform.userId, 'warn',
-          'library.unsupported',
-          `library sync not implemented for ${code} yet`,
-        );
       }
+      // No `library.unsupported` fallthrough — every supported platform
+      // (ST/PS/XB/GG) now has real sync. An empty array means "user has
+      // no games", not "sync not implemented", and looks like a normal
+      // zero-game sync.
 
       // T2 — pull PSN trophy aggregates after the library import. T-D4:
       // PSN's `getUserTitles` is one paginated call for the whole library
