@@ -28,6 +28,7 @@
 // auto-refresh-on-401 logic; this file just provides the building
 // blocks.
 
+import type { PlatformCode } from '@hoard/types';
 import type { SyncedGame } from './steam';
 
 /** Hardcoded — Galaxy's OAuth redirect URI cannot be changed. */
@@ -128,11 +129,135 @@ export function computeExpiresAt(expiresIn: number): string {
   return new Date(Date.now() + (expiresIn - 60) * 1000).toISOString();
 }
 
-export async function syncGogLibrary(_credentials: GogCredentials): Promise<SyncedGame[]> {
-  // Sub-unit #5.2 wires this up against
-  //   GET https://embed.gog.com/account/getFilteredProducts?mediaType=1&page=N
-  // Auto-refreshes on 401 using refreshGogToken.
-  return [] as SyncedGame[];
+/**
+ * If the stored access token is at or past its expiry, refresh it.
+ * Returns either the same `creds` (no refresh needed) or a NEW
+ * credentials object (caller must persist).
+ *
+ * Caller checks identity equality (`fresh === creds`) to decide whether
+ * to write to the DB.
+ */
+export async function ensureFreshGogCredentials(creds: GogCredentials): Promise<GogCredentials> {
+  if (Date.now() < new Date(creds.expiresAt).getTime()) return creds;
+  const fresh = await refreshGogToken(creds.refreshToken);
+  return {
+    accessToken: fresh.accessToken,
+    refreshToken: fresh.refreshToken,
+    expiresAt: computeExpiresAt(fresh.expiresIn),
+  };
+}
+
+const EMBED_BASE = 'https://embed.gog.com';
+/** Polite delay between paginated requests so we don't spam GOG. */
+const PAGE_DELAY_MS = 200;
+/** Hard cap on pagination so a buggy `totalPages` response can't infinite-loop. */
+const MAX_PAGES = 50;
+
+interface GogProduct {
+  id?: number;
+  title?: string;
+  image?: string;
+  slug?: string;
+  /** "game" | "dlc" | "pack" | "movie" — we keep only games. */
+  gameType?: string;
+  isHidden?: boolean;
+  releaseTimestamp?: number | null;
+  rating?: number;
+}
+
+interface GogProductsPageResponse {
+  products?: GogProduct[];
+  totalProducts?: number;
+  totalPages?: number;
+  page?: number;
+  sortBy?: string;
+  movies?: unknown[];
+}
+
+async function fetchGogProductsPage(accessToken: string, page: number): Promise<GogProductsPageResponse> {
+  const url = `${EMBED_BASE}/account/getFilteredProducts?mediaType=1&page=${page}&hiddenFlag=0&sortBy=title`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+  } catch (err) {
+    throw new Error(`GOG network error: ${err instanceof Error ? err.message : 'unknown'}`);
+  }
+  if (res.status === 401) {
+    throw new Error('GOG API: 401 — access token expired or invalid (caller should refresh + retry)');
+  }
+  if (!res.ok) {
+    throw new Error(`GOG API error: ${res.status}`);
+  }
+  try {
+    return await res.json() as GogProductsPageResponse;
+  } catch {
+    throw new Error('GOG API returned malformed JSON');
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch the user's full GOG library by paginating through
+ * /account/getFilteredProducts. Each page returns up to ~48 products;
+ * a typical Hoard user library is 1–5 pages. Sequential fetches with
+ * a 200ms polite delay — GOG has no documented rate limit on embed.gog
+ * endpoints but we don't want to be the test case.
+ *
+ * Throws on 401 (caller's responsibility to refresh via
+ * ensureFreshGogCredentials BEFORE calling, since proactive refresh
+ * keeps the persistence concerns out of this function).
+ *
+ * No playtime data — GOG community API doesn't expose per-title minutes.
+ * `playtimeMinutes` is set to 0 and `hasBeenPlayed` to false; the
+ * imported games land in Backlog status (no engagement signal).
+ */
+export async function syncGogLibrary(credentials: GogCredentials): Promise<SyncedGame[]> {
+  const accessToken = credentials.accessToken;
+  if (!accessToken) throw new Error('GOG access token missing');
+
+  const products: GogProduct[] = [];
+
+  // Page 1 — also tells us totalPages so we can decide how many more
+  // to fetch. GOG returns `totalPages` 1-based.
+  const first = await fetchGogProductsPage(accessToken, 1);
+  products.push(...(first.products ?? []));
+
+  const totalPages = Math.min(first.totalPages ?? 1, MAX_PAGES);
+  for (let p = 2; p <= totalPages; p++) {
+    await sleep(PAGE_DELAY_MS);
+    const page = await fetchGogProductsPage(accessToken, p);
+    products.push(...(page.products ?? []));
+  }
+
+  return products
+    // Defensive filters: drop nameless / non-Game / hidden products.
+    // - `gameType === undefined` is kept (some responses omit the field).
+    // - `isHidden === true` is dropped (user explicitly hid from library;
+    //    hiddenFlag=0 in the query param should already filter these but
+    //    the response field is the source of truth).
+    .filter((p): p is GogProduct & { id: number; title: string } =>
+      typeof p.id === 'number' && p.id > 0 &&
+      typeof p.title === 'string' && p.title.length > 0 &&
+      (p.gameType === undefined || p.gameType === 'game') &&
+      p.isHidden !== true,
+    )
+    .map((p) => ({
+      igdbSearchTitle: p.title,
+      gogAppId: p.id,
+      platformCode: 'GG' as PlatformCode,
+      // No playtime data from the community API. Games land in Backlog
+      // because hasBeenPlayed is unset (falsy → no engagement signal).
+      playtimeMinutes: 0,
+      lastPlayedAt: null,
+    }));
 }
 
 export { SyncedGame };

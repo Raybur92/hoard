@@ -8,6 +8,11 @@ export interface SyncedGame {
   // so the playtime side-pass (POST /v2/player/stats) can bind each
   // returned MinutesPlayed value back to the correct Game.
   xboxTitleId?: number;
+  // GOG's product identifier (GOG sub-unit #5.2). Captured by
+  // syncGogLibrary; persisted into Game.gogAppId by syncRunner. Same
+  // shape as steamAppId / xboxTitleId — stable per-title identity
+  // used for re-sync rebind without re-running IGDB matching.
+  gogAppId?: number;
   platformCode: PlatformCode;
   playtimeMinutes: number;
   lastPlayedAt: Date | null;
