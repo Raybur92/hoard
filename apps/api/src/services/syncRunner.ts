@@ -10,6 +10,15 @@ import type { SyncedGame } from './platforms/steam';
 export interface SyncResult {
   imported: number;
   skipped: number;
+  /** Titles that fell through both IGDB resolution paths (Steam-ID lookup
+   *  + smart matcher) — surfaced in the activity log so users can see
+   *  which games sync isn't catching. Trimmed to a sane size by the
+   *  caller before logging. */
+  skippedTitles: string[];
+  /** Titles that threw mid-import — distinct from `skippedTitles` because
+   *  these failed AFTER IGDB resolution succeeded (DB write error, etc).
+   *  Logged at the same time for the same reason. */
+  errorTitles: string[];
 }
 
 // Stay comfortably under the IGDB 4 req/s rate limit
@@ -69,6 +78,8 @@ export async function runSync(
 ): Promise<SyncResult> {
   let imported = 0;
   let skipped = 0;
+  const skippedTitles: string[] = [];
+  const errorTitles: string[] = [];
 
   for (const sg of syncedGames) {
     try {
@@ -88,6 +99,7 @@ export async function runSync(
 
       if (!igdbGame) {
         skipped++;
+        skippedTitles.push(sg.igdbSearchTitle);
         continue;
       }
 
@@ -222,8 +234,9 @@ export async function runSync(
     } catch (err) {
       console.error(`[syncRunner] failed for "${sg.igdbSearchTitle}":`, err);
       skipped++;
+      errorTitles.push(sg.igdbSearchTitle);
     }
   }
 
-  return { imported, skipped };
+  return { imported, skipped, skippedTitles, errorTitles };
 }

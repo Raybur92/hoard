@@ -328,11 +328,30 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
       if (syncedGames.length > 0) {
         const r = await runSync(platform.userId, syncedGames);
         gamesImported = r.imported;
+        // Diagnostic: when sync skips titles (IGDB match failure) or
+        // errors mid-import, surface a sample of the titles in the
+        // message so the user can see which games sync isn't catching.
+        // Trimmed to 10 so the message stays readable and the details
+        // payload caps at a sane size.
+        const SAMPLE = 10;
+        const skippedSample = r.skippedTitles.slice(0, SAMPLE);
+        const errorSample = r.errorTitles.slice(0, SAMPLE);
+        const skippedSuffix = r.skipped > 0
+          ? ` (skipped: ${skippedSample.map((t) => `"${t}"`).join(', ')}${r.skippedTitles.length > SAMPLE ? `, +${r.skippedTitles.length - SAMPLE} more` : ''})`
+          : '';
+        const errorSuffix = r.errorTitles.length > 0
+          ? ` (errored: ${errorSample.map((t) => `"${t}"`).join(', ')}${r.errorTitles.length > SAMPLE ? `, +${r.errorTitles.length - SAMPLE} more` : ''})`
+          : '';
         await logPlatform(
           platform.id, platform.userId, 'info',
           'library.imported',
-          `library: ${r.imported} imported, ${r.skipped} skipped`,
-          { imported: r.imported, skipped: r.skipped },
+          `library: ${r.imported} imported, ${r.skipped} skipped${skippedSuffix}${errorSuffix}`,
+          {
+            imported: r.imported,
+            skipped: r.skipped,
+            skippedTitles: r.skippedTitles,
+            errorTitles: r.errorTitles,
+          },
         );
       }
       // No `library.unsupported` fallthrough — every supported platform

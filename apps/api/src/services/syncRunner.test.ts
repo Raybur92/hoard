@@ -339,4 +339,32 @@ describe('runSync', () => {
       }),
     );
   });
+
+  // Diagnostic: surface the actual title strings of skipped + errored
+  // games so the activity log can show users what sync isn't catching.
+  it('returns skippedTitles for games that fall through both IGDB resolution paths', async () => {
+    (searchGames as jest.Mock).mockResolvedValue([]); // smart matcher returns null on empty results
+
+    const result = await runSync('user-1', [
+      { ...syncedGame, igdbSearchTitle: 'Brand New Game 1' },
+      { ...syncedGame, igdbSearchTitle: 'Brand New Game 2' },
+    ]);
+
+    expect(result.imported).toBe(0);
+    expect(result.skipped).toBe(2);
+    expect(result.skippedTitles).toEqual(['Brand New Game 1', 'Brand New Game 2']);
+    expect(result.errorTitles).toEqual([]);
+  });
+
+  it('returns errorTitles for games that throw mid-import', async () => {
+    (prisma.game.upsert as jest.Mock).mockRejectedValue(new Error('DB down'));
+
+    const result = await runSync('user-1', [
+      { ...syncedGame, igdbSearchTitle: 'Throws on Upsert' },
+    ]);
+
+    expect(result.skipped).toBe(1);
+    expect(result.errorTitles).toEqual(['Throws on Upsert']);
+    expect(result.skippedTitles).toEqual([]);
+  });
 });
