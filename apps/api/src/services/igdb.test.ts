@@ -1,4 +1,4 @@
-import { searchGames, getGame, getUpcomingReleases, clearCaches } from './igdb';
+import { searchGames, getGame, getUpcomingReleases, searchGameLocalizations, clearCaches } from './igdb';
 
 // Mock environment variables
 process.env['TWITCH_CLIENT_ID'] = 'test-client-id';
@@ -126,5 +126,100 @@ describe('getUpcomingReleases', () => {
     });
     expect(results[0]?.releaseDate).not.toBeNull();
     expect(results[0]?.synopsis).toBe('A great game');
+  });
+});
+
+describe('searchGameLocalizations (L-series)', () => {
+  it('looks up the localizations endpoint, resolves parents, and returns matchTitle from the localized name', async () => {
+    // 1st: twitch token. 2nd: game_localizations search. 3rd: games endpoint resolve.
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 9001, name: "LEGO Batman: L'Eredità del Cavaliere Oscuro", game: 12345 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 12345,
+            name: 'LEGO Batman: Legacy of the Dark Knight',
+            first_release_date: 1735689600,
+            platforms: [{ id: 167, name: 'PlayStation 5' }],
+            involved_companies: [{ company: { name: 'TT Games' }, developer: true }],
+          },
+        ],
+      });
+
+    const results = await searchGameLocalizations("LEGO Batman: L'Eredità del Cavaliere Oscuro");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      igdbId: 12345,
+      title: 'LEGO Batman: Legacy of the Dark Knight',         // canonical English
+      matchTitle: "LEGO Batman: L'Eredità del Cavaliere Oscuro", // localized for matching
+      developer: 'TT Games',
+      platforms: ['PlayStation 5'],
+    });
+  });
+
+  it('dedupes parent games when multiple localization rows share the same game id', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 1, name: 'Some Localized Title (IT)', game: 555 },
+          { id: 2, name: 'Some Localized Title (FR)', game: 555 }, // same parent
+          { id: 3, name: 'Other Localization (IT)', game: 666 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 555, name: 'English A' },
+          { id: 666, name: 'English B' },
+        ],
+      });
+
+    const results = await searchGameLocalizations('whatever');
+
+    // Two parents resolved, not three. First-seen localization wins on dedupe.
+    expect(results).toHaveLength(2);
+    expect(results.find((r) => r.igdbId === 555)?.matchTitle).toBe('Some Localized Title (IT)');
+    expect(results.find((r) => r.igdbId === 666)?.matchTitle).toBe('Other Localization (IT)');
+  });
+
+  it('returns [] when the localizations endpoint returns no matches', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const results = await searchGameLocalizations('Definitely Not A Real Title');
+    expect(results).toEqual([]);
+  });
+
+  it('returns [] on IGDB error so callers can fall through gracefully', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+
+    const results = await searchGameLocalizations('anything');
+    expect(results).toEqual([]);
+  });
+
+  it('returns [] when the parent-games resolution fails (degrades gracefully)', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 1, name: 'Loc', game: 100 }],
+      })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+
+    const results = await searchGameLocalizations('q');
+    expect(results).toEqual([]);
   });
 });

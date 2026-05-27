@@ -130,4 +130,39 @@ describe('pickBestMatch', () => {
     const out = pickBestMatch('Cyberpunk 2077', results, 'ST');
     expect(out?.igdbId).toBe(2);
   });
+
+  describe('L-series — matchTitle scoring', () => {
+    it('scores against matchTitle (localized) when present, not the canonical title', () => {
+      // Italian PSN query against a candidate from the localization fallback:
+      // canonical title is English, matchTitle is the Italian localization.
+      const results = [
+        makeResult({
+          igdbId: 1,
+          title: 'LEGO Batman: Legacy of the Dark Knight',
+          matchTitle: "LEGO Batman: L'Eredità del Cavaliere Oscuro",
+          platforms: ['PlayStation 5'],
+        }),
+        makeResult({
+          igdbId: 2,
+          title: 'LEGO Batman: The Videogame',
+          platforms: ['PlayStation 5'],
+        }),
+      ];
+      // Italian query exactly matches candidate #1's matchTitle → +1000.
+      // It doesn't word-match candidate #2's title → 0 title score.
+      const out = pickBestMatch("LEGO Batman: L'Eredità del Cavaliere Oscuro", results, 'PS');
+      expect(out?.igdbId).toBe(1);
+      // The chosen candidate still exposes the canonical English title
+      // for syncRunner to persist on Game.title.
+      expect(out?.title).toBe('LEGO Batman: Legacy of the Dark Knight');
+    });
+
+    it('falls back to canonical title when matchTitle is absent (non-localization path)', () => {
+      const results = [
+        makeResult({ igdbId: 1, title: 'Slay the Spire', platforms: ['PC (Microsoft Windows)'], totalRatingCount: 1500 }),
+      ];
+      const out = pickBestMatch('Slay the Spire', results, 'ST');
+      expect(out?.igdbId).toBe(1);
+    });
+  });
 });

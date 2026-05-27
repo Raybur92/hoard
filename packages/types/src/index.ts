@@ -441,6 +441,12 @@ export interface IgdbSearchResult {
   // sequels / clones (Slay the Spire 2 in early access). Null when IGDB
   // didn't report it.
   totalRatingCount: number | null;
+  // L-series — when the result was matched via IGDB's `game_localizations`
+  // fallback (e.g. Italian PSN title hitting an Italian localization row),
+  // this holds the LOCALIZED title that `pickBestMatch` should score
+  // against. `title` always remains IGDB's canonical English title so the
+  // Game.title we persist stays consistent across users + locales.
+  matchTitle?: string;
 }
 
 // Lives at IGDB's /game_time_to_beats endpoint, keyed by game_id. Fetched

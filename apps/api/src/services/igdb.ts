@@ -163,6 +163,83 @@ limit 10;`,
   return mapped;
 }
 
+/**
+ * L-series localization fallback.
+ *
+ * IGDB's `game_localizations` endpoint maps each game to its regional
+ * translations: rows like `{ name: "LEGO Batman: L'Eredità del Cavaliere
+ * Oscuro", region: <region_id>, game: 12345 }`. When a platform sync
+ * returns a localized title (PSN/Xbox accounts often report titles in
+ * the user's account locale) that `searchGames` can't match against
+ * IGDB's English-default game names, this fallback catches it.
+ *
+ * Two-step:
+ *   1. Search `game_localizations` for the localized query.
+ *   2. Resolve each unique parent game via the `games` endpoint to get
+ *      the full IgdbSearchResult shape (developer, platforms, popularity,
+ *      etc.) needed by `pickBestMatch`.
+ *
+ * The returned `IgdbSearchResult.matchTitle` carries the LOCALIZED
+ * name from the localization row so `pickBestMatch` can score the
+ * Italian query against the Italian name. `title` stays as IGDB's
+ * canonical English name — that's what gets persisted on `Game.title`,
+ * keeping the catalog consistent across users + locales.
+ *
+ * Limit 20 candidates: enough to catch DLC/regional variants without
+ * blowing the budget. Returns `[]` on any failure (caller treats as
+ * "no localization match found, give up").
+ */
+interface IgdbRawLocalization {
+  id: number;
+  name: string;
+  game: number;
+}
+export async function searchGameLocalizations(query: string): Promise<IgdbSearchResult[]> {
+  let localizations: IgdbRawLocalization[];
+  try {
+    localizations = await igdbPost(
+      'game_localizations',
+      `search "${query}";
+fields id, name, game;
+limit 20;`,
+    ) as unknown as IgdbRawLocalization[];
+  } catch {
+    return [];
+  }
+  if (localizations.length === 0) return [];
+
+  // Resolve each unique parent game id. `game_localizations.search` may
+  // return multiple rows for the same game (regional variants), so we
+  // dedupe before the games-endpoint call to keep the second query
+  // cheap. Map preserves the first localization seen per game so
+  // matchTitle reflects the BEST localization match (search ranks).
+  const firstLocByGame = new Map<number, string>();
+  for (const loc of localizations) {
+    if (!firstLocByGame.has(loc.game)) {
+      firstLocByGame.set(loc.game, loc.name);
+    }
+  }
+  const gameIds = [...firstLocByGame.keys()];
+
+  let parents: IgdbRawGame[];
+  try {
+    parents = await igdbPost(
+      'games',
+      `fields id, name, first_release_date, cover.url, genres.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
+where id = (${gameIds.join(',')});
+limit ${gameIds.length};`,
+    );
+  } catch {
+    return [];
+  }
+
+  return parents.map((parent) => {
+    const mapped = mapToSearchResult(parent);
+    const locName = firstLocByGame.get(parent.id);
+    return locName ? { ...mapped, matchTitle: locName } : mapped;
+  });
+}
+
 export async function getGame(igdbId: number): Promise<IgdbSearchResult | null> {
   const key = String(igdbId);
   const cached = gameCache.get(key);

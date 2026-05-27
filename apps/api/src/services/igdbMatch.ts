@@ -130,7 +130,11 @@ export function pickBestMatch(
 
   for (const r of results) {
     let score = 0;
-    const normTitle = normalize(r.title);
+    // L-series: when a candidate carries a `matchTitle` (it came from
+    // the IGDB localization fallback), score against that instead of
+    // the canonical English `title`. Otherwise score against `title`
+    // as before.
+    const normTitle = normalize(r.matchTitle ?? r.title);
 
     // Title similarity
     if (normTitle === normQuery) {

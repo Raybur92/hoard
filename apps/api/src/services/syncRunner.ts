@@ -1,7 +1,7 @@
 import { prisma } from '@hoard/db';
 import { Prisma } from '@prisma/client';
 import type { PlatformCode } from '@hoard/types';
-import { searchGames, getGameBySteamId, getTimeToBeat } from './igdb';
+import { searchGames, getGameBySteamId, getTimeToBeat, searchGameLocalizations } from './igdb';
 import { pickBestMatch } from './igdbMatch';
 import { fetchHltbWithFallback } from './hltb';
 import { promoteWishlistOnOwnership } from '../lib/promoteWishlist';
@@ -94,6 +94,18 @@ export async function runSync(
       if (!igdbGame) {
         const results = await searchGames(sg.igdbSearchTitle);
         igdbGame = pickBestMatch(sg.igdbSearchTitle, results, sg.platformCode);
+      }
+      // L-series localization fallback (applies to all 4 synced platforms).
+      // When primary IGDB resolution misses, retry via IGDB's
+      // `game_localizations` endpoint so titles returned in the user's
+      // account locale (Italian PSN, French Steam, etc.) match the
+      // regional name IGDB has on file. Two extra IGDB calls per
+      // fallback iteration — happens only on miss, so 5-10% of titles
+      // typically. The 300ms inter-iteration delay below absorbs the
+      // burst; no extra delay needed.
+      if (!igdbGame) {
+        const locResults = await searchGameLocalizations(sg.igdbSearchTitle);
+        igdbGame = pickBestMatch(sg.igdbSearchTitle, locResults, sg.platformCode);
       }
       await delay(300); // ~3.3 req/s — under the 4/s IGDB limit
 

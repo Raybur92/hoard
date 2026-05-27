@@ -19,6 +19,7 @@ jest.mock('./igdb', () => ({
   searchGames: jest.fn(),
   getGameBySteamId: jest.fn(),
   getTimeToBeat: jest.fn().mockResolvedValue(null),
+  searchGameLocalizations: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock('./hltb', () => ({
@@ -28,7 +29,7 @@ jest.mock('./hltb', () => ({
 import { runSync } from './syncRunner';
 import { prisma } from '@hoard/db';
 import { Prisma } from '@prisma/client';
-import { searchGames } from './igdb';
+import { searchGames, searchGameLocalizations } from './igdb';
 import type { SyncedGame } from './platforms/steam';
 
 const mockIgdbResult = {
@@ -54,6 +55,7 @@ const syncedGame: SyncedGame = {
 beforeEach(() => {
   jest.resetAllMocks();
   (searchGames as jest.Mock).mockResolvedValue([mockIgdbResult]);
+  (searchGameLocalizations as jest.Mock).mockResolvedValue([]);
   (prisma.game.upsert as jest.Mock).mockResolvedValue(mockGame);
   (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(null);
   (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-1' });
@@ -366,5 +368,65 @@ describe('runSync', () => {
     expect(result.skipped).toBe(1);
     expect(result.errorTitles).toEqual(['Throws on Upsert']);
     expect(result.skippedTitles).toEqual([]);
+  });
+
+  // L-series: primary search misses, localization fallback fires + matches.
+  it('falls back to searchGameLocalizations when primary search returns null (Italian PSN title example)', async () => {
+    // Primary search returns nothing — Andrea's "LEGO Batman: L'Eredità del
+    // Cavaliere Oscuro" doesn't match IGDB's English-indexed games.
+    (searchGames as jest.Mock).mockResolvedValue([]);
+    // Localization fallback finds the English parent via the IT localization.
+    const localizedResult = {
+      ...mockIgdbResult,
+      igdbId: 12345,
+      title: 'LEGO Batman: Legacy of the Dark Knight',
+      matchTitle: "LEGO Batman: L'Eredità del Cavaliere Oscuro",
+      platforms: ['PlayStation 5'],
+    };
+    (searchGameLocalizations as jest.Mock).mockResolvedValue([localizedResult]);
+
+    const result = await runSync('user-1', [
+      {
+        igdbSearchTitle: "LEGO Batman: L'Eredità del Cavaliere Oscuro",
+        platformCode: 'PS',
+        playtimeMinutes: 240,
+        lastPlayedAt: new Date('2026-05-27'),
+      },
+    ]);
+
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    // The Game we persist uses the canonical English title — not the localized one.
+    expect(prisma.game.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { igdbId: 12345 },
+        create: expect.objectContaining({
+          title: 'LEGO Batman: Legacy of the Dark Knight',
+        }),
+      }),
+    );
+  });
+
+  it('skips the localization fallback when primary search already succeeds (no extra IGDB calls)', async () => {
+    (searchGames as jest.Mock).mockResolvedValue([mockIgdbResult]);
+
+    await runSync('user-1', [syncedGame]);
+
+    expect(searchGames).toHaveBeenCalledTimes(1);
+    expect(searchGameLocalizations).not.toHaveBeenCalled();
+  });
+
+  it('records the title as skipped when both primary AND localization fallback miss', async () => {
+    (searchGames as jest.Mock).mockResolvedValue([]);
+    (searchGameLocalizations as jest.Mock).mockResolvedValue([]);
+
+    const result = await runSync('user-1', [
+      { ...syncedGame, igdbSearchTitle: 'Truly Unmatchable Game' },
+    ]);
+
+    expect(result.imported).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.skippedTitles).toEqual(['Truly Unmatchable Game']);
+    expect(searchGameLocalizations).toHaveBeenCalledWith('Truly Unmatchable Game');
   });
 });
