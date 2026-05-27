@@ -234,12 +234,12 @@ describe('searchGameLocalizations (L-series)', () => {
 });
 
 describe('N-series external_games helpers', () => {
-  it('getGameByPsnConceptId queries category=36 + returns mapped result', async () => {
+  it('getGameByPsnConceptId queries by PSN URL pattern + returns mapped result', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
       .mockImplementationOnce(async (_url, init: { body: string }) => {
-        // Verify the body specifies category 36 + the conceptId as uid.
-        expect(init.body).toContain('category = 36');
+        // Verify the body specifies the PSN storefront URL pattern + uid.
+        expect(init.body).toContain('store.playstation.com');
         expect(init.body).toContain('uid = "10008537"');
         return {
           ok: true,
@@ -264,11 +264,11 @@ describe('N-series external_games helpers', () => {
     });
   });
 
-  it('getGameByXboxTitleId queries both Xbox categories (31, 54) in one call', async () => {
+  it('getGameByXboxTitleId queries by Microsoft URL pattern', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
       .mockImplementationOnce(async (_url, init: { body: string }) => {
-        expect(init.body).toContain('category = (31,54)');
+        expect(init.body).toContain('microsoft.com');
         expect(init.body).toContain('uid = "2030093255"');
         return {
           ok: true,
@@ -282,11 +282,11 @@ describe('N-series external_games helpers', () => {
     expect(result?.igdbId).toBe(444);
   });
 
-  it('getGameByGogAppId queries category=5', async () => {
+  it('getGameByGogAppId queries by gog.com URL pattern', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({ ok: true, json: async () => mockToken })
       .mockImplementationOnce(async (_url, init: { body: string }) => {
-        expect(init.body).toContain('category = 5');
+        expect(init.body).toContain('gog.com');
         expect(init.body).toContain('uid = "1207664663"');
         return {
           ok: true,

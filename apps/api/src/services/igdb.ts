@@ -415,28 +415,30 @@ limit ${limit};`;
 
 /**
  * Shared core for the platform-id → IGDB Game resolution path. Hits
- * IGDB's external_games endpoint with a (uid, category) filter and
+ * IGDB's external_games endpoint with a (uid, url-pattern) filter and
  * joins through to the parent game in a single query.
  *
- * IGDB external_games category reference:
- *   1   Steam
- *   5   GOG
- *   31  Xbox Marketplace
- *   36  Playstation Store
- *   54  Xbox Live
+ * **Why URL-pattern instead of category=N:** IGDB is migrating from
+ * the legacy `category` enum to a newer `external_game_source` field.
+ * Many current rows (e.g. Lego Batman: Legacy of the Dark Knight on
+ * PSN, uid=10008537) have `category` set to NULL — the filter
+ * `category = 36` returned `[]` against IGDB even though the row
+ * exists. The storefront URL pattern is stable across both old and
+ * new rows (verified 2026-05-27 via scripts/probe-igdb-external-games.ts).
  *
- * `categories` accepts either a single category number or an array
- * (e.g. Xbox spans 31 AND 54 — query both at once).
+ * URL patterns by platform:
+ *   Steam: store.steampowered.com
+ *   GOG:   gog.com
+ *   PSN:   store.playstation.com
+ *   Xbox:  microsoft.com         (covers Microsoft Store + xbox.com under
+ *                                  Microsoft's domain)
  */
 async function getGameByExternalUid(
-  categories: number | number[],
+  urlPattern: string,
   uid: string,
 ): Promise<IgdbSearchResult | null> {
   const token = await getToken();
   const clientId = process.env['TWITCH_CLIENT_ID'] ?? '';
-  const catFilter = Array.isArray(categories)
-    ? `category = (${categories.join(',')})`
-    : `category = ${categories}`;
   const res = await fetch('https://api.igdb.com/v4/external_games', {
     method: 'POST',
     headers: {
@@ -445,7 +447,7 @@ async function getGameByExternalUid(
       'Content-Type': 'text/plain',
     },
     body: `fields game.id, game.name, game.first_release_date, game.cover.url, game.genres.name, game.involved_companies.company.name, game.involved_companies.developer, game.platforms.name, game.total_rating_count;
-where uid = "${uid}" & ${catFilter};
+where uid = "${uid}" & url ~ *"${urlPattern}"*;
 limit 1;`,
   });
   if (!res.ok) throw new Error(`IGDB external_games failed: ${res.status}`);
@@ -459,7 +461,7 @@ export async function getGameBySteamId(steamAppId: number): Promise<IgdbSearchRe
   const key = `steam_${steamAppId}`;
   const cached = steamCache.get(key);
   if (cached !== undefined) return cached;
-  const result = await getGameByExternalUid(1, String(steamAppId));
+  const result = await getGameByExternalUid('store.steampowered.com', String(steamAppId));
   steamCache.set(key, result);
   return result;
 }
@@ -478,7 +480,7 @@ export async function getGameByPsnConceptId(conceptId: number): Promise<IgdbSear
   if (cached !== undefined) return cached;
   let result: IgdbSearchResult | null;
   try {
-    result = await getGameByExternalUid(36, String(conceptId));
+    result = await getGameByExternalUid('store.playstation.com', String(conceptId));
   } catch {
     return null; // graceful degradation — sync falls through to title search
   }
@@ -487,10 +489,10 @@ export async function getGameByPsnConceptId(conceptId: number): Promise<IgdbSear
 }
 
 /**
- * N-series — match an Xbox game by OpenXBL's titleId. IGDB tracks Xbox
- * games across two external_games categories (31 = Marketplace, 54 =
- * Xbox Live); querying both at once covers older + newer titles in
- * one shot.
+ * N-series — match an Xbox game by OpenXBL's titleId. IGDB external_games
+ * Xbox rows have URLs under Microsoft's domain (microsoft.com/store/…
+ * for newer Xbox titles or older xbox.com/games/… paths — both fall
+ * under microsoft.com, since Microsoft routes both).
  */
 export async function getGameByXboxTitleId(xboxTitleId: number): Promise<IgdbSearchResult | null> {
   const key = `xbox_${xboxTitleId}`;
@@ -498,7 +500,7 @@ export async function getGameByXboxTitleId(xboxTitleId: number): Promise<IgdbSea
   if (cached !== undefined) return cached;
   let result: IgdbSearchResult | null;
   try {
-    result = await getGameByExternalUid([31, 54], String(xboxTitleId));
+    result = await getGameByExternalUid('microsoft.com', String(xboxTitleId));
   } catch {
     return null;
   }
@@ -508,7 +510,7 @@ export async function getGameByXboxTitleId(xboxTitleId: number): Promise<IgdbSea
 
 /**
  * N-series — match a GOG game by GOG's product id. IGDB external_games
- * category 5 = GOG.
+ * GOG rows have URLs under gog.com.
  */
 export async function getGameByGogAppId(gogAppId: number): Promise<IgdbSearchResult | null> {
   const key = `gog_${gogAppId}`;
@@ -516,7 +518,7 @@ export async function getGameByGogAppId(gogAppId: number): Promise<IgdbSearchRes
   if (cached !== undefined) return cached;
   let result: IgdbSearchResult | null;
   try {
-    result = await getGameByExternalUid(5, String(gogAppId));
+    result = await getGameByExternalUid('gog.com', String(gogAppId));
   } catch {
     return null;
   }
