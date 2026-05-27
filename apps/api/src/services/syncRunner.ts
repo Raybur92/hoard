@@ -27,6 +27,10 @@ export interface SyncResult {
    *  these failed AFTER IGDB resolution succeeded (DB write error, etc).
    *  Logged at the same time for the same reason. */
   errorTitles: string[];
+  /** Per-error short messages keyed by title, in the same order as
+   *  errorTitles. Diagnostic — surfaces the actual failure reason in the
+   *  activity log so we don't need Railway access to know what's wrong. */
+  errorMessages: Record<string, string>;
 }
 
 // Stay comfortably under the IGDB 4 req/s rate limit
@@ -88,6 +92,7 @@ export async function runSync(
   let skipped = 0;
   const skippedTitles: string[] = [];
   const errorTitles: string[] = [];
+  const errorMessages: Record<string, string> = {};
 
   for (const sg of syncedGames) {
     try {
@@ -274,8 +279,10 @@ export async function runSync(
       console.error(`[syncRunner] failed for "${sg.igdbSearchTitle}":`, err);
       skipped++;
       errorTitles.push(sg.igdbSearchTitle);
+      const msg = err instanceof Error ? err.message : String(err);
+      errorMessages[sg.igdbSearchTitle] = msg.slice(0, 300);
     }
   }
 
-  return { imported, skipped, skippedTitles, errorTitles };
+  return { imported, skipped, skippedTitles, errorTitles, errorMessages };
 }

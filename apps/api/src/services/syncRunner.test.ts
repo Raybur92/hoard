@@ -382,6 +382,8 @@ describe('runSync', () => {
     expect(result.skipped).toBe(1);
     expect(result.errorTitles).toEqual(['Throws on Upsert']);
     expect(result.skippedTitles).toEqual([]);
+    // Diagnostic: error message captured per title.
+    expect(result.errorMessages['Throws on Upsert']).toBe('DB down');
   });
 
   // L-series: primary search misses, localization fallback fires + matches.

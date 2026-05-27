@@ -339,8 +339,10 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         const skippedSuffix = r.skipped > 0
           ? ` (skipped: ${skippedSample.map((t) => `"${t}"`).join(', ')}${r.skippedTitles.length > SAMPLE ? `, +${r.skippedTitles.length - SAMPLE} more` : ''})`
           : '';
+        // Errored titles now include their failure reason (first ~50 chars)
+        // so we can diagnose without Railway log access.
         const errorSuffix = r.errorTitles.length > 0
-          ? ` (errored: ${errorSample.map((t) => `"${t}"`).join(', ')}${r.errorTitles.length > SAMPLE ? `, +${r.errorTitles.length - SAMPLE} more` : ''})`
+          ? ` (errored: ${errorSample.map((t) => `"${t}" → ${(r.errorMessages[t] ?? 'unknown').slice(0, 60)}`).join(' | ')}${r.errorTitles.length > SAMPLE ? `, +${r.errorTitles.length - SAMPLE} more` : ''})`
           : '';
         await logPlatform(
           platform.id, platform.userId, 'info',
@@ -351,6 +353,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
             skipped: r.skipped,
             skippedTitles: r.skippedTitles,
             errorTitles: r.errorTitles,
+            errorMessages: r.errorMessages,
           },
         );
       }
