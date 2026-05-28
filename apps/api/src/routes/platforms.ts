@@ -17,6 +17,18 @@ import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime'
 import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary, getGogAuthUrl, getGogUsername } from '../services/platforms/gog';
 import { syncItchLibrary, validateItchApiKey, getItchUsername } from '../services/platforms/itch';
 import { exchangeEpicAuthCode, ensureFreshEpicCredentials, syncEpicLibrary, getEpicUsername, computeExpiresAt as computeEpicExpiresAt, EPIC_LOGIN_URL } from '../services/platforms/epic';
+import {
+  generateNintendoPkce,
+  getNintendoAuthUrl,
+  exchangeNintendoSessionTokenCode,
+  exchangeNintendoAccessToken,
+  ensureFreshNintendoCredentials,
+  syncNintendoLibrary,
+  getNintendoAccountUser,
+  getNintendoUsername,
+  computeExpiresAt as computeNintendoExpiresAt,
+  extractSessionTokenCode,
+} from '../services/platforms/nintendo';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -88,7 +100,7 @@ router.get('/platforms/status', requireUser, requireActive, async (req: Request,
 //   Others (GG/NT/EP) → 404 (no credentials, or not yet implemented).
 router.get('/platforms/:code/credentials', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'IT'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'IT', 'NT'];
   if (!code || !validCodes.includes(code)) {
     res.status(404).json({ error: 'No revealable credentials for this platform' });
     return;
@@ -127,6 +139,13 @@ router.get('/platforms/:code/credentials', requireUser, requireActive, async (re
     res.json({ apiKey: creds['apiKey'] ?? null });
     return;
   }
+  if (code === 'NT') {
+    // sessionToken is the long-lived credential (months). accessToken
+    // rotates every 15 min; not worth revealing. naId is the user ID,
+    // useful for debugging. Don't expose session_token (too sensitive).
+    res.json({ naId: creds['naId'] ?? null });
+    return;
+  }
 });
 
 // GET /api/platforms/:code/log — cursor-paginated activity feed for the
@@ -135,7 +154,7 @@ router.get('/platforms/:code/credentials', requireUser, requireActive, async (re
 // in the same millisecond. Capped at 50 entries per page.
 router.get('/platforms/:code/log', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP', 'IT'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP', 'IT']; // log + patch routes accept all codes (NT/EP-as-manual-only no longer applies after M-series)
   if (!code || !validCodes.includes(code)) {
     res.status(400).json({ error: 'Invalid platform code' });
     return;
@@ -181,7 +200,7 @@ router.get('/platforms/:code/log', requireUser, requireActive, async (req: Reque
 // so the client can swap state without a refetch.
 router.patch('/platforms/:code', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP', 'IT'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP', 'IT']; // log + patch routes accept all codes (NT/EP-as-manual-only no longer applies after M-series)
   if (!code || !validCodes.includes(code)) {
     res.status(400).json({ error: 'Invalid platform code' });
     return;
@@ -231,7 +250,7 @@ router.patch('/platforms/:code', requireUser, requireActive, async (req: Request
 // POST /api/platforms/:code/sync
 router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'IT', 'EP'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'IT', 'EP', 'NT'];
   if (!code || !validCodes.includes(code)) {
     res.status(400).json({ error: 'Invalid or unsupported platform code' });
     return;
@@ -285,6 +304,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
       let itchApiKey: string | null = null;
       let epicAccessToken: string | null = null;
       let epicAccountId: string | null = null;
+      let nintendoAccessToken: string | null = null;
 
       if (code === 'ST') {
         const creds = platform.credentials as { steamId?: string } | null;
@@ -372,6 +392,33 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         epicAccessToken = fresh.accessToken;
         epicAccountId = fresh.accountId;
         syncedGames = await syncEpicLibrary(fresh);
+      } else if (code === 'NT') {
+        // M3 — Nintendo Switch sync via the Parental Controls "Moon"
+        // API. Auto-refresh on access_token expiry via
+        // ensureFreshNintendoCredentials (15-min TTL on access_token;
+        // session_token persists for months). naId is captured at
+        // connect time and persisted alongside credentials so we
+        // don't re-fetch the Nintendo Account user on every sync.
+        const creds = platform.credentials as
+          | { sessionToken?: string; accessToken?: string; naId?: string; expiresAt?: string }
+          | null;
+        if (!creds?.sessionToken || !creds?.accessToken || !creds?.naId || !creds?.expiresAt) {
+          throw new Error('Nintendo credentials missing');
+        }
+        const fresh = await ensureFreshNintendoCredentials({
+          sessionToken: creds.sessionToken,
+          accessToken: creds.accessToken,
+          naId: creds.naId,
+          expiresAt: creds.expiresAt,
+        });
+        if (fresh.accessToken !== creds.accessToken) {
+          await prisma.platform.update({
+            where: { id: platform.id },
+            data: { credentials: { ...creds, ...fresh } as Prisma.InputJsonValue },
+          });
+        }
+        nintendoAccessToken = fresh.accessToken;
+        syncedGames = await syncNintendoLibrary(fresh);
       }
 
       if (syncedGames.length > 0) {
@@ -494,6 +541,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           else if (code === 'GG' && gogAccessToken) username = await getGogUsername(gogAccessToken);
           else if (code === 'IT' && itchApiKey) username = await getItchUsername(itchApiKey);
           else if (code === 'EP' && epicAccessToken && epicAccountId) username = await getEpicUsername(epicAccessToken, epicAccountId);
+          else if (code === 'NT' && nintendoAccessToken) username = await getNintendoUsername(nintendoAccessToken);
         } catch (err) {
           console.error(`[sync ${code}] username backfill fetch failed:`, err);
         }
@@ -890,6 +938,126 @@ router.post('/platforms/epic/connect', requireUser, requireActive, async (req: R
   } catch (err) {
     console.error('[epic/connect] db error:', err);
     res.status(500).json({ error: 'Failed to save Epic credentials — database error' });
+  }
+});
+
+// GET /api/platforms/nintendo/auth-url — generate PKCE pair + auth URL (M3).
+//
+// Nintendo Account OAuth requires PKCE. We generate the verifier +
+// challenge server-side and return BOTH the auth URL and the verifier
+// to the frontend. The frontend stores the verifier in component state
+// and passes it back when POSTing the redirect URL to /connect.
+//
+// The verifier isn't a long-term secret — it's a one-shot value that
+// must match the challenge that was sent in the auth URL. Sending it
+// from client to server isn't a security problem; it just has to round-
+// trip together with the session_token_code.
+//
+// The auth URL uses Nintendo's `npf<client_id>://auth` redirect scheme
+// which browsers can't navigate to — the user signs in, gets the
+// failed-but-visible redirect URL in the address bar, and copies that
+// back into Hoard's guided flow at step 4.
+router.get('/platforms/nintendo/auth-url', requireUser, requireActive, (_req: Request, res: Response): void => {
+  const state = Buffer.from(crypto.randomUUID().replace(/-/g, ''), 'hex').toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const { verifier, challenge } = generateNintendoPkce();
+  const url = getNintendoAuthUrl(challenge, state);
+  res.json({ url, verifier, state });
+});
+
+// POST /api/platforms/nintendo/connect — exchange session_token_code (M3).
+//
+// User flow:
+//   1. Frontend calls GET /auth-url; receives { url, verifier, state }.
+//   2. Frontend opens url; user signs in.
+//   3. User copies the redirect URL (or just the session_token_code) and
+//      pastes back into the guided flow.
+//   4. Frontend POSTs { redirectUrl OR code, verifier } here.
+//   5. We extract the code → exchange for session_token → exchange for
+//      access_token → fetch the Nintendo Account user (for naId +
+//      nickname) → persist on Platform.credentials.
+//
+// session_token is the long-lived credential (months). access_token
+// rotates every 15 min; we refresh on each sync via
+// ensureFreshNintendoCredentials.
+router.post('/platforms/nintendo/connect', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const schema = z.object({
+    // Frontend can pass either the full pasted redirect URL or just the
+    // code value. extractSessionTokenCode handles both.
+    redirectUrl: z.string().min(1).max(8192).optional(),
+    code: z.string().min(1).max(8192).optional(),
+    verifier: z.string().min(20).max(2048),
+  }).refine((v) => !!(v.redirectUrl ?? v.code), 'Missing redirectUrl or code');
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+    return;
+  }
+
+  const code = extractSessionTokenCode(parsed.data.redirectUrl ?? parsed.data.code ?? '');
+  if (!code) {
+    res.status(400).json({
+      error: 'Could not extract session_token_code from input. Expected a redirect URL starting with `npf...://auth#session_token_code=...` or the raw code value.',
+    });
+    return;
+  }
+
+  // Exchange BEFORE touching the DB — bad code → no half-written row.
+  let sessionToken: string;
+  try {
+    sessionToken = await exchangeNintendoSessionTokenCode(code, parsed.data.verifier);
+  } catch (err) {
+    console.error('[nintendo/connect] session_token exchange failed:', err);
+    res.status(400).json({
+      error: 'Nintendo rejected the authorization code. Codes are single-use and expire within ~10 minutes — start over from step 1 of the guided flow.',
+    });
+    return;
+  }
+
+  let accessTokenData: Awaited<ReturnType<typeof exchangeNintendoAccessToken>>;
+  try {
+    accessTokenData = await exchangeNintendoAccessToken(sessionToken);
+  } catch (err) {
+    console.error('[nintendo/connect] access_token exchange failed:', err);
+    res.status(500).json({ error: 'Nintendo session_token was issued but access_token exchange failed. Try connecting again.' });
+    return;
+  }
+
+  // Fetch the Nintendo Account user to discover naId + nickname.
+  let naUser: Awaited<ReturnType<typeof getNintendoAccountUser>>;
+  try {
+    naUser = await getNintendoAccountUser(accessTokenData.accessToken);
+  } catch (err) {
+    console.error('[nintendo/connect] getNintendoAccountUser failed:', err);
+    res.status(500).json({ error: 'Could not fetch Nintendo Account profile. Try connecting again.' });
+    return;
+  }
+
+  const credentials = {
+    sessionToken,
+    accessToken: accessTokenData.accessToken,
+    naId: naUser.id,
+    expiresAt: computeNintendoExpiresAt(accessTokenData.expiresIn),
+    ...(naUser.nickname ? { username: naUser.nickname } : {}),
+  };
+
+  try {
+    const upserted = await prisma.platform.upsert({
+      where: { userId_code: { userId: req.userId, code: 'NT' } },
+      update: { credentials, syncStatus: 'ok' },
+      create: {
+        userId: req.userId,
+        code: 'NT',
+        syncable: true,
+        credentials,
+        syncStatus: 'ok',
+      },
+    });
+    await logEvent(req.userId, 'platform.connected', { code: 'NT' });
+    res.json({ ok: true, platformId: upserted.id });
+  } catch (err) {
+    console.error('[nintendo/connect] db error:', err);
+    res.status(500).json({ error: 'Failed to save Nintendo credentials — database error' });
   }
 });
 

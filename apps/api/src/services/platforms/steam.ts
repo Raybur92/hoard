@@ -34,6 +34,12 @@ export interface SyncedGame {
   // pattern. Unlike the other id columns this one is String not Int
   // because Epic uses hex identifiers.
   epicCatalogItemId?: string;
+  // Nintendo Switch application ID (M3). 16-char hex string from the
+  // Moon API monthly_summary response (game.meta.applicationId).
+  // Persisted into Game.nintendoTitleId for stable IGDB external_games
+  // resolution via the "nintendo.com" URL pattern. Same shape as
+  // epicCatalogItemId.
+  nintendoTitleId?: string;
   platformCode: PlatformCode;
   playtimeMinutes: number;
   lastPlayedAt: Date | null;

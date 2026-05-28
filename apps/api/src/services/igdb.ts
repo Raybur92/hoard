@@ -60,6 +60,7 @@ const xboxTitleCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const gogAppCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const itchGameCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const epicCatalogCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
+const nintendoTitleCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const upcomingCache = makeCache<IgdbUpcomingRelease[]>(ONE_DAY);
 
 /* ── IGDB raw types ── */
@@ -567,6 +568,28 @@ export async function getGameByEpicCatalogItemId(catalogItemId: string): Promise
     return null;
   }
   epicCatalogCache.set(key, result);
+  return result;
+}
+
+/**
+ * M3 — match a Nintendo Switch game by the Switch application id.
+ * IGDB external_games Nintendo rows have URLs under nintendo.com.
+ * Application IDs are 16-char hex strings. IGDB's coverage of Switch
+ * games is decent for first-party titles but spotty for indies — the
+ * title-search + L-series localization fallback in syncRunner picks
+ * up the misses.
+ */
+export async function getGameByNintendoTitleId(nintendoTitleId: string): Promise<IgdbSearchResult | null> {
+  const key = `nintendo_${nintendoTitleId}`;
+  const cached = nintendoTitleCache.get(key);
+  if (cached !== undefined) return cached;
+  let result: IgdbSearchResult | null;
+  try {
+    result = await getGameByExternalUid('nintendo.com', nintendoTitleId);
+  } catch {
+    return null;
+  }
+  nintendoTitleCache.set(key, result);
   return result;
 }
 

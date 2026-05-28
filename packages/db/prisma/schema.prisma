@@ -238,6 +238,12 @@ model Game {
   // resolution path in syncRunner so Epic games match correctly via
   // IGDB external_games (URL pattern: store.epicgames.com).
   epicCatalogItemId    String?  @unique
+  // Nintendo Switch application identifier (16-char hex string).
+  // Captured via the Moon API (Parental Controls) library sync. Used
+  // by the M3 NT-id-first resolution path in syncRunner so Switch
+  // games match correctly via IGDB external_games (URL pattern:
+  // nintendo.com).
+  nintendoTitleId      String?  @unique
   title                String
   developer            String?
   releaseYear          Int?
