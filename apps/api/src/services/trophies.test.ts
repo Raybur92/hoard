@@ -34,21 +34,26 @@ interface MockUserGame {
   userId: string;
   gameId: string;
   status: string;
+  achievementsByPlatform: Record<string, unknown>;
+  playtimeByPlatform?: Record<string, number>;
   game: { id: string; title: string; psnNpCommunicationId: string | null };
 }
 
 function makeUg(overrides: Partial<MockUserGame> & { gameId?: string; gameTitle?: string; npId?: string | null } = {}): MockUserGame {
-  return {
+  const ug: MockUserGame = {
     id: overrides.id ?? 'ug-1',
     userId: overrides.userId ?? 'user-1',
     gameId: overrides.gameId ?? 'game-1',
     status: overrides.status ?? 'Backlog',
+    achievementsByPlatform: overrides.achievementsByPlatform ?? {},
     game: {
       id: overrides.gameId ?? 'game-1',
       title: overrides.gameTitle ?? 'Slay the Spire',
       psnNpCommunicationId: overrides.npId ?? null,
     },
   };
+  if (overrides.playtimeByPlatform) ug.playtimeByPlatform = overrides.playtimeByPlatform;
+  return ug;
 }
 
 beforeEach(() => {
@@ -80,14 +85,14 @@ describe('applyPsnTrophyAggregates — matching strategy (T-D5)', () => {
     expect(result.matched).toBe(1);
     expect(result.missed).toBe(0);
     expect(prisma.game.update).not.toHaveBeenCalled(); // npId already set, no persistence needed
-    expect(prisma.userGame.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'ug-1' },
-      data: expect.objectContaining({
-        achievementsEarned: 48,
-        achievementsTotal: 48,
-        achievementsPercent: 100,
-      }),
-    }));
+
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.achievementsByPlatform.PS).toEqual({
+      earned: 48,
+      total: 48,
+      percent: 100,
+      updatedAt: expect.any(String),
+    });
   });
 
   it('falls back to normalized-title match when npId is null, and persists the npId', async () => {
@@ -106,8 +111,6 @@ describe('applyPsnTrophyAggregates — matching strategy (T-D5)', () => {
   });
 
   it('does NOT title-match a Game that already has a different npId set', async () => {
-    // Same title but a different npId already locked in — title fallback
-    // must not overwrite it. The trophy goes unmatched.
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
       makeUg({ id: 'ug-1', npId: 'NPWR_OTHER_00', gameTitle: 'Slay the Spire' }),
     ]);
@@ -158,9 +161,6 @@ describe('applyPsnTrophyAggregates — auto-complete (T-D2)', () => {
   });
 
   it('promotes Wishlist → Completed at 100% (P-series — folds in CM13 + T-D2)', async () => {
-    // Behaviour change vs T-D2 baseline: under P-series, a Wishlist
-    // UserGame that gets ANY earned-trophy evidence is promoted. At 100%
-    // we fold the auto-complete in so the user doesn't transit via OnHold.
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
       makeUg({ id: 'ug-1', npId: 'NPWR12345_00', status: 'Wishlist' }),
     ]);
@@ -173,9 +173,6 @@ describe('applyPsnTrophyAggregates — auto-complete (T-D2)', () => {
   });
 
   it('promotes Wishlist → OnHold at partial trophy progress (P-series — Andrea\'s Lego Batman case)', async () => {
-    // Under T-D2 baseline this stayed Wishlist (applyAutoCompleteRule
-    // returned null below 100%). Under P-series the promoteWishlistOnEngagement
-    // path fires whenever earned > 0, flipping to OnHold.
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
       makeUg({ id: 'ug-1', npId: 'NPWR12345_00', status: 'Wishlist' }),
     ]);
@@ -187,11 +184,11 @@ describe('applyPsnTrophyAggregates — auto-complete (T-D2)', () => {
     ]);
 
     expect(result.matched).toBe(1);
-    expect(result.autoCompleted).toBe(0); // not Completed, just OnHold
+    expect(result.autoCompleted).toBe(0);
     const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
     expect(data.status).toBe('OnHold');
-    expect(data.achievementsEarned).toBe(16);
-    expect(data.achievementsPercent).toBe(33);
+    expect(data.achievementsByPlatform.PS.earned).toBe(16);
+    expect(data.achievementsByPlatform.PS.percent).toBe(33);
   });
 
   it('preserves Wishlist when no trophies earned yet (no engagement signal)', async () => {
@@ -207,7 +204,7 @@ describe('applyPsnTrophyAggregates — auto-complete (T-D2)', () => {
 
     expect(result.matched).toBe(1);
     const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
-    expect(data.status).toBeUndefined(); // status not in update body
+    expect(data.status).toBeUndefined();
   });
 
   it('does NOT auto-complete below 100% even on auto-complete-eligible status', async () => {
@@ -223,7 +220,7 @@ describe('applyPsnTrophyAggregates — auto-complete (T-D2)', () => {
 
     expect(result.autoCompleted).toBe(0);
     const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
-    expect(data.achievementsPercent).toBe(63);
+    expect(data.achievementsByPlatform.PS.percent).toBe(63);
     expect(data.status).toBeUndefined();
   });
 });
@@ -242,9 +239,12 @@ describe('applyPsnTrophyAggregates — aggregate math', () => {
     ]);
 
     const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
-    expect(data.achievementsEarned).toBe(13);
-    expect(data.achievementsTotal).toBe(29);
-    expect(data.achievementsPercent).toBe(45); // round(13/29*100) = 45
+    expect(data.achievementsByPlatform.PS).toEqual({
+      earned: 13,
+      total: 29,
+      percent: 45, // round(13/29*100) = 45
+      updatedAt: expect.any(String),
+    });
   });
 
   it('skips defensively when defined trophies sum to 0', async () => {
@@ -259,23 +259,67 @@ describe('applyPsnTrophyAggregates — aggregate math', () => {
       }),
     ]);
 
-    expect(result.matched).toBe(0); // skipped — no update
+    expect(result.matched).toBe(0);
     expect(prisma.userGame.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyPsnTrophyAggregates — M0 per-platform merge', () => {
+  it('preserves existing .ST entry when writing .PS (no clobber across platforms)', async () => {
+    // Cross-platform game where Steam achievement sync already wrote .ST.
+    // PSN trophy sync now writes .PS — must merge, not replace.
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({
+        id: 'ug-1',
+        npId: 'NPWR12345_00',
+        achievementsByPlatform: {
+          ST: { earned: 28, total: 44, percent: 64, updatedAt: '2026-05-20T00:00:00.000Z' },
+        },
+      }),
+    ]);
+
+    await applyPsnTrophyAggregates('user-1', [makeTrophy()]);
+
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    // .ST preserved verbatim
+    expect(data.achievementsByPlatform.ST).toEqual({
+      earned: 28, total: 44, percent: 64, updatedAt: '2026-05-20T00:00:00.000Z',
+    });
+    // .PS added with new values
+    expect(data.achievementsByPlatform.PS).toEqual({
+      earned: 48, total: 48, percent: 100, updatedAt: expect.any(String),
+    });
+  });
+
+  it('overwrites existing .PS entry on PSN re-sync (no stale data accumulation)', async () => {
+    // PSN re-sync after the user has popped more trophies. The old .PS
+    // entry should be replaced, not merged (single-platform-write per
+    // sync is fine — there's no second PSN somewhere).
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({
+        id: 'ug-1',
+        npId: 'NPWR12345_00',
+        achievementsByPlatform: {
+          PS: { earned: 10, total: 48, percent: 21, updatedAt: '2026-04-01T00:00:00.000Z' },
+        },
+      }),
+    ]);
+
+    await applyPsnTrophyAggregates('user-1', [makeTrophy()]);
+
+    const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    expect(data.achievementsByPlatform.PS).toEqual({
+      earned: 48, total: 48, percent: 100, updatedAt: expect.any(String),
+    });
   });
 });
 
 describe('applyPsnTrophyAggregates — P-FIX-1 + P-FIX-2', () => {
   it('catches P2002 on Game.update and continues with the trophy data write (cross-region npId collision)', async () => {
-    // Two title-fallback matches landing on different Games but sharing
-    // a single npCommunicationId (Sony returns same npId across regions /
-    // DLC packs sometimes). Previously, the second Game.update aborted
-    // the whole loop with P2002. P-FIX-1 catches + skips the npId
-    // persistence, lets the trophy data still write.
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
       makeUg({ id: 'ug-a', gameId: 'game-a', gameTitle: 'Slay the Spire' }),
       makeUg({ id: 'ug-b', gameId: 'game-b', gameTitle: 'Slay the Spire EU' }),
     ]);
-    // First Game.update succeeds; second throws P2002.
     (prisma.game.update as jest.Mock)
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce(
@@ -291,7 +335,6 @@ describe('applyPsnTrophyAggregates — P-FIX-1 + P-FIX-2', () => {
       makeTrophy({ npCommunicationId: 'NPWR_SAME_00', cleanedTitle: 'Slay the Spire EU' }),
     ]);
 
-    // Both UserGames get trophy data written (the loop didn't abort).
     expect(prisma.userGame.update).toHaveBeenCalledTimes(2);
     expect(result.matched).toBe(2);
   });
@@ -317,15 +360,17 @@ describe('applyPsnTrophyAggregates — P-FIX-1 + P-FIX-2', () => {
   });
 
   it('preserves existing PS playtime when backfilling (doesn\'t clobber syncPsnLibrary\'s real minutes)', async () => {
-    const ug = makeUg({ id: 'ug-1', npId: 'NPWR12345_00' }) as MockUserGame & { playtimeByPlatform: Record<string, number> };
-    ug.playtimeByPlatform = { PS: 4200, ST: 100 };
-    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([ug]);
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      makeUg({
+        id: 'ug-1',
+        npId: 'NPWR12345_00',
+        playtimeByPlatform: { PS: 4200, ST: 100 },
+      }),
+    ]);
 
     await applyPsnTrophyAggregates('user-1', [makeTrophy()]);
 
     const data = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
-    // PS already had real minutes — playtimeByPlatform NOT written
-    // (avoids stomping on syncPsnLibrary's authoritative value).
     expect(data.playtimeByPlatform).toBeUndefined();
   });
 });

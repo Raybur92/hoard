@@ -10,7 +10,7 @@ import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
 import { api } from '../../lib/api';
-import { minutesToHours, formatRelative, generateReceipt, achievementLabel, buildPlatformRows } from '../../lib/utils';
+import { minutesToHours, formatRelative, generateReceipt, buildAchievementRows, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
 
@@ -267,12 +267,15 @@ HLTB extras ...... ${hltbExtras ? `${hltbExtras} h` : '—'}
 HLTB 100% ........ ${hltbComplete ? `${hltbComplete} h` : '—'}
 % of main ........ ${pctOfMain}
 last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
-{/* T5 — trophies / achievements row, hidden when not fetched / unsupported (T-D7).
-    Same dotted-row aesthetic as the HLTB rows above; label flips between
-    "trophies" (PSN) and "achievements" (Steam) via achievementLabel(). */}
-{g.achievementsTotal !== null && g.achievementsTotal > 0 && g.achievementsEarned !== null && g.achievementsPercent !== null
-  ? `\n${achievementLabel(g.playtimeByPlatform) === 'trophies' ? 'trophies ........' : 'achievements ....'} ${g.achievementsEarned}/${g.achievementsTotal} (${g.achievementsPercent}%)`
-  : ''}
+{/* M0 — per-platform trophies / achievements rows. One row per entry in
+    achievementsByPlatform. Hidden entirely when the map is empty
+    (unsupported games / private profiles / pre-sync rows). Cross-platform
+    games render multiple rows in the same dotted-row aesthetic. */}
+{buildAchievementRows(g.achievementsByPlatform)
+  .map((r) =>
+    `\n${r.label === 'trophies' ? 'trophies ........' : 'achievements ....'} ${r.earned}/${r.total} (${r.percent}%)`,
+  )
+  .join('')}
           </pre>
 
           <div className="rule" style={{ margin: '12px 0' }} />

@@ -7,7 +7,6 @@ jest.mock('@hoard/db', () => ({
       findMany: jest.fn(),
       groupBy: jest.fn(),
       count: jest.fn(),
-      aggregate: jest.fn(),
     },
     platform: { findMany: jest.fn() },
     wishlistRelease: { findMany: jest.fn() },
@@ -78,14 +77,16 @@ const backlogIdRow = (id: string, mainStory: number | null) => ({
  *
  * The route runs (in parallel):
  *   1. userGame.groupBy (counts)
- *   2. userGame.count   (weeklyAdded)
- *   3. userGame.findMany — nowPlaying (Playing, take 3, with full game+hltb)
- *   4. userGame.findMany — backlogIdsRaw (Backlog, lightweight: id + hltb.mainStory)
- *   5. userGame.findMany — aggUserGames (lightweight: playtime + genres for every userGame)
- *   6. wishlistRelease.findMany
- *   7. platform.findMany
+ *   2. userGame.count   (wishlistCount widened)
+ *   3. userGame.count   (weeklyAdded)
+ *   4. userGame.findMany — nowPlaying (Playing, take 3, with full game+hltb)
+ *   5. userGame.findMany — backlogIdsRaw (Backlog, lightweight: id + hltb.mainStory)
+ *   6. userGame.findMany — aggUserGames (lightweight: playtime + genres for every userGame)
+ *   7. wishlistRelease.findMany
+ *   8. platform.findMany
+ *   9. userGame.findMany — achievementsRows (M0: lightweight, achievementsByPlatform only)
  * Then a follow-up:
- *   8. userGame.findMany — backlogTopRaw (full data for the 30 IDs with shortest HLTB)
+ *   10. userGame.findMany — backlogTopRaw (full data for the 30 IDs with shortest HLTB)
  */
 function setupDashboard({
   countGroups = [] as Array<{ status: string; _count: { status: number } }>,
@@ -96,21 +97,34 @@ function setupDashboard({
   backlogTop = [] as ReturnType<typeof makeUserGame>[],
   wishlist = [] as unknown[],
   platforms = [] as unknown[],
-  achievementsAggregate = { _sum: { achievementsEarned: null, achievementsTotal: null } } as { _sum: { achievementsEarned: number | null; achievementsTotal: number | null } },
-}) {
+  achievementsRows = [] as Array<{ achievementsByPlatform: Record<string, unknown> }>,
+}: Partial<{
+  countGroups: Array<{ status: string; _count: { status: number } }>;
+  weeklyAdded: number;
+  nowPlaying: ReturnType<typeof makeUserGame>[];
+  backlogIds: ReturnType<typeof backlogIdRow>[];
+  aggRows: ReturnType<typeof aggRow>[];
+  backlogTop: ReturnType<typeof makeUserGame>[];
+  wishlist: unknown[];
+  platforms: unknown[];
+  achievementsRows: Array<{ achievementsByPlatform: Record<string, unknown> }>;
+}>) {
   (prisma.userGame.groupBy as jest.Mock).mockResolvedValue(countGroups);
-  (prisma.userGame.count as jest.Mock).mockResolvedValue(weeklyAdded);
-  // findMany order: nowPlaying, backlogIds, aggRows, [backlogTop if any backlogIds]
+  // Two count() calls in Promise.all order: wishlistCount (widened), weeklyAdded.
+  (prisma.userGame.count as jest.Mock)
+    .mockResolvedValueOnce(0)
+    .mockResolvedValueOnce(weeklyAdded);
+  // findMany order: nowPlaying, backlogIds, aggRows, achievementsRows, [backlogTop if any backlogIds]
   const findManyMock = prisma.userGame.findMany as jest.Mock;
   findManyMock.mockReset();
   findManyMock
     .mockResolvedValueOnce(nowPlaying)
     .mockResolvedValueOnce(backlogIds)
     .mockResolvedValueOnce(aggRows)
+    .mockResolvedValueOnce(achievementsRows)
     .mockResolvedValueOnce(backlogTop);
   (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue(wishlist);
   (prisma.platform.findMany as jest.Mock).mockResolvedValue(platforms);
-  (prisma.userGame.aggregate as jest.Mock).mockResolvedValue(achievementsAggregate);
 }
 
 describe('GET /api/dashboard', () => {
@@ -244,36 +258,28 @@ describe('GET /api/dashboard', () => {
 
 describe('GET /api/dashboard — wishlistCount widening (F1-PR2 / CM12 + CM13)', () => {
   it('wishlistCount comes from the widened count() query, not from countGroups[Wishlist]', async () => {
-    // The widened count() captures status=Wishlist OR wishlistedPlatforms
-    // non-empty. The groupBy-derived countGroups only sees status=Wishlist.
-    // When the two diverge (per-platform-wishlist case), the widened count
-    // wins. This test mocks them with different values to make the wiring
-    // unambiguous: countGroups says 3 status=Wishlist rows; the widened
-    // count() says 5 (3 status-Wishlist + 2 partially-wishlisted via
-    // wishlistedPlatforms). The response should report 5.
     (prisma.userGame.groupBy as jest.Mock).mockResolvedValue([
       { status: 'Backlog',  _count: { status: 10 } },
       { status: 'Wishlist', _count: { status: 3 } },
     ]);
     (prisma.userGame.count as jest.Mock)
-      .mockResolvedValueOnce(5) // widened wishlistCount (first count() in Promise.all order)
-      .mockResolvedValueOnce(0); // weeklyAdded (second count() in order)
+      .mockResolvedValueOnce(5) // widened wishlistCount
+      .mockResolvedValueOnce(0); // weeklyAdded
     const findManyMock = prisma.userGame.findMany as jest.Mock;
     findManyMock.mockReset();
     findManyMock
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([]); // achievementsRows
     (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.platform.findMany as jest.Mock).mockResolvedValue([]);
-    (prisma.userGame.aggregate as jest.Mock).mockResolvedValue({ _sum: { achievementsEarned: null, achievementsTotal: null } });
 
     const res = await request(app).get('/api/dashboard');
 
     expect(res.status).toBe(200);
     expect(res.body.stats.wishlistCount).toBe(5);
-    expect(res.body.stats.backlogCount).toBe(10); // status-derived count unchanged
+    expect(res.body.stats.backlogCount).toBe(10);
 
     // Verify the count() call shape — the widened one uses OR with isEmpty: false
     const countCalls = (prisma.userGame.count as jest.Mock).mock.calls;
@@ -288,12 +294,14 @@ describe('GET /api/dashboard — wishlistCount widening (F1-PR2 / CM12 + CM13)',
   });
 });
 
-describe('GET /api/dashboard — achievements rollup (T6)', () => {
+describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)', () => {
   it('returns null when no game in the library has achievement data yet', async () => {
     setupDashboard({
       countGroups: [{ status: 'Backlog', _count: { status: 5 } }],
-      // _sum returns null when no rows match the filter (achievementsTotal: not null)
-      achievementsAggregate: { _sum: { achievementsEarned: null, achievementsTotal: null } },
+      achievementsRows: [
+        { achievementsByPlatform: {} },
+        { achievementsByPlatform: {} },
+      ],
     });
 
     const res = await request(app).get('/api/dashboard');
@@ -301,10 +309,13 @@ describe('GET /api/dashboard — achievements rollup (T6)', () => {
     expect(res.body.stats.achievementsRollup).toBeNull();
   });
 
-  it('returns the summed counts + percent rounded to one decimal', async () => {
+  it('aggregates summed counts across single-platform rows + percent rounded to one decimal', async () => {
     setupDashboard({
       countGroups: [{ status: 'Playing', _count: { status: 10 } }],
-      achievementsAggregate: { _sum: { achievementsEarned: 1242, achievementsTotal: 4580 } },
+      achievementsRows: [
+        { achievementsByPlatform: { PS: { earned: 800, total: 2000, percent: 40, updatedAt: 't' } } },
+        { achievementsByPlatform: { ST: { earned: 442, total: 2580, percent: 17, updatedAt: 't' } } },
+      ],
     });
 
     const res = await request(app).get('/api/dashboard');
@@ -312,32 +323,57 @@ describe('GET /api/dashboard — achievements rollup (T6)', () => {
     expect(res.body.stats.achievementsRollup).toEqual({
       earned: 1242,
       total: 4580,
-      percent: 27.1, // round(1242/4580*1000)/10
+      percent: 27.1,
+    });
+  });
+
+  it('aggregates summed counts across cross-platform rows (M-D7 — both .ST and .PS contribute)', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Playing', _count: { status: 1 } }],
+      achievementsRows: [
+        // Cyberpunk-style: same game with both Steam achievements and PSN trophies.
+        // Both should contribute to the library-wide rollup.
+        { achievementsByPlatform: {
+          ST: { earned: 28, total: 44, percent: 64, updatedAt: 't' },
+          PS: { earned: 30, total: 45, percent: 67, updatedAt: 't' },
+        } },
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard');
+    expect(res.body.stats.achievementsRollup).toEqual({
+      earned: 58, // 28 + 30
+      total: 89,  // 44 + 45
+      percent: 65.2,
     });
   });
 
   it('handles a 0/N case (user has games with achievement support but earned none)', async () => {
     setupDashboard({
       countGroups: [{ status: 'Backlog', _count: { status: 1 } }],
-      achievementsAggregate: { _sum: { achievementsEarned: 0, achievementsTotal: 100 } },
+      achievementsRows: [
+        { achievementsByPlatform: { ST: { earned: 0, total: 100, percent: 0, updatedAt: 't' } } },
+      ],
     });
 
     const res = await request(app).get('/api/dashboard');
     expect(res.body.stats.achievementsRollup).toEqual({ earned: 0, total: 100, percent: 0 });
   });
 
-  it('runs the aggregate query scoped to userId AND filtering achievementsTotal: not null', async () => {
+  it('runs the achievementsRows query as a findMany with the achievementsByPlatform select', async () => {
     setupDashboard({
       countGroups: [{ status: 'Backlog', _count: { status: 1 } }],
-      achievementsAggregate: { _sum: { achievementsEarned: 50, achievementsTotal: 200 } },
+      achievementsRows: [
+        { achievementsByPlatform: { ST: { earned: 50, total: 200, percent: 25, updatedAt: 't' } } },
+      ],
     });
 
     await request(app).get('/api/dashboard');
 
-    // The mock was called with the correct filter shape.
-    const aggregateCall = (prisma.userGame.aggregate as jest.Mock).mock.calls[0][0];
-    expect(aggregateCall.where.userId).toBe('test-user-id');
-    expect(aggregateCall.where.achievementsTotal).toEqual({ not: null });
-    expect(aggregateCall._sum).toEqual({ achievementsEarned: true, achievementsTotal: true });
+    // The 4th findMany call is the achievements rollup (per setupDashboard order).
+    const findManyCalls = (prisma.userGame.findMany as jest.Mock).mock.calls;
+    const achievementsCall = findManyCalls[3]?.[0];
+    expect(achievementsCall.where.userId).toBe('test-user-id');
+    expect(achievementsCall.select).toEqual({ achievementsByPlatform: true });
   });
 });

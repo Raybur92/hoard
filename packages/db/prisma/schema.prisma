@@ -247,16 +247,17 @@ model UserGame {
   lastPlayedAt          DateTime?
   notes                 String?
   rating                Int?
-  // Aggregate achievement / trophy progress. All four are populated by the
-  // sync flow (T2 PSN trophy fetcher + T3 Steam achievement fetcher in
-  // docs/TROPHIES_PLAN.md). All nullable: `null` means "no data fetched
-  // yet" (pre-T2/T3 rows) OR "the game doesn't support achievements"
-  // (Steam returns success=false). The receipt-block UI hides the
-  // trophies / achievements line when `achievementsTotal === null`.
-  achievementsEarned    Int?
-  achievementsTotal     Int?
-  achievementsPercent   Int?
-  achievementsUpdatedAt DateTime?
+  // Per-platform trophy/achievement progress per M-D7 (M0 of the sync-
+  // expansion workstream, docs/SYNC_EXPANSION_PLAN.md). JSON shape:
+  // { "ST": { earned, total, percent, updatedAt }, "PS": { ... }, ... }.
+  // Replaces the 4 flat columns (achievementsEarned/Total/Percent/UpdatedAt)
+  // dropped in the M0 migration. Reason: Steam achievements and PSN
+  // trophies are entirely different sets per game (Cyberpunk: 44 Steam
+  // achievements vs 45 PSN trophies), so the flat columns flapped on
+  // every sync for cross-platform games. Default `{}` means "no
+  // achievement data fetched yet for any platform"; UI hides the
+  // receipt section when the map is empty.
+  achievementsByPlatform Json @default("{}")
   // F1-PR2 collector metadata per CONCEPTUAL_MODEL CM2 + CM12. All four
   // nullable so existing rows remain unaffected. Populated by the new
   // manual-add flow + GameDetail per-platform-wishlist affordance.

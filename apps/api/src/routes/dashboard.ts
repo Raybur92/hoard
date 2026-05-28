@@ -71,7 +71,7 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     aggUserGames,
     wishlistReleases,
     platforms,
-    achievementsAggregate,
+    achievementsRows,
   ] = await Promise.all([
     prisma.userGame.groupBy({
       by: ['status'],
@@ -127,13 +127,12 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
       take: 5,
     }),
     prisma.platform.findMany({ where: { userId } }),
-    // T6 — library-wide achievement rollup. Single Postgres SUM scoped to
-    // the user; only counts UserGames where achievementsTotal is non-null
-    // (otherwise unsupported games / private profiles inflate the
-    // denominator with 0/0 noise).
-    prisma.userGame.aggregate({
-      where: { userId, achievementsTotal: { not: null } },
-      _sum: { achievementsEarned: true, achievementsTotal: true },
+    // T6 — library-wide achievement rollup. M0: data is now per-platform
+    // JSON, so we can't use Prisma _sum. Fetch just the JSON column and
+    // iterate in app code. Cheap (~1 row per UserGame, JSON is small).
+    prisma.userGame.findMany({
+      where: { userId },
+      select: { achievementsByPlatform: true },
     }),
   ]);
 
@@ -184,11 +183,22 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
       ? Math.round((shelfCounts['Completed'] / totalGames) * 1000) / 10
       : 0;
 
-  // T6 rollup. _sum is `number | null` (null = no rows passed the filter).
-  // `null` rolls up to "no achievement data anywhere yet" so the UI can
-  // hide the line entirely instead of showing 0/0.
-  const achEarned = achievementsAggregate._sum.achievementsEarned ?? 0;
-  const achTotal = achievementsAggregate._sum.achievementsTotal ?? 0;
+  // T6 rollup (M0). Iterate each UserGame's achievementsByPlatform map and
+  // sum earned/total across all platform entries. Rationale per M-D7:
+  // Steam achievements and PSN trophies are distinct sets, but for a
+  // library-wide percent indicator counting both makes sense — every
+  // popped trophy / achievement is engagement evidence. Result is
+  // `null` (UI hide) when no row in the library has any achievement
+  // data; otherwise total>0 by construction.
+  let achEarned = 0;
+  let achTotal = 0;
+  for (const row of achievementsRows) {
+    const map = (row.achievementsByPlatform ?? {}) as Record<string, { earned?: number; total?: number }>;
+    for (const e of Object.values(map)) {
+      if (typeof e?.earned === 'number') achEarned += e.earned;
+      if (typeof e?.total === 'number') achTotal += e.total;
+    }
+  }
   const achievementsRollup =
     achTotal > 0
       ? {

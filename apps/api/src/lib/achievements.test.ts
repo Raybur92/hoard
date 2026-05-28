@@ -1,4 +1,13 @@
 import { applyAutoCompleteRule, promoteWishlistOnEngagement } from './achievements';
+import type { AchievementsByPlatform } from '@hoard/types';
+
+// Helpers for terser test bodies.
+const ent = (earned: number, total: number, percent: number) => ({
+  earned,
+  total,
+  percent,
+  updatedAt: '2026-05-27T00:00:00.000Z',
+});
 
 describe('applyAutoCompleteRule (T-D2)', () => {
   describe('returns null when percent !== 100', () => {
@@ -39,30 +48,48 @@ describe('applyAutoCompleteRule (T-D2)', () => {
   });
 });
 
-describe('promoteWishlistOnEngagement (P-series)', () => {
+describe('promoteWishlistOnEngagement (P-series, M0 per-platform shape)', () => {
   it('returns null for any non-Wishlist status (preserves user library state)', () => {
+    const abp: AchievementsByPlatform = { PS: ent(5, 10, 50) };
     for (const s of ['Backlog', 'OnHold', 'Playing', 'Completed', 'Dropped'] as const) {
-      expect(promoteWishlistOnEngagement(s, 5, 50)).toBeNull();
-      expect(promoteWishlistOnEngagement(s, 52, 100)).toBeNull();
-      expect(promoteWishlistOnEngagement(s, 0, 0)).toBeNull();
+      expect(promoteWishlistOnEngagement(s, abp)).toBeNull();
     }
   });
 
-  it('returns null on Wishlist with zero earned (no engagement signal yet)', () => {
-    expect(promoteWishlistOnEngagement('Wishlist', 0, 0)).toBeNull();
-    expect(promoteWishlistOnEngagement('Wishlist', 0, null)).toBeNull();
+  it('returns null on Wishlist with empty map (no entries fetched yet)', () => {
+    expect(promoteWishlistOnEngagement('Wishlist', {})).toBeNull();
+  });
+
+  it('returns null on Wishlist when all entries have earned === 0', () => {
+    const abp: AchievementsByPlatform = { PS: ent(0, 50, 0), ST: ent(0, 30, 0) };
+    expect(promoteWishlistOnEngagement('Wishlist', abp)).toBeNull();
     // Even if `total > 0`, if nothing is earned we conservatively don't
     // promote — the game might be in the trophy list because the user
     // pulled it down but hasn't actually launched it yet.
   });
 
-  it('promotes Wishlist → OnHold on any earned trophy below 100%', () => {
-    expect(promoteWishlistOnEngagement('Wishlist', 1, 5)).toBe('OnHold');
-    expect(promoteWishlistOnEngagement('Wishlist', 16, 31)).toBe('OnHold'); // Andrea's Lego Batman case
-    expect(promoteWishlistOnEngagement('Wishlist', 50, 99)).toBe('OnHold');
+  it('promotes Wishlist → OnHold when any single platform has earned > 0 below 100%', () => {
+    expect(promoteWishlistOnEngagement('Wishlist', { PS: ent(1, 50, 2) })).toBe('OnHold');
+    expect(promoteWishlistOnEngagement('Wishlist', { PS: ent(16, 52, 31) })).toBe('OnHold'); // Andrea's Lego Batman
+    expect(promoteWishlistOnEngagement('Wishlist', { ST: ent(50, 51, 98) })).toBe('OnHold');
   });
 
-  it('promotes Wishlist → Completed when percent === 100 (folds in T-D2)', () => {
-    expect(promoteWishlistOnEngagement('Wishlist', 52, 100)).toBe('Completed');
+  it('promotes Wishlist → OnHold when one platform has earned and another is empty', () => {
+    expect(
+      promoteWishlistOnEngagement('Wishlist', { PS: ent(0, 50, 0), ST: ent(5, 30, 17) }),
+    ).toBe('OnHold');
+  });
+
+  it('promotes Wishlist → Completed when any platform hits percent === 100', () => {
+    expect(promoteWishlistOnEngagement('Wishlist', { PS: ent(50, 50, 100) })).toBe('Completed');
+    expect(promoteWishlistOnEngagement('Wishlist', { ST: ent(44, 44, 100) })).toBe('Completed');
+  });
+
+  it('Completed beats OnHold when one platform is 100% and another is partial', () => {
+    // Multi-platform: Steam 100%, PSN partial → Completed (the strongest
+    // signal wins per M-D8). Any platform at 100% means the user beat the
+    // game; the other platform being partial doesn't downgrade them.
+    const abp: AchievementsByPlatform = { ST: ent(44, 44, 100), PS: ent(10, 50, 20) };
+    expect(promoteWishlistOnEngagement('Wishlist', abp)).toBe('Completed');
   });
 });

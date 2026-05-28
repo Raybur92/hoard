@@ -11,7 +11,7 @@ import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
 import { api } from '../../lib/api';
-import { minutesToHours, formatRelative, shortYear, generateReceipt, achievementLabel, buildPlatformRows } from '../../lib/utils';
+import { minutesToHours, formatRelative, shortYear, generateReceipt, buildAchievementRows, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
 
@@ -354,26 +354,33 @@ export function GameDetailDesktop() {
                   </div>
                 )}
 
-                {/* T5 — trophies / achievements receipt line. Hidden when
-                    achievementsTotal === null (T-D7) so unsupported games /
-                    private profiles / unfetched rows are invisible. The
-                    inline-marker style mirrors the "// game record · last
-                    sync ..." line at the top of the page. */}
-                {g.achievementsTotal !== null && g.achievementsTotal > 0 && g.achievementsEarned !== null && g.achievementsPercent !== null && (
-                  <div style={{ marginTop: 24 }}>
-                    <Marker>
-                      // {achievementLabel(g.playtimeByPlatform)}
-                      {' · '}
-                      <span className="t-mono t-tnum" style={{ color: 'var(--paper)' }}>
-                        {g.achievementsEarned}/{g.achievementsTotal}
-                      </span>
-                      {' · '}
-                      <span className="t-mono t-tnum" style={{ color: g.achievementsPercent >= 80 ? 'var(--green)' : 'var(--paper-dim)' }}>
-                        {g.achievementsPercent}%
-                      </span>
-                    </Marker>
-                  </div>
-                )}
+                {/* M0 — per-platform trophies / achievements rows. One
+                    Marker line per platform entry. Hidden entirely when
+                    the map is empty (unsupported games / private profiles
+                    / pre-sync rows). Cross-platform games show multiple
+                    rows ("trophies" for PSN, "achievements" for Steam &
+                    everything else). */}
+                {(() => {
+                  const rows = buildAchievementRows(g.achievementsByPlatform);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div style={{ marginTop: 24 }}>
+                      {rows.map((r) => (
+                        <Marker key={r.code}>
+                          // {r.label}
+                          {' · '}
+                          <span className="t-mono t-tnum" style={{ color: 'var(--paper)' }}>
+                            {r.earned}/{r.total}
+                          </span>
+                          {' · '}
+                          <span className="t-mono t-tnum" style={{ color: r.percent >= 80 ? 'var(--green)' : 'var(--paper-dim)' }}>
+                            {r.percent}%
+                          </span>
+                        </Marker>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* synopsis / genres */}
                 <div style={{ marginTop: 24 }}>

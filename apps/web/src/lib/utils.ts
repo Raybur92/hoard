@@ -1,3 +1,5 @@
+import type { AchievementsByPlatform, PlatformCode } from '@hoard/types';
+
 export function minutesToHours(minutes: number): string {
   if (minutes === 0) return '—';
   const h = minutes / 60;
@@ -105,24 +107,51 @@ export function upcomingDateParts(iso: string | null): { full: string; month: st
 }
 
 /**
- * Pick the right label for the trophies/achievements receipt-block line on
- * GameDetail (T5 in `docs/TROPHIES_PLAN.md`). PSN calls them "trophies",
- * Steam calls them "achievements" — Hoard renders the label that matches
- * the user's primary platform for the game.
+ * M0 of the sync-expansion workstream (docs/SYNC_EXPANSION_PLAN.md M-D7).
  *
- * Inference rule: if the user has any PSN playtime on this game, use
- * "trophies" (Sony's brand term). Otherwise default to "achievements" (the
- * generic English term that fits Steam, Xbox, GOG). Single-platform users
- * get the right label; dual-platform games default to "trophies" because
- * Andrea is PSN-heavy and that's the more authentic read for trophy-hunter
- * culture.
+ * Builds the per-platform achievement rows for the GameDetail receipt
+ * block. Each entry in `achievementsByPlatform` becomes one row; the
+ * label per row reflects platform branding — PSN calls them "trophies",
+ * everyone else calls them "achievements".
  *
- * Note: this doesn't track which platform actually wrote the aggregate
- * data — Steam's background pass overwrites PSN's inline pass for
- * dual-platform games. Per-platform achievement storage is v2.
+ * Sort order is stable so multi-row renders don't flap between requests:
+ * `PS` first (Sony's branding feels more specific), then `ST`, then the
+ * rest alphabetically. Single-platform games render identically to the
+ * pre-M0 flat-column rendering.
+ *
+ * Empty input → empty array; callers hide the receipt section entirely
+ * when nothing comes back.
  */
-export function achievementLabel(playtimeByPlatform: Partial<Record<string, number>>): 'trophies' | 'achievements' {
-  return playtimeByPlatform.PS !== undefined ? 'trophies' : 'achievements';
+export interface AchievementRow {
+  code: PlatformCode;
+  label: 'trophies' | 'achievements';
+  earned: number;
+  total: number;
+  percent: number;
+  updatedAt: string;
+}
+
+const PLATFORM_SORT_ORDER: PlatformCode[] = ['PS', 'ST', 'XB', 'GG', 'NT', 'EP'];
+
+export function buildAchievementRows(
+  abp: AchievementsByPlatform | null | undefined,
+): AchievementRow[] {
+  if (!abp) return [];
+  const rows: AchievementRow[] = [];
+  for (const code of PLATFORM_SORT_ORDER) {
+    const e = abp[code];
+    if (!e) continue;
+    if (e.total <= 0) continue;
+    rows.push({
+      code,
+      label: code === 'PS' ? 'trophies' : 'achievements',
+      earned: e.earned,
+      total: e.total,
+      percent: e.percent,
+      updatedAt: e.updatedAt,
+    });
+  }
+  return rows;
 }
 
 export function countdownParts(iso: string | null, now: number = Date.now()): { d: string; h: string; m: string; s: string } | null {

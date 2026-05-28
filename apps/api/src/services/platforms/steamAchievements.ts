@@ -1,5 +1,7 @@
 import { prisma } from '@hoard/db';
+import type { Prisma } from '@prisma/client';
 import { applyAutoCompleteRule, promoteWishlistOnEngagement } from '../../lib/achievements';
+import type { AchievementsByPlatform } from '@hoard/types';
 
 /**
  * T3 of the trophies workstream (`docs/TROPHIES_PLAN.md`).
@@ -16,11 +18,11 @@ import { applyAutoCompleteRule, promoteWishlistOnEngagement } from '../../lib/ac
  *     app has no stats")
  *   - HTTP / network error
  *
- * UI policy (T-D7): the GameDetail receipt-block hides the achievements
- * line when `achievementsTotal === null`. PlatformDetail's scope tab
- * carries a Steam-only note pointing users at "Settings → Privacy →
- * Game details" so the silent failure mode is discoverable. Both shipped
- * in T5.
+ * UI policy (T-D7, updated for M0): the GameDetail receipt-block hides
+ * the achievements line when `achievementsByPlatform.ST` is absent.
+ * PlatformDetail's scope tab carries a Steam-only note pointing users at
+ * "Settings → Privacy → Game details" so the silent failure mode is
+ * discoverable. Both shipped in T5.
  */
 
 interface SteamPlayerStatsAchievement {
@@ -111,8 +113,9 @@ export interface TriggerSteamAchievementsResult {
  * - Fetches achievement aggregates per game (one Steam Web API call each).
  * - Throttled at ~3 req/s — Steam's per-key cap is 100k/day so this leaves
  *   plenty of headroom even at 1000 games per sync.
- * - Writes the four `achievements*` columns + applies the T-D2 auto-complete
- *   rule via the shared helper.
+ * - Merges into `achievementsByPlatform.ST` (per M-D7), preserving any
+ *   existing `.PS` entry from the PSN trophy aggregator. Applies the T-D2
+ *   auto-complete rule and CM13 wishlist promotion via the shared helpers.
  * - Per-game failures don't kill the loop. We log and continue.
  *
  * Caller is expected to fire-and-forget this — `runSync` returns
@@ -155,12 +158,26 @@ export async function triggerSteamAchievementsBackground(
       if (ach === null) {
         skipped++;
       } else {
-        const percent = ach.total > 0 ? Math.round((ach.earned / ach.total) * 100) : null;
-        // P-series: Wishlist promotion via achievements (covers the case
-        // where Steam achievements pop before Steam playtime increments).
-        // Falls back to T-D2 auto-complete rule for non-Wishlist statuses.
+        const percent = ach.total > 0 ? Math.round((ach.earned / ach.total) * 100) : 0;
+        // M0: merge .ST into achievementsByPlatform, preserving any
+        // existing .PS entry from the PSN trophy aggregator. Per M-D7
+        // Steam achievements and PSN trophies are distinct sets.
+        const existingAbp = (ug.achievementsByPlatform ?? {}) as AchievementsByPlatform;
+        const newAbp: AchievementsByPlatform = {
+          ...existingAbp,
+          ST: {
+            earned: ach.earned,
+            total: ach.total,
+            percent,
+            updatedAt: new Date().toISOString(),
+          },
+        };
+        // P-series + M-D8: Wishlist promotion via any-platform engagement
+        // signal. Falls back to per-platform auto-complete (T-D2) for
+        // non-Wishlist statuses — passes the Steam percent specifically
+        // since this is the platform the current write is about.
         const newStatus =
-          promoteWishlistOnEngagement(ug.status, ach.earned, percent) ??
+          promoteWishlistOnEngagement(ug.status, newAbp) ??
           applyAutoCompleteRule(ug.status, percent);
         // P-FIX-2: writing achievement data is hard evidence the user
         // owns the game on Steam. Backfill `playtimeByPlatform.ST = 0`
@@ -173,10 +190,7 @@ export async function triggerSteamAchievementsBackground(
         await prisma.userGame.update({
           where: { id: ug.id },
           data: {
-            achievementsEarned: ach.earned,
-            achievementsTotal: ach.total,
-            achievementsPercent: percent,
-            achievementsUpdatedAt: new Date(),
+            achievementsByPlatform: newAbp as Prisma.InputJsonValue,
             ...(newStatus ? { status: newStatus } : {}),
             ...(ptbpWithSt ? { playtimeByPlatform: ptbpWithSt } : {}),
           },

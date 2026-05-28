@@ -2,6 +2,7 @@ import { prisma } from '@hoard/db';
 import { Prisma } from '@prisma/client';
 import type { PsnTrophyTitle } from './platforms/psn';
 import { applyAutoCompleteRule, promoteWishlistOnEngagement } from '../lib/achievements';
+import type { AchievementsByPlatform } from '@hoard/types';
 
 /**
  * Title normalization for the title-fallback match (T-D5).
@@ -54,7 +55,10 @@ export interface ApplyPsnTrophyAggregatesResult {
  *
  * For each match:
  *   - Persist `Game.psnNpCommunicationId` if not already set.
- *   - Update `UserGame.achievements{Earned,Total,Percent,UpdatedAt}`.
+ *   - Merge `UserGame.achievementsByPlatform.PS = { earned, total, percent, updatedAt }`.
+ *     Other platform entries (`.ST` from Steam) are preserved — per M-D7
+ *     PSN trophies and Steam achievements are different sets and must not
+ *     overwrite each other.
  *   - Apply the T-D2 auto-complete rule.
  *
  * The whole thing is intentionally read-pull / write-loop rather than a
@@ -138,11 +142,22 @@ export async function applyPsnTrophyAggregates(
       }
     }
 
-    // P-series: try the Wishlist promotion first (covers the new-release
-    // case where trophies pop before getUserPlayedGames surfaces playtime),
-    // fall back to the auto-complete rule for non-Wishlist statuses.
+    // M0: merge .PS into existing achievementsByPlatform, preserving any
+    // existing .ST (Steam) entry. Per M-D7 PSN trophies and Steam
+    // achievements are distinct sets per game and must not collide.
+    const existingAbp = (userGame.achievementsByPlatform ?? {}) as AchievementsByPlatform;
+    const updatedAt = (trophy.lastUpdatedAt ?? new Date()).toISOString();
+    const newAbp: AchievementsByPlatform = {
+      ...existingAbp,
+      PS: { earned, total, percent, updatedAt },
+    };
+
+    // P-series + M-D8: Wishlist promotion via any-platform engagement
+    // signal. Falls back to per-platform auto-complete (T-D2) for
+    // non-Wishlist statuses — passes the PSN percent specifically since
+    // this is the platform the current write is about.
     const newStatus =
-      promoteWishlistOnEngagement(userGame.status, earned, percent) ??
+      promoteWishlistOnEngagement(userGame.status, newAbp) ??
       applyAutoCompleteRule(userGame.status, percent);
 
     // P-FIX-2: PSN trophy aggregation is hard evidence that the user
@@ -159,10 +174,7 @@ export async function applyPsnTrophyAggregates(
     await prisma.userGame.update({
       where: { id: userGame.id },
       data: {
-        achievementsEarned: earned,
-        achievementsTotal: total,
-        achievementsPercent: percent,
-        achievementsUpdatedAt: trophy.lastUpdatedAt ?? new Date(),
+        achievementsByPlatform: newAbp as Prisma.InputJsonValue,
         ...(newStatus ? { status: newStatus } : {}),
         ...(ptbpWithPs ? { playtimeByPlatform: ptbpWithPs } : {}),
       },

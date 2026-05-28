@@ -128,6 +128,34 @@ export interface Game {
 
 export type PlaytimeByPlatform = Partial<Record<PlatformCode, number>>;
 
+/**
+ * Per-platform trophy/achievement progress for a single UserGame.
+ * M0 of the sync-expansion workstream (docs/SYNC_EXPANSION_PLAN.md M-D7).
+ *
+ * One entry per platform that has actually surfaced achievement data
+ * for this user's copy of the game. Steam achievements and PSN trophies
+ * are DIFFERENT sets per game (Cyberpunk: 44 Steam vs 45 PSN), so each
+ * platform's progress is tracked independently — never aggregated into a
+ * single flat number. UI renders one row per entry on GameDetail; the
+ * receipt section is hidden when the map is empty.
+ *
+ * Writers: PSN trophy aggregator writes to `.PS`; Steam achievement
+ * fetcher writes to `.ST`. Each writer preserves entries it doesn't own
+ * (merge, don't replace). Future platforms add their own keys without
+ * collision.
+ */
+export interface AchievementEntry {
+  earned: number;
+  total: number;
+  /** Integer 0-100. Persisted alongside earned/total to avoid recomputing
+   *  on every read; T-D2 + CM13 auto-promote logic reads this value. */
+  percent: number;
+  /** When the platform's API last reported the values. */
+  updatedAt: string;
+}
+
+export type AchievementsByPlatform = Partial<Record<PlatformCode, AchievementEntry>>;
+
 export interface UserGame {
   id: string;
   userId: string;
@@ -138,17 +166,14 @@ export interface UserGame {
   lastPlayedAt: string | null;
   notes: string | null;
   rating: number | null;
-  // Aggregate trophy / achievement progress for this user's copy of the
-  // game. Populated by T2 (PSN) and T3 (Steam) in
-  // docs/TROPHIES_PLAN.md. All four are nullable — `null` means either
-  // "not yet fetched" (pre-trophy-sync rows) or "the game doesn't
-  // support achievements" (Steam returns success=false). The
-  // GameDetail receipt-block UI hides the trophies / achievements line
-  // when `achievementsTotal === null`.
-  achievementsEarned: number | null;
-  achievementsTotal: number | null;
-  achievementsPercent: number | null;
-  achievementsUpdatedAt: string | null;
+  // Per-platform trophy/achievement progress per M-D7 (M0 of the sync-
+  // expansion workstream, docs/SYNC_EXPANSION_PLAN.md). Mirrors the
+  // playtimeByPlatform shape. Empty `{}` means no achievement data has
+  // been fetched for any platform yet (T2/T3 pre-sync rows + games whose
+  // platform reports no achievement support). Replaces the 4 flat
+  // columns dropped in M0 — they conflated Steam achievements and PSN
+  // trophies which are distinct sets per game.
+  achievementsByPlatform: AchievementsByPlatform;
   // F1-PR2 collector metadata per CONCEPTUAL_MODEL CM2 + CM12. All
   // nullable / default-empty so existing sync-imported rows remain
   // unaffected. Populated by the manual-add flow + GameDetail per-row
@@ -235,13 +260,14 @@ export interface DashboardStats {
   weeklyAdded: number;
   playtimeByPlatform: PlatformStat[];
   genres: { name: string; count: number }[];
-  // T6 of the trophies workstream (`docs/TROPHIES_PLAN.md`). Library-wide
-  // sum of trophy/achievement progress across every UserGame that has
-  // achievement data fetched. `null` when no game in the library has any
-  // achievement data yet (e.g. trophies pre-T2/T3 sync, or every
-  // achievementsTotal is null because every Steam profile is private and
-  // no PSN games have been synced). Percent is `earned / total * 100`,
-  // rounded to one decimal — same convention as `completionPct`.
+  // T6 of the trophies workstream, updated for M0. Library-wide sum of
+  // trophy/achievement progress across every UserGame that has any
+  // achievement data fetched, aggregated across all platform entries in
+  // achievementsByPlatform. `null` when no game in the library has any
+  // achievement data yet (e.g. pre-T2/T3 sync, or every Steam profile is
+  // private and no PSN games have been synced). Percent is
+  // `earned / total * 100`, rounded to one decimal — same convention as
+  // `completionPct`.
   achievementsRollup: { earned: number; total: number; percent: number } | null;
 }
 

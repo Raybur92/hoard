@@ -6,6 +6,7 @@ import type {
   UserGameDetail,
 } from '@hoard/types';
 import { displayIdentity } from './displayIdentity';
+import { normalizeAchievementsByPlatform } from './achievementsShape';
 
 export interface UserGameRow {
   id: string;
@@ -16,10 +17,10 @@ export interface UserGameRow {
   lastPlayedAt: Date | null;
   notes: string | null;
   rating: number | null;
-  achievementsEarned: number | null;
-  achievementsTotal: number | null;
-  achievementsPercent: number | null;
-  achievementsUpdatedAt: Date | null;
+  // M0: per-platform JSON, replaces the 4 flat achievement columns.
+  // Prisma surfaces JSON as `unknown`; the mapper narrows via
+  // normalizeAchievementsByPlatform.
+  achievementsByPlatform: unknown;
   // F1-PR2 collector-metadata fields per CM2 + CM12. Null on sync-
   // imported rows; populated by manual-add and per-row affordances.
   mediaType: 'DIGITAL' | 'PHYSICAL' | null;
@@ -175,10 +176,7 @@ export function mapUserGame(ug: UserGameRow): UserGameDetail {
     lastPlayedAt: ug.lastPlayedAt?.toISOString() ?? null,
     notes: ug.notes,
     rating: ug.rating,
-    achievementsEarned: ug.achievementsEarned,
-    achievementsTotal: ug.achievementsTotal,
-    achievementsPercent: ug.achievementsPercent,
-    achievementsUpdatedAt: ug.achievementsUpdatedAt?.toISOString() ?? null,
+    achievementsByPlatform: normalizeAchievementsByPlatform(ug.achievementsByPlatform),
     mediaType: ug.mediaType,
     condition: ug.condition,
     region: ug.region,

@@ -54,10 +54,7 @@ function makeUpdated(igdbId: number, title: string): UserGameDetail {
     lastPlayedAt: null,
     notes: 'preserved',
     rating: null,
-    achievementsEarned: null,
-    achievementsTotal: null,
-    achievementsPercent: null,
-    achievementsUpdatedAt: null,
+    achievementsByPlatform: {},
     // F1-PR2 fields — null/empty defaults match sync-imported row shape
     mediaType: null,
     condition: null,
