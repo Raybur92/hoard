@@ -300,6 +300,13 @@ function ConnectButton({ info, code, npssoInput: _npssoInput, setNpssoInput: _se
       </Btn>
     );
   }
+  if (code.toLowerCase() === 'it') {
+    return (
+      <Btn sm variant="primary" onClick={() => navigate('/settings/platforms/it/connect')}>
+        <Icon name="key" size={11} /> connect via api key →
+      </Btn>
+    );
+  }
   if (info.connectPath?.startsWith('/api/')) {
     return (
       <Btn sm variant="primary" onClick={() => { window.location.href = `${API_BASE}${info.connectPath!}`; }}>
@@ -307,8 +314,17 @@ function ConnectButton({ info, code, npssoInput: _npssoInput, setNpssoInput: _se
       </Btn>
     );
   }
+  // Generic fallback for any future platform with an internal connectPath
+  // (not /api/). Navigates to the guided flow if one is configured.
+  if (info.connectPath) {
+    return (
+      <Btn sm variant="primary" onClick={() => navigate(info.connectPath!)}>
+        <Icon name="link" size={11} /> connect
+      </Btn>
+    );
+  }
   return (
-    <Btn sm variant="primary">
+    <Btn sm variant="primary" disabled>
       <Icon name="link" size={11} /> connect
     </Btn>
   );
