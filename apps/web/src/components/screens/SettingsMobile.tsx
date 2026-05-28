@@ -20,6 +20,7 @@ const MOBILE_PLATFORM_NAMES: Record<string, string> = {
   GG: 'GOG',
   NT: 'Nintendo',
   EP: 'Epic Games',
+  IT: 'itch.io',
 };
 
 const TOP_SECTIONS = [
@@ -200,7 +201,7 @@ export function SettingsMobile() {
       <>
         {backHeader('platforms', `// ${platforms.length} connected`)}
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
-          {['ST', 'PS', 'XB', 'GG', 'NT', 'EP'].map((code) => {
+          {['ST', 'PS', 'XB', 'GG', 'IT', 'NT', 'EP'].map((code) => {
             const detail = platforms.find((p) => p.code === code);
             const connected = connectedCodes.has(code as PlatformCode);
             const rawSyncStatus = detail?.syncStatus;

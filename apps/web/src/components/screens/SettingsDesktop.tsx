@@ -222,6 +222,7 @@ const PLATFORM_META: Array<{
   { code: 'GG', name: 'GOG',              syncable: true,  via: 'OAuth · community API' },
   { code: 'NT', name: 'Nintendo',         syncable: false, via: 'no public api · manual import' },
   { code: 'EP', name: 'Epic Games',       syncable: false, via: 'manual import only' },
+  { code: 'IT', name: 'itch.io',          syncable: true,  via: 'personal API key' },
 ];
 
 function PlatformsSection({ platforms, refetch }: { platforms: PlatformDetail[]; refetch: () => Promise<PlatformDetail[]> }) {

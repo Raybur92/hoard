@@ -19,6 +19,15 @@ export interface SyncedGame {
   // IGDB's external_games (category 36) without going through fuzzy
   // title matching. Same shape as steamAppId / xboxTitleId.
   psnConceptId?: number;
+  // itch.io's per-product id (M1). Captured by syncItchLibrary from
+  // /my-owned-keys → `game.id`. Persisted into Game.itchGameId by
+  // syncRunner for stable IGDB external_games resolution via the
+  // "itch.io" URL pattern. Same shape as steamAppId.
+  itchGameId?: number;
+  // Optional itch.io storefront URL captured during library sync —
+  // used as a hint to the IGDB external_games URL-pattern resolver.
+  // Most itch.io games aren't in IGDB at all so this is best-effort.
+  itchUrl?: string;
   platformCode: PlatformCode;
   playtimeMinutes: number;
   lastPlayedAt: Date | null;

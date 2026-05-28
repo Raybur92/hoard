@@ -131,7 +131,7 @@ export interface AchievementRow {
   updatedAt: string;
 }
 
-const PLATFORM_SORT_ORDER: PlatformCode[] = ['PS', 'ST', 'XB', 'GG', 'NT', 'EP'];
+const PLATFORM_SORT_ORDER: PlatformCode[] = ['PS', 'ST', 'XB', 'GG', 'NT', 'EP', 'IT'];
 
 export function buildAchievementRows(
   abp: AchievementsByPlatform | null | undefined,

@@ -44,6 +44,11 @@ const PLATFORM_TO_IGDB_NAMES: Record<PlatformCode, string[]> = {
   PS: ['PlayStation 3', 'PlayStation 4', 'PlayStation 5', 'PlayStation VR2'],
   XB: ['Xbox', 'Xbox 360', 'Xbox One', 'Xbox Series X|S'],
   NT: ['Nintendo Switch', 'Nintendo Switch 2'],
+  // M1 — itch.io games are predominantly PC builds (Windows / Mac / Linux);
+  // mobile builds also exist for some jam titles. IGDB rarely tags itch.io
+  // games at all, so this list is best-effort. The IGDB miss path falls
+  // through to title search with no platform bonus.
+  IT: ['PC (Microsoft Windows)', 'Mac', 'Linux'],
 };
 
 /**

@@ -27,6 +27,7 @@ const PLATFORM_INFO: Record<string, {
   gg: { name: 'GG', fullName: 'GOG',               syncable: true,  authMethod: 'OAuth · Galaxy credentials', connectPath: '/settings/platforms/gg/connect' },
   nt: { name: 'NT', fullName: 'Nintendo',           syncable: false, authMethod: 'no public api',              connectPath: null },
   ep: { name: 'EP', fullName: 'Epic Games',         syncable: false, authMethod: 'manual import only',         connectPath: null },
+  it: { name: 'IT', fullName: 'itch.io',           syncable: true,  authMethod: 'personal API key',           connectPath: '/settings/platforms/it/connect' },
 };
 
 type TabKey = 'authentication' | 'scope' | 'sync' | 'log';

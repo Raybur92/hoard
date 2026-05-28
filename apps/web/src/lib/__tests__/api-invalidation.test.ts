@@ -174,4 +174,19 @@ describe('api mutation invalidation', () => {
     expect(cache.get('games:{}')).toBeUndefined();
     expect(cache.get('dashboard')).toBeUndefined();
   });
+
+  it('connectItch drops platformStatus + library (M1)', async () => {
+    const api = await loadApi();
+    cache.set('platformStatus', 'old');
+    cache.set('games:{}', 'old');
+    cache.set('dashboard', 'old');
+    cache.set('shelves:30', 'old');
+
+    await api.connectItch('a-real-itch-key');
+
+    expect(cache.get('platformStatus')).toBeUndefined();
+    expect(cache.get('games:{}')).toBeUndefined();
+    expect(cache.get('dashboard')).toBeUndefined();
+    expect(cache.get('shelves:30')).toBeUndefined();
+  });
 });

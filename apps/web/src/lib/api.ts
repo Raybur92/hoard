@@ -441,6 +441,17 @@ export const api = {
     return r;
   },
 
+  // M1 — itch.io paste-API-key flow. The user generates a key from
+  // https://itch.io/user/settings/api-keys and pastes it into Hoard.
+  // Server validates the key against itch.io's /me endpoint before
+  // persisting; returns 400 if itch.io rejects.
+  connectItch: async (apiKey: string) => {
+    const r = await post<void>('/api/platforms/itch/connect', { apiKey });
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
+
   // manual games (Nintendo / Epic)
   addManualGame: async (body: ManualAddBody) => {
     const r = await post<UserGameDetail>('/api/games/manual', body);

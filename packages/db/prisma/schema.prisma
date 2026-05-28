@@ -25,6 +25,7 @@ enum PlatformCode {
   GG
   NT
   EP
+  IT
 }
 
 enum SyncStatus {
@@ -225,6 +226,12 @@ model Game {
   // Chinese, etc.) match correctly without going through fuzzy title
   // search — same pattern as steamAppId → external_games.
   psnConceptId         Int?     @unique
+  // itch.io's per-product identifier (Int). Captured during library sync
+  // via /api/1/<key>/my-owned-keys. Used by the M1 IT-id-first resolution
+  // path in syncRunner so itch.io games match correctly via IGDB
+  // external_games (URL pattern: itch.io). Same shape as steamAppId /
+  // xboxTitleId.
+  itchGameId           Int?     @unique
   title                String
   developer            String?
   releaseYear          Int?

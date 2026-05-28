@@ -58,6 +58,7 @@ const steamCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const psnConceptCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const xboxTitleCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const gogAppCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
+const itchGameCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const upcomingCache = makeCache<IgdbUpcomingRelease[]>(ONE_DAY);
 
 /* ── IGDB raw types ── */
@@ -523,6 +524,28 @@ export async function getGameByGogAppId(gogAppId: number): Promise<IgdbSearchRes
     return null;
   }
   gogAppCache.set(key, result);
+  return result;
+}
+
+/**
+ * M1 — match an itch.io game by itch's per-product id. IGDB
+ * external_games itch.io rows have URLs under itch.io (the path
+ * itself varies — `creator.itch.io/game-slug` or `itch.io/jam/…`).
+ * Most itch.io games AREN'T in IGDB at all (jam entries, hobby
+ * releases) — this lookup misses for ~all of them. The title-search
+ * fallback in syncRunner is the realistic resolution path.
+ */
+export async function getGameByItchGameId(itchGameId: number): Promise<IgdbSearchResult | null> {
+  const key = `itch_${itchGameId}`;
+  const cached = itchGameCache.get(key);
+  if (cached !== undefined) return cached;
+  let result: IgdbSearchResult | null;
+  try {
+    result = await getGameByExternalUid('itch.io', String(itchGameId));
+  } catch {
+    return null;
+  }
+  itchGameCache.set(key, result);
   return result;
 }
 

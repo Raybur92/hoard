@@ -1,7 +1,7 @@
 import type { AchievementsByPlatform, AchievementEntry, PlatformCode } from '@hoard/types';
 
 const VALID_CODES: ReadonlySet<PlatformCode> = new Set<PlatformCode>([
-  'ST', 'PS', 'XB', 'GG', 'NT', 'EP',
+  'ST', 'PS', 'XB', 'GG', 'NT', 'EP', 'IT',
 ]);
 
 function isValidEntry(v: unknown): v is AchievementEntry {

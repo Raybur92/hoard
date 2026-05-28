@@ -15,6 +15,7 @@ import { syncPsnLibrary, getPsnTrophyTitles, getPsnUsername } from '../services/
 import { syncXboxLibrary, getXboxGamertag } from '../services/platforms/xbox';
 import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime';
 import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary, getGogAuthUrl, getGogUsername } from '../services/platforms/gog';
+import { syncItchLibrary, validateItchApiKey, getItchUsername } from '../services/platforms/itch';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -31,6 +32,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   GG: 'GOG',
   NT: 'Nintendo',
   EP: 'Epic Games',
+  IT: 'itch.io',
 };
 
 // GET /api/platforms/status
@@ -81,10 +83,11 @@ router.get('/platforms/status', requireUser, requireActive, async (req: Request,
 //   PS → { npsso: string | null }
 //   ST → { steamId: string | null }
 //   XB → { apiKey: string | null }
+//   IT → { apiKey: string | null }
 //   Others (GG/NT/EP) → 404 (no credentials, or not yet implemented).
 router.get('/platforms/:code/credentials', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'IT'];
   if (!code || !validCodes.includes(code)) {
     res.status(404).json({ error: 'No revealable credentials for this platform' });
     return;
@@ -119,6 +122,10 @@ router.get('/platforms/:code/credentials', requireUser, requireActive, async (re
     res.json({ apiKey: creds['apiKey'] ?? null });
     return;
   }
+  if (code === 'IT') {
+    res.json({ apiKey: creds['apiKey'] ?? null });
+    return;
+  }
 });
 
 // GET /api/platforms/:code/log — cursor-paginated activity feed for the
@@ -127,7 +134,7 @@ router.get('/platforms/:code/credentials', requireUser, requireActive, async (re
 // in the same millisecond. Capped at 50 entries per page.
 router.get('/platforms/:code/log', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP', 'IT'];
   if (!code || !validCodes.includes(code)) {
     res.status(400).json({ error: 'Invalid platform code' });
     return;
@@ -173,7 +180,7 @@ router.get('/platforms/:code/log', requireUser, requireActive, async (req: Reque
 // so the client can swap state without a refetch.
 router.patch('/platforms/:code', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'NT', 'EP', 'IT'];
   if (!code || !validCodes.includes(code)) {
     res.status(400).json({ error: 'Invalid platform code' });
     return;
@@ -223,7 +230,7 @@ router.patch('/platforms/:code', requireUser, requireActive, async (req: Request
 // POST /api/platforms/:code/sync
 router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'IT'];
   if (!code || !validCodes.includes(code)) {
     res.status(400).json({ error: 'Invalid or unsupported platform code' });
     return;
@@ -274,6 +281,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
       let steamId: string | null = null;
       let xboxApiKey: string | null = null;
       let gogAccessToken: string | null = null;
+      let itchApiKey: string | null = null;
 
       if (code === 'ST') {
         const creds = platform.credentials as { steamId?: string } | null;
@@ -323,6 +331,17 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         }
         gogAccessToken = fresh.accessToken;
         syncedGames = await syncGogLibrary(fresh);
+      } else if (code === 'IT') {
+        // M1 — itch.io library sync via the official server-side API.
+        // No OAuth, no token refresh: the user pastes an API key
+        // generated from itch.io's settings page (single-input flow,
+        // mirrors Xbox's OpenXBL paste). syncItchLibrary throws on
+        // missing key / non-2xx / malformed JSON / 401-403 (revoked
+        // key) — outer try/catch logs sync.error.
+        const creds = platform.credentials as { apiKey?: string } | null;
+        if (!creds?.apiKey) throw new Error('itch.io credentials missing');
+        itchApiKey = creds.apiKey;
+        syncedGames = await syncItchLibrary({ apiKey: creds.apiKey });
       }
 
       if (syncedGames.length > 0) {
@@ -443,6 +462,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           else if (code === 'PS' && psnNpsso) username = await getPsnUsername(psnNpsso);
           else if (code === 'XB' && xboxApiKey) username = await getXboxGamertag(xboxApiKey);
           else if (code === 'GG' && gogAccessToken) username = await getGogUsername(gogAccessToken);
+          else if (code === 'IT' && itchApiKey) username = await getItchUsername(itchApiKey);
         } catch (err) {
           console.error(`[sync ${code}] username backfill fetch failed:`, err);
         }
@@ -709,6 +729,55 @@ router.post('/platforms/gog/connect', requireUser, requireActive, async (req: Re
   } catch (err) {
     console.error('[gog/connect] db error:', err);
     res.status(500).json({ error: 'Failed to save GOG credentials — database error' });
+  }
+});
+
+// POST /api/platforms/itch/connect — save itch.io API key (M1).
+//
+// itch.io API keys are user-generated at https://itch.io/user/settings/api-keys.
+// The user pastes the key into Hoard; we validate it by calling /me against
+// the itch.io API, then persist it on Platform.credentials as `{ apiKey }`.
+// Same shape as Xbox's OpenXBL paste — single input, no OAuth handshake.
+router.post('/platforms/itch/connect', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const schema = z.object({ apiKey: z.string().min(10).max(2048) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid API key' });
+    return;
+  }
+
+  // Validate the key against itch.io BEFORE persisting — better to fail
+  // fast than save a broken credential. validateItchApiKey is fail-silent
+  // (returns false on any network/parsing issue), so this also catches the
+  // "key looks well-formed but itch.io rejects it" case.
+  const valid = await validateItchApiKey(parsed.data.apiKey);
+  if (!valid) {
+    res.status(400).json({ error: 'itch.io rejected the API key. Generate a new one at https://itch.io/user/settings/api-keys and try again.' });
+    return;
+  }
+
+  try {
+    const username = await getItchUsername(parsed.data.apiKey);
+    const credentials = {
+      apiKey: parsed.data.apiKey,
+      ...(username ? { username } : {}),
+    };
+    const upserted = await prisma.platform.upsert({
+      where: { userId_code: { userId: req.userId, code: 'IT' } },
+      update: { credentials, syncStatus: 'ok' },
+      create: {
+        userId: req.userId,
+        code: 'IT',
+        syncable: true,
+        credentials,
+        syncStatus: 'ok',
+      },
+    });
+    await logEvent(req.userId, 'platform.connected', { code: 'IT' });
+    res.json({ ok: true, platformId: upserted.id });
+  } catch (err) {
+    console.error('[itch/connect] db error:', err);
+    res.status(500).json({ error: 'Failed to save itch.io API key — database error' });
   }
 });
 

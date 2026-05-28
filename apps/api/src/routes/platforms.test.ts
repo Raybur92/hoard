@@ -224,6 +224,89 @@ describe('GET /api/platforms/gog/auth-url', () => {
   });
 });
 
+/* ── POST /api/platforms/itch/connect (M1) ── */
+
+jest.mock('../services/platforms/itch', () => {
+  const actual = jest.requireActual('../services/platforms/itch');
+  return {
+    ...actual,
+    validateItchApiKey: jest.fn(),
+    getItchUsername: jest.fn(),
+    // syncItchLibrary stays the real implementation; the sync route
+    // tests below mock fetch directly to control the response.
+  };
+});
+
+import { validateItchApiKey as mockedValidateItch, getItchUsername as mockedGetItchUsername } from '../services/platforms/itch';
+
+describe('POST /api/platforms/itch/connect', () => {
+  it('returns 400 when the API key is missing or too short', async () => {
+    const res = await request(app).post('/api/platforms/itch/connect').send({});
+    expect(res.status).toBe(400);
+
+    const res2 = await request(app).post('/api/platforms/itch/connect').send({ apiKey: 'short' });
+    expect(res2.status).toBe(400);
+
+    expect(mockedValidateItch).not.toHaveBeenCalled();
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when itch.io rejects the key (no DB write)', async () => {
+    (mockedValidateItch as jest.Mock).mockResolvedValue(false);
+
+    const res = await request(app)
+      .post('/api/platforms/itch/connect')
+      .send({ apiKey: 'a-real-looking-key-but-rejected' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/itch\.io rejected/i);
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+  });
+
+  it('validates → captures username → persists, returns 200 on success', async () => {
+    (mockedValidateItch as jest.Mock).mockResolvedValue(true);
+    (mockedGetItchUsername as jest.Mock).mockResolvedValue('Andrea');
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-it-1' });
+
+    const res = await request(app)
+      .post('/api/platforms/itch/connect')
+      .send({ apiKey: 'a-real-looking-key-ok' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.platformId).toBe('plat-it-1');
+    expect(prisma.platform.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_code: { userId: 'test-user-id', code: 'IT' } },
+        create: expect.objectContaining({
+          code: 'IT',
+          syncable: true,
+          syncStatus: 'ok',
+          credentials: expect.objectContaining({
+            apiKey: 'a-real-looking-key-ok',
+            username: 'Andrea',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('persists without a username field when getItchUsername returns null (fail-silent)', async () => {
+    (mockedValidateItch as jest.Mock).mockResolvedValue(true);
+    (mockedGetItchUsername as jest.Mock).mockResolvedValue(null);
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-it-2' });
+
+    const res = await request(app)
+      .post('/api/platforms/itch/connect')
+      .send({ apiKey: 'a-real-looking-key-ok' });
+
+    expect(res.status).toBe(200);
+    const call = (prisma.platform.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.create.credentials).toEqual({ apiKey: 'a-real-looking-key-ok' });
+    expect(call.create.credentials.username).toBeUndefined();
+  });
+});
+
 /* ── POST /api/platforms/gog/connect ── */
 
 import { exchangeGogCode as mockedExchangeGogCode } from '../services/platforms/gog';

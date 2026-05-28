@@ -20,10 +20,11 @@ const PLATFORM_CONNECT_PATH: Record<string, string | null> = {
   gg: '/settings/platforms/gg/connect',
   nt: null,
   ep: null,
+  it: '/settings/platforms/it/connect',
 };
 
 const PLATFORM_NAMES: Record<string, string> = {
-  st: 'Steam', ps: 'PSN', xb: 'Xbox', gg: 'GOG', nt: 'Nintendo', ep: 'Epic Games',
+  st: 'Steam', ps: 'PSN', xb: 'Xbox', gg: 'GOG', nt: 'Nintendo', ep: 'Epic Games', it: 'itch.io',
 };
 
 // PR B reintroduces the activity log tab with a real PlatformLog model

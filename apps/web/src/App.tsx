@@ -38,6 +38,8 @@ const PsnGuidedFlowDesktop  = lazyNamed(() => import('./components/screens/PsnGu
 const PsnGuidedFlowMobile   = lazyNamed(() => import('./components/screens/PsnGuidedFlowMobile'),   'PsnGuidedFlowMobile');
 const GogGuidedFlowDesktop  = lazyNamed(() => import('./components/screens/GogGuidedFlowDesktop'),  'GogGuidedFlowDesktop');
 const GogGuidedFlowMobile   = lazyNamed(() => import('./components/screens/GogGuidedFlowMobile'),   'GogGuidedFlowMobile');
+const ItchGuidedFlowDesktop = lazyNamed(() => import('./components/screens/ItchGuidedFlowDesktop'), 'ItchGuidedFlowDesktop');
+const ItchGuidedFlowMobile  = lazyNamed(() => import('./components/screens/ItchGuidedFlowMobile'),  'ItchGuidedFlowMobile');
 const AdminScreen           = lazyNamed(() => import('./components/screens/AdminScreen'),           'AdminScreen');
 
 function SuspenseFallback() {
@@ -104,6 +106,7 @@ export default function App() {
               <Route element={<RequireAuth><RequireActive><Outlet /></RequireActive></RequireAuth>}>
                 <Route path="/settings/platforms/ps/connect" element={desktop ? <PsnGuidedFlowDesktop /> : <PsnGuidedFlowMobile />} />
                 <Route path="/settings/platforms/gg/connect" element={desktop ? <GogGuidedFlowDesktop /> : <GogGuidedFlowMobile />} />
+                <Route path="/settings/platforms/it/connect" element={desktop ? <ItchGuidedFlowDesktop /> : <ItchGuidedFlowMobile />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

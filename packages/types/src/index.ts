@@ -6,7 +6,7 @@ export type GameStatus =
   | 'Dropped'
   | 'Wishlist';
 
-export type PlatformCode = 'ST' | 'PS' | 'XB' | 'GG' | 'NT' | 'EP';
+export type PlatformCode = 'ST' | 'PS' | 'XB' | 'GG' | 'NT' | 'EP' | 'IT';
 
 export type SyncStatus = 'ok' | 'syncing' | 'error' | 'stale' | 'manual';
 

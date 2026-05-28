@@ -16,7 +16,7 @@ import type {
 const router = Router();
 
 const PLATFORM_LABELS: Record<string, string> = {
-  ST: 'STEAM', PS: 'PSN', XB: 'XBOX', GG: 'GOG', NT: 'NINTENDO', EP: 'EPIC',
+  ST: 'STEAM', PS: 'PSN', XB: 'XBOX', GG: 'GOG', NT: 'NINTENDO', EP: 'EPIC', IT: 'ITCH.IO',
 };
 
 const SHELF_KEYS = ['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist'] as const;

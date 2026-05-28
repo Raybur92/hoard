@@ -335,11 +335,22 @@ WHERE ug."achievementsTotal" IS NOT NULL;
 
 | PR | Scope | Status | Commit |
 |----|-------|--------|--------|
-| M0 | Per-platform achievement model + backfill | Done 2026-05-28 | pending commit |
-| M1 | itch.io auto-sync | Not started | — |
+| M0 | Per-platform achievement model + backfill | Done 2026-05-28 | `18a46a8` + `36fcf6d` |
+| M1 | itch.io auto-sync | Done 2026-05-28 | pending commit |
 | M2 | Epic auto-sync | Not started | — |
 | M3 | Nintendo auto-sync | Not started | — |
 | M-doc | Hard Rule #6 amendment + AGENT.md decision + memory updates | Bundled into M3 closeout | — |
+
+**M1 closeout notes (2026-05-28):**
+- `IT` added to `PlatformCode` enum (database + `@hoard/types`); `Game.itchGameId Int? @unique` column added. Migration `20260528150000_itch_platform_code` applied via `prisma db execute` + a Node `$executeRaw` fallback for `migrate resolve` (the documented advisory-lock hang surfaced this time around). Verified post-migration: enum lists `ST, PS, XB, GG, NT, EP, IT`; `Game.itchGameId` column present as INTEGER; `Game_itchGameId_key` unique index present.
+- Backend: new `apps/api/src/services/platforms/itch.ts` (`validateItchApiKey` / `getItchUsername` / `syncItchLibrary`). Paginated `/my-owned-keys` walker with 200ms polite delay + 50-page hard cap. Throws on 401/403 (revoked key); fail-silent for `validateItchApiKey` + `getItchUsername` per M-D13.
+- `getGameByItchGameId` added to `apps/api/src/services/igdb.ts` wrapping the shared `getGameByExternalUid('itch.io', uid)`. Cached 24h same as siblings. Expect low match rate per M-D9 — most itch.io games aren't in IGDB.
+- `syncRunner.ts` resolution cascade extended: `steamAppId → psnConceptId → xboxTitleId → gogAppId → itchGameId → title-search → localization`. `Game.itchGameId` persisted on upsert; P2002 collision recovery extended to handle it.
+- `routes/platforms.ts`: `POST /api/platforms/itch/connect` (validate-then-persist), IT branch in `POST /platforms/:code/sync`, IT added to all validCodes lists, PLATFORM_NAMES gains `IT: 'itch.io'`, credentials reveal endpoint extended to expose `{ apiKey }`, username backfill block includes IT.
+- Frontend: new 4-step `ItchGuidedFlowDesktop` + `ItchGuidedFlowMobile` components (lazy-routed at `/settings/platforms/it/connect`). `api.connectItch(apiKey)` client method with cache invalidation matching the other platforms. `PlatformDetailDesktop` + `PlatformDetailMobile` + `SettingsDesktop` + `SettingsMobile` platform maps + lists all include IT. `dashboard.ts` `PLATFORM_LABELS` adds IT, `buildAchievementRows` sort order extends to IT (no achievement support — entry will never appear, but the type system stays exhaustive).
+- Tests: 14 new backend tests (5 validateItchApiKey + 3 getItchUsername + 5 syncItchLibrary + 4 connect-route) + 6 new frontend tests (5 ItchGuidedFlow + 1 api-invalidation for connectItch). Final: **37 backend suites / 511 tests passing** (+17 from M0's 494); modified web files green. Typecheck + lint clean (1 pre-existing warning).
+- Q3 from §5 (itch.io rate limits) resolved by default: polite 200ms inter-page delay + 50-page hard cap, no rate-limit handling needed for single-user libraries.
+- One operational note worth keeping: `prisma migrate resolve --applied` hit the documented pgbouncer advisory-lock hang again. The Node `$executeRaw` fallback recipe in CLAUDE.md operational gotchas worked cleanly. Two ON CONFLICT gotchas surfaced: the `_prisma_migrations` table doesn't have `migration_name` as a unique constraint, so `ON CONFLICT (migration_name) DO NOTHING` errors with P2010 (code 42P10). Use a SELECT-then-INSERT pattern instead.
 
 **M0 closeout notes (2026-05-28):**
 - Q0 probe ran twice against prod (value-based first, then refined key-presence) — 33 ambiguous out of 1222 rows (2.7%); YELLOW per the plan's threshold but well within self-healing range. Refined heuristic shipped in the migration: uses Postgres `?` operator for JSONB key-presence, not value > 0. Ambiguous attribution self-heals on next per-platform sync.
