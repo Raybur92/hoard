@@ -1,7 +1,7 @@
-# touch 2026-05-26 sub-unit #4.4 — wire applyXboxPlaytimeBackground
-# into the Xbox sync flow. Fire-and-forget mirror of Steam's
-# achievements pass; library lands fast, playtime trickles in within
-# seconds. Diagnostic block removed (we have ground truth now).
+# touch 2026-05-28 M0 — per-platform achievement model. Railway Watch
+# Paths didn't fire on the M0 commit (apps/api/** glob); manual touch
+# forces the webhook so the new code deploys against the freshly-
+# migrated DB. Same recipe as the #4.4 fix.
 
 [build]
 builder = "nixpacks"
