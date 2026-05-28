@@ -16,6 +16,7 @@ import { syncXboxLibrary, getXboxGamertag } from '../services/platforms/xbox';
 import { applyXboxPlaytimeBackground } from '../services/platforms/xboxPlaytime';
 import { exchangeGogCode, computeExpiresAt, ensureFreshGogCredentials, syncGogLibrary, getGogAuthUrl, getGogUsername } from '../services/platforms/gog';
 import { syncItchLibrary, validateItchApiKey, getItchUsername } from '../services/platforms/itch';
+import { exchangeEpicAuthCode, ensureFreshEpicCredentials, syncEpicLibrary, getEpicUsername, computeExpiresAt as computeEpicExpiresAt, EPIC_LOGIN_URL } from '../services/platforms/epic';
 import { triggerSteamAchievementsBackground } from '../services/platforms/steamAchievements';
 import { runSync } from '../services/syncRunner';
 import { applyPsnTrophyAggregates } from '../services/trophies';
@@ -230,7 +231,7 @@ router.patch('/platforms/:code', requireUser, requireActive, async (req: Request
 // POST /api/platforms/:code/sync
 router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const code = (req.params['code'] as string | undefined)?.toUpperCase() as PrismaCode | undefined;
-  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'IT'];
+  const validCodes: PrismaCode[] = ['ST', 'PS', 'XB', 'GG', 'IT', 'EP'];
   if (!code || !validCodes.includes(code)) {
     res.status(400).json({ error: 'Invalid or unsupported platform code' });
     return;
@@ -282,6 +283,8 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
       let xboxApiKey: string | null = null;
       let gogAccessToken: string | null = null;
       let itchApiKey: string | null = null;
+      let epicAccessToken: string | null = null;
+      let epicAccountId: string | null = null;
 
       if (code === 'ST') {
         const creds = platform.credentials as { steamId?: string } | null;
@@ -342,6 +345,33 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         if (!creds?.apiKey) throw new Error('itch.io credentials missing');
         itchApiKey = creds.apiKey;
         syncedGames = await syncItchLibrary({ apiKey: creds.apiKey });
+      } else if (code === 'EP') {
+        // M2 — Epic Games Store sync via library-service /items.
+        // Auto-refresh on expiry via ensureFreshEpicCredentials (same
+        // identity-equality pattern as GOG). We persist only on
+        // refresh — merging with existing creds so decorative fields
+        // (username) survive.
+        const creds = platform.credentials as
+          | { accessToken?: string; refreshToken?: string; accountId?: string; expiresAt?: string }
+          | null;
+        if (!creds?.accessToken || !creds?.refreshToken || !creds?.accountId || !creds?.expiresAt) {
+          throw new Error('Epic credentials missing');
+        }
+        const fresh = await ensureFreshEpicCredentials({
+          accessToken: creds.accessToken,
+          refreshToken: creds.refreshToken,
+          accountId: creds.accountId,
+          expiresAt: creds.expiresAt,
+        });
+        if (fresh.accessToken !== creds.accessToken) {
+          await prisma.platform.update({
+            where: { id: platform.id },
+            data: { credentials: { ...creds, ...fresh } as Prisma.InputJsonValue },
+          });
+        }
+        epicAccessToken = fresh.accessToken;
+        epicAccountId = fresh.accountId;
+        syncedGames = await syncEpicLibrary(fresh);
       }
 
       if (syncedGames.length > 0) {
@@ -463,6 +493,7 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
           else if (code === 'XB' && xboxApiKey) username = await getXboxGamertag(xboxApiKey);
           else if (code === 'GG' && gogAccessToken) username = await getGogUsername(gogAccessToken);
           else if (code === 'IT' && itchApiKey) username = await getItchUsername(itchApiKey);
+          else if (code === 'EP' && epicAccessToken && epicAccountId) username = await getEpicUsername(epicAccessToken, epicAccountId);
         } catch (err) {
           console.error(`[sync ${code}] username backfill fetch failed:`, err);
         }
@@ -778,6 +809,87 @@ router.post('/platforms/itch/connect', requireUser, requireActive, async (req: R
   } catch (err) {
     console.error('[itch/connect] db error:', err);
     res.status(500).json({ error: 'Failed to save itch.io API key — database error' });
+  }
+});
+
+// GET /api/platforms/epic/auth-url — return the Epic web login URL (M2).
+//
+// Server-side because the EPIC_CLIENT_ID env var lives on the API only
+// (keeps the Fortnite-Android-client credentials out of the frontend
+// bundle). Frontend opens the returned URL in a new tab; user logs in
+// on Epic, gets redirected to a page that displays the
+// `authorizationCode` in a JSON blob, copies the code, pastes into Hoard.
+//
+// Throws 500 if EPIC_CLIENT_ID isn't configured.
+router.get('/platforms/epic/auth-url', requireUser, requireActive, (_req: Request, res: Response): void => {
+  // EPIC_LOGIN_URL is a module-level constant that doesn't require any
+  // env var to compute (the public-client-id is baked into the URL
+  // string by the login page itself). But we keep the API-driven shape
+  // for symmetry with GOG and to allow future per-deployment URL
+  // overrides without redeploying the frontend.
+  res.json({ url: EPIC_LOGIN_URL });
+});
+
+// POST /api/platforms/epic/connect — exchange OAuth code for tokens (M2).
+//
+// User flow mirrors GOG:
+//   1. Frontend opens EPIC_LOGIN_URL in a new tab.
+//   2. User signs in to Epic; Epic redirects to
+//      `https://www.epicgames.com/id/api/redirect?authorizationCode=XXX`.
+//   3. User copies the URL (or just the code) from the address bar.
+//   4. Frontend POSTs the code here.
+//   5. We exchange via exchangeEpicAuthCode and store {accessToken,
+//      refreshToken, accountId, expiresAt, username} on Platform.credentials.
+//
+// Epic access tokens last ~2h (7950s); refresh tokens last 28 days.
+// Sync auto-refreshes via ensureFreshEpicCredentials.
+router.post('/platforms/epic/connect', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const schema = z.object({ code: z.string().min(1).max(2048) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Missing or malformed authorization code' });
+    return;
+  }
+
+  // Exchange BEFORE touching the DB — bad code → no half-written row.
+  let tokens: Awaited<ReturnType<typeof exchangeEpicAuthCode>>;
+  try {
+    tokens = await exchangeEpicAuthCode(parsed.data.code);
+  } catch (err) {
+    console.error('[epic/connect] token exchange failed:', err);
+    res.status(400).json({
+      error: 'Epic rejected the authorization code. Codes are single-use and expire fast — start the connect flow over.',
+    });
+    return;
+  }
+
+  // Capture display name for the "signed in as X" UI. Fail-silent.
+  const username = await getEpicUsername(tokens.accessToken, tokens.accountId);
+  const credentials = {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    accountId: tokens.accountId,
+    expiresAt: computeEpicExpiresAt(tokens.expiresIn),
+    ...(username ? { username } : {}),
+  };
+
+  try {
+    const upserted = await prisma.platform.upsert({
+      where: { userId_code: { userId: req.userId, code: 'EP' } },
+      update: { credentials, syncStatus: 'ok' },
+      create: {
+        userId: req.userId,
+        code: 'EP',
+        syncable: true,
+        credentials,
+        syncStatus: 'ok',
+      },
+    });
+    await logEvent(req.userId, 'platform.connected', { code: 'EP' });
+    res.json({ ok: true, platformId: upserted.id });
+  } catch (err) {
+    console.error('[epic/connect] db error:', err);
+    res.status(500).json({ error: 'Failed to save Epic credentials — database error' });
   }
 });
 

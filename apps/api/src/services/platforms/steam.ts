@@ -28,6 +28,12 @@ export interface SyncedGame {
   // used as a hint to the IGDB external_games URL-pattern resolver.
   // Most itch.io games aren't in IGDB at all so this is best-effort.
   itchUrl?: string;
+  // Epic Games Store catalog item id (M2). Opaque hex string from
+  // library-service. Persisted into Game.epicCatalogItemId for stable
+  // IGDB external_games resolution via the "store.epicgames.com" URL
+  // pattern. Unlike the other id columns this one is String not Int
+  // because Epic uses hex identifiers.
+  epicCatalogItemId?: string;
   platformCode: PlatformCode;
   playtimeMinutes: number;
   lastPlayedAt: Date | null;

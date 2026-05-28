@@ -336,8 +336,8 @@ WHERE ug."achievementsTotal" IS NOT NULL;
 | PR | Scope | Status | Commit |
 |----|-------|--------|--------|
 | M0 | Per-platform achievement model + backfill | Done 2026-05-28 | `18a46a8` + `36fcf6d` |
-| M1 | itch.io auto-sync | Done 2026-05-28 | pending commit |
-| M2 | Epic auto-sync | Not started | — |
+| M1 | itch.io auto-sync | Done 2026-05-28 | `8005ed6` + `12c5991` |
+| M2 | Epic auto-sync | Done 2026-05-28 | pending commit |
 | M3 | Nintendo auto-sync | Not started | — |
 | M-doc | Hard Rule #6 amendment + AGENT.md decision + memory updates | Bundled into M3 closeout | — |
 
@@ -351,6 +351,19 @@ WHERE ug."achievementsTotal" IS NOT NULL;
 - Tests: 14 new backend tests (5 validateItchApiKey + 3 getItchUsername + 5 syncItchLibrary + 4 connect-route) + 6 new frontend tests (5 ItchGuidedFlow + 1 api-invalidation for connectItch). Final: **37 backend suites / 511 tests passing** (+17 from M0's 494); modified web files green. Typecheck + lint clean (1 pre-existing warning).
 - Q3 from §5 (itch.io rate limits) resolved by default: polite 200ms inter-page delay + 50-page hard cap, no rate-limit handling needed for single-user libraries.
 - One operational note worth keeping: `prisma migrate resolve --applied` hit the documented pgbouncer advisory-lock hang again. The Node `$executeRaw` fallback recipe in CLAUDE.md operational gotchas worked cleanly. Two ON CONFLICT gotchas surfaced: the `_prisma_migrations` table doesn't have `migration_name` as a unique constraint, so `ON CONFLICT (migration_name) DO NOTHING` errors with P2010 (code 42P10). Use a SELECT-then-INSERT pattern instead.
+
+**M2 closeout notes (2026-05-28):**
+- `Game.epicCatalogItemId String? @unique` added (Epic uses opaque hex strings, not integers — unlike Steam/PSN/Xbox/itch which use Int IDs). Migration `20260528160000_epic_catalog_item_id` applied via `prisma db execute` + Node `$executeRaw` migration-record insert (same fallback recipe as M1).
+- New `apps/api/src/services/platforms/epic.ts` (~330 lines): `exchangeEpicAuthCode` / `refreshEpicToken` / `ensureFreshEpicCredentials` (identity-equality pattern from GOG) / `getEpicUsername` / `syncEpicLibrary`. Uses Epic's public "Fortnite Android" client credentials (env-vars-only: `EPIC_CLIENT_ID` + `EPIC_CLIENT_SECRET`) — same pattern as GOG's Galaxy desktop creds; values publicly known and used by every community tool (Heroic, Legendary, egs-api-rs). Cursor-paginated library walker over `library-service.live.use1a.on.epicgames.com/library/api/public/items`. Catalog title resolution via a secondary bulk `/catalog/.../bulk/items?id=…` batch (50 per request, namespace-grouped) — Epic's library endpoint returns opaque `appName`/`catalogItemId` but no human-readable title.
+- `getGameByEpicCatalogItemId` added to `apps/api/src/services/igdb.ts` wrapping the shared `getGameByExternalUid('store.epicgames.com', uid)`. Cache key uses the string ID directly (not numeric).
+- `syncRunner.ts` cascade extended: `steamAppId → psnConceptId → xboxTitleId → gogAppId → itchGameId → epicCatalogItemId → title-search → localization`. P2002 collision recovery extended to handle epicCatalogItemId.
+- `routes/platforms.ts`: `GET /api/platforms/epic/auth-url` returns the Epic login URL; `POST /api/platforms/epic/connect` validates-then-persists (exchanges code BEFORE DB write so a bad code → no half-row); EP added to `validCodes` for the sync endpoint; sync branch uses `ensureFreshEpicCredentials` with the GOG-style merge-on-refresh persistence; username backfill block covers EP via `getEpicUsername`.
+- Frontend: new 5-step `EpicGuidedFlowDesktop` + `EpicGuidedFlowMobile` lazy-routed at `/settings/platforms/ep/connect`. `extractCode()` handles three paste shapes — bare code, full URL, and JSON blob (the actual Epic redirect renders JSON). `api.epicAuthUrl()` + `api.connectEpic(code)` added to the client. PlatformDetail* + Settings* + Mobile platforms list all flipped EP from `syncable: false → true`. `PlatformDetailDesktop.ConnectButton` already had a generic `info.connectPath` fallback from the M1 fix, so EP works there without needing a per-platform branch.
+- Tests: +18 backend epic.ts (4 exchange + 2 refresh + 3 ensureFresh + 4 username + 5 sync library) + 5 platforms.test.ts (auth-url + connect happy/missing-code/Epic-rejects/null-username); +5 frontend EpicGuidedFlow (auth-url fetch + error + happy path + URL extraction + reject error) + 1 api-invalidation. Final: **38 backend suites / 534 tests passing** (+23 from M1's 511). Typecheck + lint clean.
+- Q2 from §5 (Epic public-client ID stability) resolved by env-vars-only setup — if Epic ever rotates the public client, Andrea updates the env vars on Railway and redeploys; no code change. Live verification deferred to post-deploy (requires `EPIC_CLIENT_ID` + `EPIC_CLIENT_SECRET` set on Railway).
+- One sticky property worth recording for M3 (Nintendo): Epic's redirect-renders-JSON pattern is more user-friendly than GOG's empty-page-with-code-in-URL pattern (the JSON shows the user exactly what to copy). When designing M3's guided flow, prefer surfaces where the user can see what they're copying.
+
+**Pre-deploy env-var setup required:** Production needs `EPIC_CLIENT_ID` + `EPIC_CLIENT_SECRET` on Railway → API service → Variables before the connect flow works. Same pattern as GOG's `GOG_CLIENT_ID` + `GOG_CLIENT_SECRET`. Local `.env` for dev too.
 
 **M0 closeout notes (2026-05-28):**
 - Q0 probe ran twice against prod (value-based first, then refined key-presence) — 33 ambiguous out of 1222 rows (2.7%); YELLOW per the plan's threshold but well within self-healing range. Refined heuristic shipped in the migration: uses Postgres `?` operator for JSONB key-presence, not value > 0. Ambiguous attribution self-heals on next per-platform sync.

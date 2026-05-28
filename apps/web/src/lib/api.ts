@@ -452,6 +452,21 @@ export const api = {
     return r;
   },
 
+  // M2 — Epic Games Store auth-code paste flow. User opens the Epic
+  // login URL (returned by epicAuthUrl()) in a new tab, signs in,
+  // gets redirected to a page showing the `authorizationCode`,
+  // copies it, pastes here. connectEpic() exchanges the code for
+  // tokens. Same shape as GOG.
+  epicAuthUrl: async () => {
+    return get<{ url: string }>('/api/platforms/epic/auth-url');
+  },
+  connectEpic: async (code: string) => {
+    const r = await post<void>('/api/platforms/epic/connect', { code });
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
+
   // manual games (Nintendo / Epic)
   addManualGame: async (body: ManualAddBody) => {
     const r = await post<UserGameDetail>('/api/games/manual', body);

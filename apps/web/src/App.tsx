@@ -40,6 +40,8 @@ const GogGuidedFlowDesktop  = lazyNamed(() => import('./components/screens/GogGu
 const GogGuidedFlowMobile   = lazyNamed(() => import('./components/screens/GogGuidedFlowMobile'),   'GogGuidedFlowMobile');
 const ItchGuidedFlowDesktop = lazyNamed(() => import('./components/screens/ItchGuidedFlowDesktop'), 'ItchGuidedFlowDesktop');
 const ItchGuidedFlowMobile  = lazyNamed(() => import('./components/screens/ItchGuidedFlowMobile'),  'ItchGuidedFlowMobile');
+const EpicGuidedFlowDesktop = lazyNamed(() => import('./components/screens/EpicGuidedFlowDesktop'), 'EpicGuidedFlowDesktop');
+const EpicGuidedFlowMobile  = lazyNamed(() => import('./components/screens/EpicGuidedFlowMobile'),  'EpicGuidedFlowMobile');
 const AdminScreen           = lazyNamed(() => import('./components/screens/AdminScreen'),           'AdminScreen');
 
 function SuspenseFallback() {
@@ -107,6 +109,7 @@ export default function App() {
                 <Route path="/settings/platforms/ps/connect" element={desktop ? <PsnGuidedFlowDesktop /> : <PsnGuidedFlowMobile />} />
                 <Route path="/settings/platforms/gg/connect" element={desktop ? <GogGuidedFlowDesktop /> : <GogGuidedFlowMobile />} />
                 <Route path="/settings/platforms/it/connect" element={desktop ? <ItchGuidedFlowDesktop /> : <ItchGuidedFlowMobile />} />
+                <Route path="/settings/platforms/ep/connect" element={desktop ? <EpicGuidedFlowDesktop /> : <EpicGuidedFlowMobile />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

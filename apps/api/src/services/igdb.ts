@@ -59,6 +59,7 @@ const psnConceptCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const xboxTitleCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const gogAppCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const itchGameCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
+const epicCatalogCache = makeCache<IgdbSearchResult | null>(ONE_DAY);
 const upcomingCache = makeCache<IgdbUpcomingRelease[]>(ONE_DAY);
 
 /* ── IGDB raw types ── */
@@ -546,6 +547,26 @@ export async function getGameByItchGameId(itchGameId: number): Promise<IgdbSearc
     return null;
   }
   itchGameCache.set(key, result);
+  return result;
+}
+
+/**
+ * M2 — match an Epic Games Store game by Epic's catalog item id.
+ * IGDB external_games Epic rows have URLs under store.epicgames.com.
+ * Catalog item IDs are opaque hex strings (32 chars). Unlike the
+ * numeric platform IDs, the cache key is the string itself.
+ */
+export async function getGameByEpicCatalogItemId(catalogItemId: string): Promise<IgdbSearchResult | null> {
+  const key = `epic_${catalogItemId}`;
+  const cached = epicCatalogCache.get(key);
+  if (cached !== undefined) return cached;
+  let result: IgdbSearchResult | null;
+  try {
+    result = await getGameByExternalUid('store.epicgames.com', catalogItemId);
+  } catch {
+    return null;
+  }
+  epicCatalogCache.set(key, result);
   return result;
 }
 

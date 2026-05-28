@@ -26,7 +26,7 @@ const PLATFORM_INFO: Record<string, {
   xb: { name: 'XB', fullName: 'Xbox',              syncable: true,  authMethod: 'OpenXBL API key',            connectPath: null },
   gg: { name: 'GG', fullName: 'GOG',               syncable: true,  authMethod: 'OAuth · Galaxy credentials', connectPath: '/settings/platforms/gg/connect' },
   nt: { name: 'NT', fullName: 'Nintendo',           syncable: false, authMethod: 'no public api',              connectPath: null },
-  ep: { name: 'EP', fullName: 'Epic Games',         syncable: false, authMethod: 'manual import only',         connectPath: null },
+  ep: { name: 'EP', fullName: 'Epic Games',         syncable: true,  authMethod: 'OAuth · public client',       connectPath: '/settings/platforms/ep/connect' },
   it: { name: 'IT', fullName: 'itch.io',           syncable: true,  authMethod: 'personal API key',           connectPath: '/settings/platforms/it/connect' },
 };
 

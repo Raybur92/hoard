@@ -307,6 +307,119 @@ describe('POST /api/platforms/itch/connect', () => {
   });
 });
 
+/* ── POST /api/platforms/epic/connect + GET auth-url (M2) ── */
+
+jest.mock('../services/platforms/epic', () => {
+  const actual = jest.requireActual('../services/platforms/epic');
+  return {
+    ...actual,
+    exchangeEpicAuthCode: jest.fn(),
+    getEpicUsername: jest.fn(),
+  };
+});
+
+import { exchangeEpicAuthCode as mockedExchangeEpicCode, getEpicUsername as mockedGetEpicUsername, EPIC_LOGIN_URL } from '../services/platforms/epic';
+
+describe('GET /api/platforms/epic/auth-url', () => {
+  it('returns the Epic login URL (no env required — the URL is module-constant)', async () => {
+    const res = await request(app).get('/api/platforms/epic/auth-url');
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBe(EPIC_LOGIN_URL);
+    expect(typeof res.body.url).toBe('string');
+    expect(res.body.url).toContain('epicgames.com/id/login');
+  });
+});
+
+describe('POST /api/platforms/epic/connect', () => {
+  it('returns 400 when the code is missing or empty', async () => {
+    const res = await request(app).post('/api/platforms/epic/connect').send({});
+    expect(res.status).toBe(400);
+
+    const res2 = await request(app).post('/api/platforms/epic/connect').send({ code: '' });
+    expect(res2.status).toBe(400);
+
+    expect(mockedExchangeEpicCode).not.toHaveBeenCalled();
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when Epic rejects the code (no DB write)', async () => {
+    (mockedExchangeEpicCode as jest.Mock).mockRejectedValue(
+      new Error('Epic token exchange failed: 400 authorization_code_not_found'),
+    );
+
+    const res = await request(app)
+      .post('/api/platforms/epic/connect')
+      .send({ code: 'stale-code' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/single-use|expire|start.*over/i);
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+  });
+
+  it('exchanges, persists all 4 cred fields + username, returns 200 on success', async () => {
+    (mockedExchangeEpicCode as jest.Mock).mockResolvedValue({
+      accessToken: 'AT',
+      refreshToken: 'RT',
+      accountId: 'ACC-32-HEX',
+      expiresIn: 7950,
+    });
+    (mockedGetEpicUsername as jest.Mock).mockResolvedValue('AndreaC');
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-ep-1' });
+
+    const res = await request(app)
+      .post('/api/platforms/epic/connect')
+      .send({ code: 'fresh-code' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.platformId).toBe('plat-ep-1');
+
+    expect(mockedExchangeEpicCode).toHaveBeenCalledWith('fresh-code');
+    expect(prisma.platform.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_code: { userId: 'test-user-id', code: 'EP' } },
+        create: expect.objectContaining({
+          code: 'EP',
+          syncable: true,
+          syncStatus: 'ok',
+          credentials: expect.objectContaining({
+            accessToken: 'AT',
+            refreshToken: 'RT',
+            accountId: 'ACC-32-HEX',
+            expiresAt: expect.any(String),
+            username: 'AndreaC',
+          }),
+        }),
+      }),
+    );
+
+    // expiresAt should reflect the 60-second safety margin.
+    const credentials = (prisma.platform.upsert as jest.Mock).mock.calls[0][0].create.credentials;
+    const expiresAt = new Date(credentials.expiresAt as string).getTime();
+    expect(expiresAt).toBeGreaterThan(Date.now() + (7950 - 65) * 1000);
+    expect(expiresAt).toBeLessThan(Date.now() + 7950 * 1000);
+  });
+
+  it('persists without a username field when getEpicUsername returns null', async () => {
+    (mockedExchangeEpicCode as jest.Mock).mockResolvedValue({
+      accessToken: 'AT',
+      refreshToken: 'RT',
+      accountId: 'ACC',
+      expiresIn: 7950,
+    });
+    (mockedGetEpicUsername as jest.Mock).mockResolvedValue(null);
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-ep-2' });
+
+    await request(app)
+      .post('/api/platforms/epic/connect')
+      .send({ code: 'fresh-code' });
+
+    const call = (prisma.platform.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.create.credentials.username).toBeUndefined();
+    expect(call.create.credentials.accessToken).toBe('AT');
+  });
+});
+
 /* ── POST /api/platforms/gog/connect ── */
 
 import { exchangeGogCode as mockedExchangeGogCode } from '../services/platforms/gog';

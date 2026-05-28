@@ -232,6 +232,12 @@ model Game {
   // external_games (URL pattern: itch.io). Same shape as steamAppId /
   // xboxTitleId.
   itchGameId           Int?     @unique
+  // Epic Games Store's per-product identifier (opaque hex string, not
+  // numeric — unlike Steam/PSN/Xbox/itch). Captured during library sync
+  // via the library-service /items endpoint. Used by the M2 EP-id-first
+  // resolution path in syncRunner so Epic games match correctly via
+  // IGDB external_games (URL pattern: store.epicgames.com).
+  epicCatalogItemId    String?  @unique
   title                String
   developer            String?
   releaseYear          Int?

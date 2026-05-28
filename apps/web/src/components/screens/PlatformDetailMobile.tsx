@@ -19,7 +19,7 @@ const PLATFORM_CONNECT_PATH: Record<string, string | null> = {
   xb: null,
   gg: '/settings/platforms/gg/connect',
   nt: null,
-  ep: null,
+  ep: '/settings/platforms/ep/connect',
   it: '/settings/platforms/it/connect',
 };
 

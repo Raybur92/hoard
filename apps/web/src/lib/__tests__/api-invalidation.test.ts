@@ -189,4 +189,19 @@ describe('api mutation invalidation', () => {
     expect(cache.get('dashboard')).toBeUndefined();
     expect(cache.get('shelves:30')).toBeUndefined();
   });
+
+  it('connectEpic drops platformStatus + library (M2)', async () => {
+    const api = await loadApi();
+    cache.set('platformStatus', 'old');
+    cache.set('games:{}', 'old');
+    cache.set('dashboard', 'old');
+    cache.set('shelves:30', 'old');
+
+    await api.connectEpic('an-epic-auth-code');
+
+    expect(cache.get('platformStatus')).toBeUndefined();
+    expect(cache.get('games:{}')).toBeUndefined();
+    expect(cache.get('dashboard')).toBeUndefined();
+    expect(cache.get('shelves:30')).toBeUndefined();
+  });
 });

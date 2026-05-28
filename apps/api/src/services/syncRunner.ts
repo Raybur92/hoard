@@ -8,6 +8,7 @@ import {
   getGameByXboxTitleId,
   getGameByGogAppId,
   getGameByItchGameId,
+  getGameByEpicCatalogItemId,
   getTimeToBeat,
   searchGameLocalizations,
 } from './igdb';
@@ -38,7 +39,7 @@ export interface SyncResult {
    *  PSN title, that means psn-api gave us one but the IGDB
    *  external_games lookup missed (gap is IGDB-side). If it's absent,
    *  psn-api itself didn't return a concept (gap is Sony-side). */
-  skippedIds: Record<string, { psnConceptId?: number; xboxTitleId?: number; gogAppId?: number; steamAppId?: number; itchGameId?: number }>;
+  skippedIds: Record<string, { psnConceptId?: number; xboxTitleId?: number; gogAppId?: number; steamAppId?: number; itchGameId?: number; epicCatalogItemId?: string }>;
 }
 
 // Stay comfortably under the IGDB 4 req/s rate limit
@@ -106,7 +107,7 @@ export async function runSync(
   // Tells us whether the gap is "psn-api didn't return concept.id" vs
   // "IGDB doesn't have external_games for this concept" without needing
   // to run separate diagnostic scripts.
-  const skippedIds: Record<string, { psnConceptId?: number; xboxTitleId?: number; gogAppId?: number; steamAppId?: number; itchGameId?: number }> = {};
+  const skippedIds: Record<string, { psnConceptId?: number; xboxTitleId?: number; gogAppId?: number; steamAppId?: number; itchGameId?: number; epicCatalogItemId?: string }> = {};
 
   for (const sg of syncedGames) {
     try {
@@ -133,6 +134,9 @@ export async function runSync(
       }
       if (!igdbGame && sg.itchGameId) {
         igdbGame = await getGameByItchGameId(sg.itchGameId);
+      }
+      if (!igdbGame && sg.epicCatalogItemId) {
+        igdbGame = await getGameByEpicCatalogItemId(sg.epicCatalogItemId);
       }
       if (!igdbGame) {
         const results = await searchGames(sg.igdbSearchTitle);
@@ -166,6 +170,7 @@ export async function runSync(
         if (sg.gogAppId !== undefined) ids.gogAppId = sg.gogAppId;
         if (sg.steamAppId !== undefined) ids.steamAppId = sg.steamAppId;
         if (sg.itchGameId !== undefined) ids.itchGameId = sg.itchGameId;
+        if (sg.epicCatalogItemId !== undefined) ids.epicCatalogItemId = sg.epicCatalogItemId;
         if (Object.keys(ids).length > 0) skippedIds[sg.igdbSearchTitle] = ids;
         continue;
       }
@@ -189,6 +194,7 @@ export async function runSync(
       // upsert so the sync path keeps it fresh, but no recovery branch.
       const gogAppId = sg.gogAppId ?? null;
       const itchGameId = sg.itchGameId ?? null;
+      const epicCatalogItemId = sg.epicCatalogItemId ?? null;
       let game;
       try {
         game = await prisma.game.upsert({
@@ -204,6 +210,7 @@ export async function runSync(
             ...(psnConceptId ? { psnConceptId } : {}),
             ...(gogAppId ? { gogAppId } : {}),
             ...(itchGameId ? { itchGameId } : {}),
+            ...(epicCatalogItemId ? { epicCatalogItemId } : {}),
           },
           create: {
             igdbId: igdbGame.igdbId,
@@ -217,6 +224,7 @@ export async function runSync(
             psnConceptId,
             gogAppId,
             itchGameId,
+            epicCatalogItemId,
           },
         });
       } catch (err) {
@@ -230,7 +238,8 @@ export async function runSync(
         const isXboxTitleIdCollision = target.includes('xboxTitleId') && xboxTitleId !== null;
         const isPsnConceptIdCollision = target.includes('psnConceptId') && psnConceptId !== null;
         const isItchGameIdCollision = target.includes('itchGameId') && itchGameId !== null;
-        if (!isSteamAppIdCollision && !isXboxTitleIdCollision && !isPsnConceptIdCollision && !isItchGameIdCollision) throw err;
+        const isEpicCatalogItemIdCollision = target.includes('epicCatalogItemId') && epicCatalogItemId !== null;
+        if (!isSteamAppIdCollision && !isXboxTitleIdCollision && !isPsnConceptIdCollision && !isItchGameIdCollision && !isEpicCatalogItemIdCollision) throw err;
         // TS can't narrow any id to non-null through the disjunctive
         // guard above, so each branch asserts. The asserts are safe
         // because the isXxxCollision flags already include the non-null
@@ -241,7 +250,9 @@ export async function runSync(
             ? await prisma.game.findUnique({ where: { xboxTitleId: xboxTitleId! } })
             : isPsnConceptIdCollision
               ? await prisma.game.findUnique({ where: { psnConceptId: psnConceptId! } })
-              : await prisma.game.findUnique({ where: { itchGameId: itchGameId! } });
+              : isItchGameIdCollision
+                ? await prisma.game.findUnique({ where: { itchGameId: itchGameId! } })
+                : await prisma.game.findUnique({ where: { epicCatalogItemId: epicCatalogItemId! } });
         if (!existing) throw err;
         game = existing;
       }
