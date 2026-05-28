@@ -10,8 +10,8 @@ import { api } from '../../lib/api';
 
 const EPIC_STEPS = [
   { n: 1, t: 'open epic login',    d: 'Open the Epic Games sign-in page in a new tab. Hoard never sees your password.' },
-  { n: 2, t: 'sign in to epic',    d: 'Use your normal Epic credentials. Epic redirects to a small JSON page.' },
-  { n: 3, t: 'copy the code',      d: 'Tap the address bar, copy the URL. The `authorizationCode` is what hoard needs.' },
+  { n: 2, t: 'sign in to epic',    d: 'Use your normal Epic credentials. Epic redirects to a plain page showing a JSON blob.' },
+  { n: 3, t: 'copy the json',      d: 'The PAGE BODY has the `authorizationCode` — the URL bar does NOT. Tap the page, select the JSON (or just the code value), copy.' },
   { n: 4, t: 'paste into hoard',   d: 'Paste below. Hoard extracts the code automatically.' },
   { n: 5, t: 'all set',             d: "Library sync is running. Epic doesn't expose playtime — games land in Backlog." },
 ] as const;
@@ -159,7 +159,7 @@ export function EpicGuidedFlowMobile() {
 
         {step === 4 && (
           <div style={{ marginTop: 18 }}>
-            <label htmlFor="epic-code-input-mobile" className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)' }}>// paste url, json, or code</label>
+            <label htmlFor="epic-code-input-mobile" className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)' }}>// paste json or code</label>
             <input
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
@@ -167,7 +167,7 @@ export function EpicGuidedFlowMobile() {
               className="field"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="paste url or code…"
+              placeholder="paste json or code…"
               style={{
                 display: 'block', width: '100%', marginTop: 8, height: 38, fontSize: 'var(--text-2xs)',
                 fontFamily: 'var(--mono)',
@@ -176,7 +176,7 @@ export function EpicGuidedFlowMobile() {
               }}
             />
             <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', marginTop: 6 }}>
-              {code && code !== input.trim() ? `code extracted · ${code.length} chars` : `${code.length} chars · url, json, or bare code all work`}
+              {code && code !== input.trim() ? `code extracted from json · ${code.length} chars` : `${code.length} chars · json blob or bare code`}
             </div>
             {error && <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--red)', marginTop: 8 }}>{error}</div>}
           </div>

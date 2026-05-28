@@ -72,7 +72,7 @@ describe('EpicGuidedFlowDesktop', () => {
     fireEvent.click(screen.getByRole('button', { name: /next.*step 4/i }));
 
     // Step 4: paste a JSON blob containing the code.
-    fireEvent.change(screen.getByLabelText(/\/\/ paste url, json, or code/i), {
+    fireEvent.change(screen.getByLabelText(/\/\/ paste json or code/i), {
       target: { value: '{"redirectUrl":"https://x","authorizationCode":"epic-code-aBc123"}' },
     });
     fireEvent.click(screen.getByRole('button', { name: /save & connect/i }));
@@ -90,7 +90,7 @@ describe('EpicGuidedFlowDesktop', () => {
     fireEvent.click(screen.getByRole('button', { name: /next.*step 3/i }));
     fireEvent.click(screen.getByRole('button', { name: /next.*step 4/i }));
 
-    fireEvent.change(screen.getByLabelText(/\/\/ paste url, json, or code/i), {
+    fireEvent.change(screen.getByLabelText(/\/\/ paste json or code/i), {
       target: { value: 'https://www.epicgames.com/id/api/redirect?authorizationCode=epic-from-url' },
     });
     fireEvent.click(screen.getByRole('button', { name: /save & connect/i }));
@@ -106,7 +106,7 @@ describe('EpicGuidedFlowDesktop', () => {
     fireEvent.click(screen.getByRole('button', { name: /next.*step 2/i }));
     fireEvent.click(screen.getByRole('button', { name: /next.*step 3/i }));
     fireEvent.click(screen.getByRole('button', { name: /next.*step 4/i }));
-    fireEvent.change(screen.getByLabelText(/\/\/ paste url, json, or code/i), {
+    fireEvent.change(screen.getByLabelText(/\/\/ paste json or code/i), {
       target: { value: 'stale-code' },
     });
     fireEvent.click(screen.getByRole('button', { name: /save & connect/i }));

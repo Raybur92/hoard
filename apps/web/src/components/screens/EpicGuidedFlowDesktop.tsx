@@ -7,10 +7,10 @@ import { Marker } from '../primitives/Marker';
 import { api } from '../../lib/api';
 
 const EPIC_STEPS = [
-  { n: 1, t: 'open epic login',    d: 'Open the Epic Games sign-in page in a new tab. Hoard never sees your password — Epic redirects back with a one-time authorization code.' },
-  { n: 2, t: 'sign in to epic',    d: 'Authenticate with your normal Epic credentials. After sign-in, Epic redirects you to a small JSON page that displays an `authorizationCode`.' },
-  { n: 3, t: 'copy the code',      d: 'Copy the FULL URL from your browser address bar, or just the code inside `authorizationCode`. The code is single-use and expires in ~5 minutes.' },
-  { n: 4, t: 'paste into hoard',   d: 'Paste the URL (or just the code) below. Hoard extracts the code automatically and exchanges it for an access token + refresh token.' },
+  { n: 1, t: 'open epic login',    d: 'Open the Epic Games sign-in page in a new tab. Hoard never sees your password — Epic returns a one-time authorization code on the redirect page.' },
+  { n: 2, t: 'sign in to epic',    d: 'Authenticate with your normal Epic credentials. After sign-in, Epic redirects you to a plain page showing a JSON blob (NOT a normal Epic page).' },
+  { n: 3, t: 'copy the json',      d: 'The PAGE BODY shows JSON with an `authorizationCode` field — the URL bar does NOT contain the code, just the input parameters. Select the whole JSON blob (Cmd+A → Cmd+C) or just the code value inside the quotes.' },
+  { n: 4, t: 'paste into hoard',   d: 'Paste the JSON (or just the code) below. Hoard extracts the code automatically and exchanges it for an access token + refresh token.' },
   { n: 5, t: 'all set',             d: "We'll fetch your library. Epic doesn't expose playtime, so games land in Backlog by default." },
 ] as const;
 
@@ -178,7 +178,7 @@ export function EpicGuidedFlowDesktop() {
 
             {step === 4 && (
               <div style={{ marginTop: 18 }}>
-                <label htmlFor="epic-code-input-desktop" className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)' }}>// paste url, json, or code</label>
+                <label htmlFor="epic-code-input-desktop" className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)' }}>// paste json or code</label>
                 <input
                   // eslint-disable-next-line jsx-a11y/no-autofocus
                   autoFocus
@@ -186,7 +186,7 @@ export function EpicGuidedFlowDesktop() {
                   className="field"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder='paste url or just the authorizationCode value…'
+                  placeholder='paste the JSON blob or just the authorizationCode value…'
                   style={{
                     marginTop: 8, width: '100%', height: 38, fontSize: 'var(--text-xs)',
                     fontFamily: 'var(--mono)',
@@ -195,7 +195,7 @@ export function EpicGuidedFlowDesktop() {
                   }}
                 />
                 <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', marginTop: 6 }}>
-                  {code && code !== input.trim() ? `code extracted · ${code.length} chars` : `${code.length} chars · paste the full url, the json blob, or just the code`}
+                  {code && code !== input.trim() ? `code extracted from json · ${code.length} chars` : `${code.length} chars · paste the json blob or just the code`}
                 </div>
                 {error && (
                   <div className="t-red" style={{ fontSize: 'var(--text-2xs)', marginTop: 8, color: 'var(--red)' }}>{error}</div>
@@ -250,6 +250,8 @@ export function EpicGuidedFlowDesktop() {
             <div className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)' }}>// what you should see</div>
 
             <div style={{ border: '1px solid var(--rule-bright)', background: 'var(--void)', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              {/* Fake browser chrome — note the URL bar does NOT contain the code,
+                  only the input params. Common point of confusion. */}
               <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--ink)' }}>
                 <span style={{ display: 'inline-flex', gap: 4 }}>
                   {[0, 1, 2].map((i) => (
@@ -258,20 +260,30 @@ export function EpicGuidedFlowDesktop() {
                 </span>
                 <div className="field" style={{ flex: 1, height: 22, fontSize: 'var(--text-3xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span className="pre" style={{ color: 'var(--green)' }}>https://</span>
-                  <span style={{ color: 'var(--paper-dim)' }}>www.epicgames.com/id/api/redirect?</span>
-                  <span style={{ background: 'var(--green)', color: 'var(--void)', padding: '0 3px' }}>authorizationCode=aBc…</span>
+                  <span style={{ color: 'var(--paper-dim)' }}>www.epicgames.com/id/api/redirect?clientId=…&amp;responseType=code</span>
                 </div>
                 <Icon name="refresh" size={11} style={{ color: 'var(--paper-dim)' }} />
               </div>
 
+              {/* Page body — JSON blob is what the user actually copies from. */}
               <div style={{ padding: 18, flex: 1, fontFamily: 'var(--mono)', fontSize: 'var(--text-xs)', lineHeight: 1.7, color: 'var(--paper-dim)', overflow: 'auto' }}>
-                <div style={{ color: 'var(--paper-dim)', fontSize: 'var(--text-3xs)', marginBottom: 10 }}>// after sign-in, epic redirects here</div>
-                <div style={{ color: 'var(--paper)', fontSize: 'var(--text-sm)', marginBottom: 10 }}>You see a small JSON blob, not a normal Epic page.</div>
+                <div style={{ color: 'var(--paper-dim)', fontSize: 'var(--text-3xs)', marginBottom: 10 }}>// page body (raw JSON — no Epic chrome)</div>
+                <pre className="ascii" style={{
+                  padding: 10, background: 'var(--ink)', border: '1px solid var(--rule)',
+                  fontSize: 'var(--text-3xs)', lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: '0 0 14px',
+                }}>
+                  {'{ "redirectUrl": "https://...",\n  "sid": "...",\n  '}
+                  <span style={{ color: 'var(--green)' }}>{'"authorizationCode":'}</span>
+                  {' '}
+                  <span style={{ background: 'var(--green)', color: 'var(--void)', padding: '1px 4px' }}>"aBc123xYz…"</span>
+                  {' }'}
+                </pre>
                 <div className="t-faint" style={{ fontSize: 'var(--text-2xs)', lineHeight: 1.55 }}>
-                  That JSON has an <span style={{ color: 'var(--green)' }}>authorizationCode</span> field — that&rsquo;s what hoard needs. Copy the value (or the whole URL), then paste on step 4.
+                  Copy the <span style={{ color: 'var(--green)' }}>authorizationCode</span> value (or the whole JSON), then paste on step 4. The URL bar does NOT contain the code — only the page body does.
                 </div>
                 <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--amber)', fontSize: 'var(--text-2xs)' }}>
-                  <Icon name="info" size={11} /> code expires fast · don&rsquo;t reuse, generate a fresh one if it fails
+                  <Icon name="info" size={11} /> code expires fast · don&rsquo;t reuse, refresh the page if it fails
                 </div>
               </div>
             </div>
