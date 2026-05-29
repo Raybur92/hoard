@@ -182,3 +182,46 @@ describe('ConfirmModal — typed-confirm gate (all variants)', () => {
     expect(onCancel).toHaveBeenCalled();
   });
 });
+
+describe('ConfirmModal — variant: delete-feedback (admin-IA redesign 2026-05-29)', () => {
+  it('renders the feedback-specific headline + description + cancel/confirm labels', () => {
+    setup({
+      variant: 'delete-feedback',
+      subject: 'gaetano@example.com',
+      confirmKeyword: 'DELETE',
+    });
+    expect(screen.getByText(/delete this feedback row/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/removes this feedback row from the database/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /cancel · keep this feedback/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^delete feedback$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('uppercases the input (DELETE keyword is fixed uppercase)', () => {
+    const { onTextChange } = setup({
+      variant: 'delete-feedback',
+      subject: 'gaetano@example.com',
+      confirmKeyword: 'DELETE',
+    });
+    const input = screen.getByPlaceholderText('type DELETE');
+    fireEvent.change(input, { target: { value: 'delete' } });
+    expect(onTextChange).toHaveBeenCalledWith('DELETE');
+  });
+
+  it('disables confirm until confirmText === "DELETE"', () => {
+    const { rerender, props } = setup({
+      variant: 'delete-feedback',
+      subject: 'gaetano@example.com',
+      confirmKeyword: 'DELETE',
+      confirmText: 'DELET',
+    });
+    expect(screen.getByRole('button', { name: /^delete feedback$/i })).toBeDisabled();
+    rerender(<ConfirmModal {...props} confirmText="DELETE" />);
+    expect(screen.getByRole('button', { name: /^delete feedback$/i })).not.toBeDisabled();
+  });
+});

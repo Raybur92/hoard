@@ -355,6 +355,32 @@ router.patch('/admin/feedback/:id', async (req: Request, res: Response): Promise
   res.json(mapFeedbackWithUser(updated));
 });
 
+// DELETE /api/admin/feedback/:id
+//
+// Hard-delete a feedback row. Returns 204 on success, 404 with the
+// canonical body if the row is gone. Mirrors `DELETE /api/admin/users/:id`
+// shape — admin-only via the router-level requireAdmin middleware,
+// no cascade concerns (Feedback rows don't FK out to anything).
+//
+// Bundled into the admin-IA redesign workstream (2026-05-29) — feedback
+// triage gains a [delete] affordance alongside the existing
+// [mark read]/[mark unread] toggle.
+router.delete('/admin/feedback/:id', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+
+  const existing = await prisma.feedback.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!existing) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  await prisma.feedback.delete({ where: { id } });
+  res.status(204).end();
+});
+
 /* ── Events / Telemetry (TL1.3 of docs/TELEMETRY_PLAN.md) ────── */
 
 // GET /api/admin/events

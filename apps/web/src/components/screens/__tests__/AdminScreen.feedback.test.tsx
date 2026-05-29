@@ -7,7 +7,7 @@
 
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import type { AuthUser, FeedbackWithUser } from '@hoard/types';
 
 vi.mock('../../../lib/api', async () => {
@@ -23,6 +23,7 @@ vi.mock('../../../lib/api', async () => {
         deleteUser: vi.fn(),
         listFeedback: vi.fn(),
         markFeedbackRead: vi.fn(),
+        deleteFeedback: vi.fn(),
         // TL1.4 — AdminScreen also renders EVENTS now. Default empty
         // list so feedback-specific tests stay isolated.
         listEvents: vi.fn(),
@@ -43,6 +44,11 @@ vi.mock('../../../hooks/useBreakpoint', () => ({
 
 import { api } from '../../../lib/api';
 import { AdminScreen } from '../AdminScreen';
+import { AdminFeedback } from '../admin/AdminFeedback';
+import { AdminPending } from '../admin/AdminPending';
+import { AdminUsers } from '../admin/AdminUsers';
+import { AdminCodes } from '../admin/AdminCodes';
+import { AdminEvents } from '../admin/AdminEvents';
 
 function makeAdmin(): AuthUser {
   return {
@@ -72,10 +78,19 @@ function makeFb(overrides: Partial<FeedbackWithUser> = {}): FeedbackWithUser {
   };
 }
 
-function renderScreen() {
+function renderScreen(path: string = '/admin/feedback') {
   return render(
-    <MemoryRouter>
-      <AdminScreen />
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/admin" element={<AdminScreen />}>
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="pending" element={<AdminPending />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="codes" element={<AdminCodes />} />
+          <Route path="feedback" element={<AdminFeedback />} />
+          <Route path="events" element={<AdminEvents />} />
+        </Route>
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -203,6 +218,70 @@ describe('AdminScreen — FEEDBACK section', () => {
     expect(screen.getByText('page1@x')).toBeTruthy();
     // Button gone (nextCursor became null).
     expect(screen.queryByRole('button', { name: /\[load more\]/ })).toBeNull();
+  });
+});
+
+/* ── Admin-IA redesign (2026-05-29): [delete] feedback flow ── */
+
+describe('AdminScreen feedback — delete affordance', () => {
+  it('clicking [delete] opens the ConfirmModal with the DELETE keyword + correct copy', async () => {
+    (api.admin.listFeedback as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [makeFb({ id: 'fb_d', user: { id: 'u-d', email: 'spam@x.com', name: null, displayIdentity: 'spam@x.com' } })],
+      nextCursor: null,
+      unreadCount: 0,
+    });
+
+    renderScreen();
+    const delBtn = await screen.findByRole('button', { name: /Delete feedback from spam@x\.com/i });
+    fireEvent.click(delBtn);
+
+    // Modal headline + DELETE keyword instruction render.
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByText(/delete this feedback row/i)).toBeTruthy();
+    // The TYPE keyword display includes the literal "DELETE" keyword.
+    expect(screen.getByText(/TYPE/i)).toBeTruthy();
+  });
+
+  it('typing DELETE unlocks the confirm button and calls api.admin.deleteFeedback', async () => {
+    (api.admin.listFeedback as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [makeFb({ id: 'fb_d2', user: { id: 'u-d2', email: 'noise@x.com', name: null, displayIdentity: 'noise@x.com' } })],
+      nextCursor: null,
+      unreadCount: 0,
+    });
+    (api.admin.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    renderScreen();
+    const delBtn = await screen.findByRole('button', { name: /Delete feedback from noise@x\.com/i });
+    fireEvent.click(delBtn);
+
+    const input = screen.getByPlaceholderText(/type DELETE/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'DELETE' } });
+    // Modal's confirm button is exactly "delete feedback" (no "from X"
+    // suffix that the row button has — disambiguate via exact match).
+    const confirm = screen.getByRole('button', { name: /^delete feedback$/i });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(api.admin.deleteFeedback).toHaveBeenCalledWith('fb_d2'));
+    await waitFor(() =>
+      expect(screen.getByText(/deleted feedback from: noise@x\.com/i)).toBeTruthy(),
+    );
+  });
+
+  it('clicking [delete] does NOT toggle the row expanded state (stopPropagation guard)', async () => {
+    (api.admin.listFeedback as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [makeFb({ id: 'fb_d3', message: 'expand-or-not body', user: { id: 'u-d3', email: 'sp@x.com', name: null, displayIdentity: 'sp@x.com' } })],
+      nextCursor: null,
+      unreadCount: 0,
+    });
+
+    renderScreen();
+    const delBtn = await screen.findByRole('button', { name: /Delete feedback from sp@x\.com/i });
+    fireEvent.click(delBtn);
+
+    // Row body text should NOT be rendered (no expansion fired).
+    expect(screen.queryByText(/expand-or-not body/i)).toBeNull();
+    // Modal should have opened (dialog present).
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });
 

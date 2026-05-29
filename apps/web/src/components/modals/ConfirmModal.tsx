@@ -6,10 +6,12 @@ import { Icon } from '../primitives/Icon';
  * Shared typed-confirm modal for destructive actions.
  *
  * Promoted from `SettingsDesktop.tsx` to a shared file in A-series
- * commit 3 (per A-D7 in `docs/ADMIN_POLISH_PLAN.md`). Three variants:
- *   - `'delete-account'` — user deletes their own account (HOARD keyword).
- *   - `'wipe-library'`   — user wipes their library (WIPE keyword).
- *   - `'delete-user'`    — admin deletes another user (typed displayIdentity).
+ * commit 3 (per A-D7 in `docs/ADMIN_POLISH_PLAN.md`). Variants:
+ *   - `'delete-account'`  — user deletes their own account (HOARD keyword).
+ *   - `'wipe-library'`    — user wipes their library (WIPE keyword).
+ *   - `'delete-user'`     — admin deletes another user (typed displayIdentity).
+ *   - `'delete-feedback'` — admin deletes a feedback row (DELETE keyword,
+ *                            added in the admin-IA redesign 2026-05-29).
  *
  * The first two carry exactly the copy that was inline in
  * SettingsDesktop pre-promotion — regression-guarded by the modal
@@ -23,7 +25,7 @@ import { Icon } from '../primitives/Icon';
  * iterations can extend the prop shape and the rendering branch.
  */
 export interface ConfirmModalProps {
-  variant: 'delete-account' | 'wipe-library' | 'delete-user';
+  variant: 'delete-account' | 'wipe-library' | 'delete-user' | 'delete-feedback';
   subject: string;
   confirmKeyword: string;
   confirmText: string;
@@ -53,26 +55,34 @@ export function ConfirmModal({
     ? <>delete {subject}<br />and everything in it.</>
     : variant === 'wipe-library'
       ? <>wipe {subject}<br />but keep the account.</>
-      : <>delete {subject}<br />· permanently.</>;
+      : variant === 'delete-feedback'
+        ? <>delete this feedback row<br />· permanently.</>
+        : <>delete {subject}<br />· permanently.</>;
 
   const description = variant === 'delete-account'
     ? 'this will permanently erase your hoard. there is no recovery, no soft-delete window, no support ticket that brings it back.'
     : variant === 'wipe-library'
       ? 'deletes every tracked game, status, rating, and note. disconnects every connected platform. your wishlist, account, and preferences stay. you can re-sync from scratch afterwards.'
-      // delete-user
-      : 'deletes the account and every owned row — platforms, games, wishlist, sync logs. their invite code stays in the audit trail with the redeemer reference orphaned. cannot be undone.';
+      : variant === 'delete-feedback'
+        ? 'removes this feedback row from the database. the submitter’s account is unaffected. no audit trail is kept of the deleted row — only do this for spam, noise, or rows you’ve already triaged elsewhere.'
+        // delete-user
+        : 'deletes the account and every owned row — platforms, games, wishlist, sync logs. their invite code stays in the audit trail with the redeemer reference orphaned. cannot be undone.';
 
   const cancelLabel = variant === 'delete-account'
     ? 'cancel · keep my hoard'
     : variant === 'wipe-library'
       ? 'cancel · keep my library'
-      : 'cancel · keep this user';
+      : variant === 'delete-feedback'
+        ? 'cancel · keep this feedback'
+        : 'cancel · keep this user';
 
   const confirmLabel = variant === 'delete-account'
     ? (working ? 'deleting…' : 'delete forever')
     : variant === 'wipe-library'
       ? (working ? 'wiping…' : 'wipe library')
-      : (working ? 'deleting…' : 'delete user');
+      : variant === 'delete-feedback'
+        ? (working ? 'deleting…' : 'delete feedback')
+        : (working ? 'deleting…' : 'delete user');
 
   const trapRef = useFocusTrap<HTMLDivElement>(true);
   useEffect(() => {

@@ -17,6 +17,7 @@ jest.mock('@hoard/db', () => ({
       count: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
     },
   },
 }));
@@ -89,6 +90,13 @@ describe('requireAdmin gating on the feedback admin routes', () => {
     expect(res.body).toEqual({ error: 'Not found' });
     expect(prisma.feedback.update).not.toHaveBeenCalled();
   });
+
+  it('DELETE /api/admin/feedback/:id → 404 { error: "Not found" } for non-admins', async () => {
+    const res = await request(app).delete('/api/admin/feedback/fb_1');
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Not found' });
+    expect(prisma.feedback.delete).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/admin/feedback — cursor pagination', () => {
@@ -155,5 +163,28 @@ describe('PATCH /api/admin/feedback/:id', () => {
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Not found' });
     expect(prisma.feedback.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/admin/feedback/:id', () => {
+  it('hard-deletes the row and returns 204 (no body)', async () => {
+    (prisma.feedback.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'fb_1' });
+    (prisma.feedback.delete as jest.Mock).mockResolvedValueOnce({ id: 'fb_1' });
+
+    const res = await request(app).delete('/api/admin/feedback/fb_1');
+
+    expect(res.status).toBe(204);
+    expect(res.body).toEqual({});
+    expect(prisma.feedback.delete).toHaveBeenCalledWith({ where: { id: 'fb_1' } });
+  });
+
+  it('returns 404 with the canonical body when the row is gone (no delete attempted)', async () => {
+    (prisma.feedback.findUnique as jest.Mock).mockResolvedValueOnce(null);
+
+    const res = await request(app).delete('/api/admin/feedback/missing');
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Not found' });
+    expect(prisma.feedback.delete).not.toHaveBeenCalled();
   });
 });

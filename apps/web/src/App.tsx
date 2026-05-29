@@ -45,6 +45,11 @@ const EpicGuidedFlowMobile  = lazyNamed(() => import('./components/screens/EpicG
 const NintendoGuidedFlowDesktop = lazyNamed(() => import('./components/screens/NintendoGuidedFlowDesktop'), 'NintendoGuidedFlowDesktop');
 const NintendoGuidedFlowMobile  = lazyNamed(() => import('./components/screens/NintendoGuidedFlowMobile'),  'NintendoGuidedFlowMobile');
 const AdminScreen           = lazyNamed(() => import('./components/screens/AdminScreen'),           'AdminScreen');
+const AdminPending          = lazyNamed(() => import('./components/screens/admin/AdminPending'),    'AdminPending');
+const AdminUsers            = lazyNamed(() => import('./components/screens/admin/AdminUsers'),      'AdminUsers');
+const AdminCodes            = lazyNamed(() => import('./components/screens/admin/AdminCodes'),      'AdminCodes');
+const AdminFeedback         = lazyNamed(() => import('./components/screens/admin/AdminFeedback'),   'AdminFeedback');
+const AdminEvents           = lazyNamed(() => import('./components/screens/admin/AdminEvents'),     'AdminEvents');
 
 function SuspenseFallback() {
   return <div className="hoard-noise" style={{ minHeight: '100vh' }} />;
@@ -96,11 +101,20 @@ export default function App() {
                 <Route path="/settings"                         element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/:section"                element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/platforms/:code"         element={desktop ? <PlatformDetailDesktop /> : <PlatformDetailMobile />} />
-                {/* Admin panel — desktop-only per I-D3. The component
-                    handles its own breakpoint check + non-admin 404
-                    fallback (defense-in-depth alongside requireAdmin
-                    server-side and the Sidebar conditional entry). */}
-                <Route path="/admin"                            element={<AdminScreen />} />
+                {/* Admin panel — desktop-only per I-D3. Sub-routes per the
+                    admin-IA redesign (2026-05-29). The parent `<AdminScreen>`
+                    handles breakpoint + admin-flag gates then renders
+                    <AdminLayout> which provides the sidebar + outlet.
+                    `/admin` (no sub-path) redirects to `/admin/users` so
+                    bookmarks + the sidebar link still work. */}
+                <Route path="/admin" element={<AdminScreen />}>
+                  <Route index element={<Navigate to="users" replace />} />
+                  <Route path="pending"  element={<AdminPending />} />
+                  <Route path="users"    element={<AdminUsers />} />
+                  <Route path="codes"    element={<AdminCodes />} />
+                  <Route path="feedback" element={<AdminFeedback />} />
+                  <Route path="events"   element={<AdminEvents />} />
+                </Route>
               </Route>
 
               {/* Authed + active full-screen routes (no app shell).

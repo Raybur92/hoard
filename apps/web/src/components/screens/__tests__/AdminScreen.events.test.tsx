@@ -5,7 +5,7 @@
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import type { AuthUser, UserEventWithUser } from '@hoard/types';
 
 vi.mock('../../../lib/api', async () => {
@@ -21,6 +21,7 @@ vi.mock('../../../lib/api', async () => {
         deleteUser: vi.fn(),
         listFeedback: vi.fn(),
         markFeedbackRead: vi.fn(),
+        deleteFeedback: vi.fn(),
         listEvents: vi.fn(),
       },
     },
@@ -39,6 +40,11 @@ vi.mock('../../../hooks/useBreakpoint', () => ({
 
 import { api } from '../../../lib/api';
 import { AdminScreen } from '../AdminScreen';
+import { AdminEvents } from '../admin/AdminEvents';
+import { AdminPending } from '../admin/AdminPending';
+import { AdminUsers } from '../admin/AdminUsers';
+import { AdminCodes } from '../admin/AdminCodes';
+import { AdminFeedback } from '../admin/AdminFeedback';
 
 function makeAdmin(): AuthUser {
   return {
@@ -66,10 +72,19 @@ function makeEvent(overrides: Partial<UserEventWithUser> = {}): UserEventWithUse
   };
 }
 
-function renderScreen() {
+function renderScreen(path: string = '/admin/events') {
   return render(
-    <MemoryRouter>
-      <AdminScreen />
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/admin" element={<AdminScreen />}>
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="pending" element={<AdminPending />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="codes" element={<AdminCodes />} />
+          <Route path="feedback" element={<AdminFeedback />} />
+          <Route path="events" element={<AdminEvents />} />
+        </Route>
+      </Routes>
     </MemoryRouter>,
   );
 }

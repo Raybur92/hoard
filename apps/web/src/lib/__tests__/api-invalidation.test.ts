@@ -222,4 +222,22 @@ describe('api mutation invalidation', () => {
     expect(cache.get('dashboard')).toBeUndefined();
     expect(cache.get('shelves:30')).toBeUndefined();
   });
+
+  it('admin.deleteFeedback drops only admin:feedback (admin-IA redesign 2026-05-29)', async () => {
+    const api = await loadApi();
+    cache.set('admin:feedback', 'old');
+    cache.set('admin:invite-codes', 'unaffected');
+    cache.set('admin:users', 'unaffected');
+
+    globalThis.fetch = vi.fn(async () =>
+      new Response(null, { status: 204 })
+    ) as unknown as typeof fetch;
+
+    await api.admin.deleteFeedback('fb_xyz');
+
+    expect(cache.get('admin:feedback')).toBeUndefined();
+    // Narrower invalidation than `deleteUser` — codes + users untouched.
+    expect(cache.get('admin:invite-codes')).toBeDefined();
+    expect(cache.get('admin:users')).toBeDefined();
+  });
 });

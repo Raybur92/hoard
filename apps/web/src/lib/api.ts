@@ -334,6 +334,19 @@ export const api = {
       return r;
     },
 
+    // Admin-IA redesign (2026-05-29): hard-delete a feedback row.
+    // Server returns 204 on success, 404 if already gone. Narrower cache
+    // invalidation than `deleteUser` (which flushes `admin:`) — deleting a
+    // feedback row can't orphan an InviteCode or change the users list.
+    deleteFeedback: async (id: string) => {
+      const res = await fetch(url(`/api/admin/feedback/${id}`), { method: 'DELETE', credentials: 'include' });
+      if (!res.ok && res.status !== 204) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      cache.invalidate('admin:feedback');
+    },
+
     // TL1.4 of docs/TELEMETRY_PLAN.md. Cursor-paginated; optional userId
     // and event filters. Events are immutable per TL-D10 so there's no
     // companion mutation method that invalidates the cache — the hook

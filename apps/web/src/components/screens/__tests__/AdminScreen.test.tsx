@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import type { AdminUser, AdminInviteCode, AuthUser } from '@hoard/types';
 
 vi.mock('../../../lib/api', async () => {
@@ -42,6 +42,11 @@ vi.mock('../../../hooks/useBreakpoint', () => ({
 
 import { api } from '../../../lib/api';
 import { AdminScreen } from '../AdminScreen';
+import { AdminPending } from '../admin/AdminPending';
+import { AdminUsers } from '../admin/AdminUsers';
+import { AdminCodes } from '../admin/AdminCodes';
+import { AdminFeedback } from '../admin/AdminFeedback';
+import { AdminEvents } from '../admin/AdminEvents';
 
 function makeAdmin(): AuthUser {
   return {
@@ -88,10 +93,26 @@ function makeCode(overrides: Partial<AdminInviteCode> = {}): AdminInviteCode {
   };
 }
 
-function renderScreen() {
+/**
+ * Renders the AdminScreen route tree at a given URL. Admin-IA redesign
+ * (2026-05-29) split the monolithic page into sub-routes — tests now
+ * choose which section to mount via the path arg. Default is
+ * `/admin/users` which matches the previous default landing surface
+ * (most legacy tests assert against the users-section content).
+ */
+function renderScreen(path: string = '/admin/users') {
   return render(
-    <MemoryRouter>
-      <AdminScreen />
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/admin" element={<AdminScreen />}>
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="pending" element={<AdminPending />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="codes" element={<AdminCodes />} />
+          <Route path="feedback" element={<AdminFeedback />} />
+          <Route path="events" element={<AdminEvents />} />
+        </Route>
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -133,8 +154,8 @@ describe('AdminScreen — gating', () => {
 
 /* ── Sections render ── */
 
-describe('AdminScreen — sections', () => {
-  it('renders all three section headers with counts', async () => {
+describe('AdminScreen — sidebar nav (admin-IA redesign)', () => {
+  it('sidebar shows count badges for every section, reflecting the loaded data', async () => {
     (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
       makeUser({ id: 'u-1', displayIdentity: 'pending@x.com', status: 'PENDING_INVITE', hasRequestedAccess: true, accessRequestedAt: '2026-05-09T00:00:00.000Z', accessRequestMessage: 'Hi I am Marco' }),
       makeUser({ id: 'u-2', displayIdentity: 'andrea@x.com' }),
@@ -145,30 +166,35 @@ describe('AdminScreen — sections', () => {
 
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText(/pending access requests \(1\)/i)).toBeTruthy();
-      expect(screen.getByText(/all users \(2\)/i)).toBeTruthy();
-      expect(screen.getByText(/invite codes \(1\)/i)).toBeTruthy();
+      // Sidebar links carry the count next to each label.
+      expect(screen.getByRole('link', { name: /users 2/i })).toBeTruthy();
+      expect(screen.getByRole('link', { name: /pending 1/i })).toBeTruthy();
+      expect(screen.getByRole('link', { name: /codes 1/i })).toBeTruthy();
     });
   });
 
-  it('shows empty-state copy for each section when nothing is present', async () => {
+  it('empty-data state: counts default to 0 / ∞ for events', async () => {
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('// no pending requests')).toBeTruthy();
-      expect(screen.getByText('// no users')).toBeTruthy();
-      expect(screen.getByText('// no invite codes yet')).toBeTruthy();
+      expect(screen.getByRole('link', { name: /users 0/i })).toBeTruthy();
+      expect(screen.getByRole('link', { name: /codes 0/i })).toBeTruthy();
+      expect(screen.getByRole('link', { name: /events ∞/i })).toBeTruthy();
     });
   });
+});
 
+describe('AdminScreen — /admin/pending section', () => {
   it('only puts pending-WITH-request users in the pending section, not pending-no-request', async () => {
     (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
       makeUser({ id: 'pr', displayIdentity: 'requested@x.com', status: 'PENDING_INVITE', hasRequestedAccess: true, accessRequestedAt: '2026-05-09T00:00:00.000Z' }),
       makeUser({ id: 'pnr', displayIdentity: 'pending-no-request@x.com', status: 'PENDING_INVITE', hasRequestedAccess: false }),
     ]);
-    renderScreen();
+    renderScreen('/admin/pending');
     await waitFor(() => {
       expect(screen.getByText(/pending access requests \(1\)/i)).toBeTruthy();
-      expect(screen.getByText(/all users \(2\)/i)).toBeTruthy();
+      expect(screen.getByText('requested@x.com')).toBeTruthy();
+      // pending-no-request user does NOT render here — they live in /admin/users.
+      expect(screen.queryByText('pending-no-request@x.com')).toBeNull();
     });
   });
 
@@ -176,9 +202,16 @@ describe('AdminScreen — sections', () => {
     (api.admin.listUsers as ReturnType<typeof vi.fn>).mockResolvedValue([
       makeUser({ id: 'pr', displayIdentity: 'no-msg@x.com', status: 'PENDING_INVITE', hasRequestedAccess: true, accessRequestedAt: '2026-05-09T00:00:00.000Z', accessRequestMessage: null }),
     ]);
-    renderScreen();
+    renderScreen('/admin/pending');
     await waitFor(() => {
       expect(screen.getByText('(no message)')).toBeTruthy();
+    });
+  });
+
+  it('shows the empty-state copy when there are no pending requests', async () => {
+    renderScreen('/admin/pending');
+    await waitFor(() => {
+      expect(screen.getByText('// no pending requests')).toBeTruthy();
     });
   });
 });
@@ -186,9 +219,11 @@ describe('AdminScreen — sections', () => {
 /* ── Generate code flow ── */
 
 describe('AdminScreen — generate code flow', () => {
-  it('top-bar [+ generate code] opens the modal in prompt state', async () => {
-    renderScreen();
-    fireEvent.click(screen.getByRole('button', { name: /generate code/i }));
+  it('[+ generate code] CTA in the /admin/codes section opens the modal in prompt state', async () => {
+    // Admin-IA redesign: the CTA moved from the top-bar to the codes
+    // section header (where its output goes).
+    renderScreen('/admin/codes');
+    fireEvent.click(screen.getByRole('button', { name: /\+ generate code/i }));
     expect(screen.getByText('> generate invite code')).toBeTruthy();
     expect(screen.getByLabelText(/note/i)).toBeTruthy();
   });
@@ -205,7 +240,7 @@ describe('AdminScreen — generate code flow', () => {
         accessRequestedAt: '2026-05-09T00:00:00.000Z',
       }),
     ]);
-    renderScreen();
+    renderScreen('/admin/pending');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /generate code for marco/i })).toBeTruthy();
     });
@@ -235,13 +270,14 @@ describe('AdminScreen — generate code flow', () => {
         accessRequestedAt: '2026-05-09T00:00:00.000Z',
       }),
     ]);
-    renderScreen();
+    renderScreen('/admin/pending');
     await waitFor(() => {
       // Button text uses noteLabel (User.name when set).
       expect(screen.getByRole('button', { name: /generate code for Marco Rossi/i })).toBeTruthy();
-      // Full email shows in BOTH the pending-row identity header AND
-      // the all-users row — getAllByText catches both, asserts ≥1.
-      expect(screen.getAllByText('marco.rossi@example.com').length).toBeGreaterThanOrEqual(1);
+      // Full email shows in the pending-row identity header. The
+      // all-users section is on a different route now, so we only
+      // assert presence on the pending route.
+      expect(screen.getByText('marco.rossi@example.com')).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /generate code for Marco Rossi/i }));
     // Pre-fill uses noteLabel — same as button, by design.
@@ -260,7 +296,7 @@ describe('AdminScreen — generate code flow', () => {
         accessRequestedAt: '2026-05-09T00:00:00.000Z',
       }),
     ]);
-    renderScreen();
+    renderScreen('/admin/pending');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /generate code for Steam user — 76561198012345678/i })).toBeTruthy();
     });
@@ -272,8 +308,8 @@ describe('AdminScreen — generate code flow', () => {
     (api.admin.createInviteCode as ReturnType<typeof vi.fn>).mockResolvedValue(
       makeCode({ id: 'c-new', code: 'HOARD-NEW1-2345', note: 'spare' }),
     );
-    renderScreen();
-    fireEvent.click(screen.getByRole('button', { name: /generate code/i }));
+    renderScreen('/admin/codes');
+    fireEvent.click(screen.getByRole('button', { name: /\+ generate code/i }));
     fireEvent.change(screen.getByLabelText(/note/i), { target: { value: 'spare' } });
     fireEvent.click(screen.getByRole('button', { name: /\$ generate/i }));
 
@@ -286,8 +322,8 @@ describe('AdminScreen — generate code flow', () => {
 
   it('passes undefined for empty note (server-side default keeps `note` nullable)', async () => {
     (api.admin.createInviteCode as ReturnType<typeof vi.fn>).mockResolvedValue(makeCode({ id: 'c-new' }));
-    renderScreen();
-    fireEvent.click(screen.getByRole('button', { name: /generate code/i }));
+    renderScreen('/admin/codes');
+    fireEvent.click(screen.getByRole('button', { name: /\+ generate code/i }));
     fireEvent.click(screen.getByRole('button', { name: /\$ generate/i }));
 
     await waitFor(() => {
@@ -323,7 +359,7 @@ describe('AdminScreen — revoke unused code', () => {
     (api.admin.deleteInviteCode as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    renderScreen();
+    renderScreen('/admin/codes');
     await waitFor(() => {
       expect(screen.getByText('HOARD-AAAA-BBBB')).toBeTruthy();
     });
@@ -341,7 +377,7 @@ describe('AdminScreen — revoke unused code', () => {
     ]);
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    renderScreen();
+    renderScreen('/admin/codes');
     await waitFor(() => {
       expect(screen.getByText('HOARD-AAAA-BBBB')).toBeTruthy();
     });
@@ -354,7 +390,7 @@ describe('AdminScreen — revoke unused code', () => {
     (api.admin.listInviteCodes as ReturnType<typeof vi.fn>).mockResolvedValue([
       makeCode({ id: 'c-used', code: 'HOARD-USED-CODE', usedAt: '2026-05-09T00:00:00.000Z', usedBy: { id: 'u', email: 'x@y.com', displayIdentity: 'x@y.com' } }),
     ]);
-    renderScreen();
+    renderScreen('/admin/codes');
     await waitFor(() => {
       expect(screen.getByText('HOARD-USED-CODE')).toBeTruthy();
     });
@@ -364,10 +400,34 @@ describe('AdminScreen — revoke unused code', () => {
 
 /* ── A1 commit 4 ── filter / search / sort / delete ── */
 
+/**
+ * Legacy helper for tests that depend on URL query params landing on
+ * the users section. Maps `/admin?...` to `/admin/users?...` so the
+ * existing assertions still target the right route. New tests should
+ * call `renderScreen('/admin/users?filter=...')` directly.
+ */
 function renderScreenWithUrl(url: string) {
+  if (url.startsWith('/admin?')) {
+    url = url.replace('/admin?', '/admin/users?');
+  } else if (url === '/admin') {
+    url = '/admin/users';
+  }
+  return _legacyRenderScreenWithUrl(url);
+}
+
+function _legacyRenderScreenWithUrl(url: string) {
   return render(
     <MemoryRouter initialEntries={[url]}>
-      <AdminScreen />
+      <Routes>
+        <Route path="/admin" element={<AdminScreen />}>
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="pending" element={<AdminPending />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="codes" element={<AdminCodes />} />
+          <Route path="feedback" element={<AdminFeedback />} />
+          <Route path="events" element={<AdminEvents />} />
+        </Route>
+      </Routes>
     </MemoryRouter>,
   );
 }
