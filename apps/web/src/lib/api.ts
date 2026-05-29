@@ -467,6 +467,24 @@ export const api = {
     return r;
   },
 
+  // M3 — Nintendo Switch session_token_code paste flow via Parental
+  // Controls OAuth + PKCE. The server generates the PKCE verifier +
+  // challenge and returns BOTH the auth URL and the verifier; the
+  // client stores the verifier in component state and posts it back
+  // alongside the pasted redirect URL (or bare session_token_code).
+  // Verifier is a one-shot value, not a long-term secret — sending it
+  // server→client→server is safe as long as it round-trips with the
+  // matching code.
+  nintendoAuthUrl: async () => {
+    return get<{ url: string; verifier: string; state: string }>('/api/platforms/nintendo/auth-url');
+  },
+  connectNintendo: async (input: { redirectUrl?: string; code?: string; verifier: string }) => {
+    const r = await post<{ ok: boolean; platformId: string }>('/api/platforms/nintendo/connect', input);
+    cache.invalidate('platformStatus');
+    invalidateLibrary();
+    return r;
+  },
+
   // manual games (Nintendo / Epic)
   addManualGame: async (body: ManualAddBody) => {
     const r = await post<UserGameDetail>('/api/games/manual', body);

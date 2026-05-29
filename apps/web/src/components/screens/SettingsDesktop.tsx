@@ -220,7 +220,7 @@ const PLATFORM_META: Array<{
   { code: 'PS', name: 'PSN',              syncable: true,  via: 'NPSSO token · re-paste required' },
   { code: 'XB', name: 'Xbox',             syncable: true,  via: 'OpenXBL API key' },
   { code: 'GG', name: 'GOG',              syncable: true,  via: 'OAuth · community API' },
-  { code: 'NT', name: 'Nintendo',         syncable: false, via: 'no public api · manual import' },
+  { code: 'NT', name: 'Nintendo',         syncable: true,  via: 'OAuth · Parental Controls API' },
   { code: 'EP', name: 'Epic Games',       syncable: true,  via: 'OAuth · public client' },
   { code: 'IT', name: 'itch.io',          syncable: true,  via: 'personal API key' },
 ];

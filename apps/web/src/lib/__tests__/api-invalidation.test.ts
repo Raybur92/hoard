@@ -204,4 +204,22 @@ describe('api mutation invalidation', () => {
     expect(cache.get('dashboard')).toBeUndefined();
     expect(cache.get('shelves:30')).toBeUndefined();
   });
+
+  it('connectNintendo drops platformStatus + library (M3)', async () => {
+    const api = await loadApi();
+    cache.set('platformStatus', 'old');
+    cache.set('games:{}', 'old');
+    cache.set('dashboard', 'old');
+    cache.set('shelves:30', 'old');
+
+    await api.connectNintendo({
+      redirectUrl: 'npf...://auth#session_token_code=eyJh.abc.def&state=ST',
+      verifier: 'V'.repeat(43),
+    });
+
+    expect(cache.get('platformStatus')).toBeUndefined();
+    expect(cache.get('games:{}')).toBeUndefined();
+    expect(cache.get('dashboard')).toBeUndefined();
+    expect(cache.get('shelves:30')).toBeUndefined();
+  });
 });

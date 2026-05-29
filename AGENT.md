@@ -208,8 +208,8 @@ All of these are closed and final for v1. Do not re-open them.
 **1. Settings screen**
 In scope for v1. Design delivered in `project/Hoard.html` (sections 05–11). Layout: `SettingsNav` sidebar with 8 sections (Account, Platforms, Library, Notifications, Appearance, Privacy, Data export, Danger zone). Platforms section uses a dedicated per-platform page (Variant B — `ConnectDedicatedDesktop`) with tabs (auth / scope / sync / log) and a stats sidebar. PSN NPSSO flow is a 5-step guided walkthrough (`GuidedFlowDesktop`) with a live browser-mock showing the user exactly what to copy.
 
-**2. Nintendo / Epic platforms**
-No sync — no viable public API exists and none is coming. These platforms appear as selectable labels only. Games are added manually: user searches IGDB, picks the game, assigns `platformLabel: "Nintendo"` or `"Epic"`, chooses a status. No CSV import.
+**2. Nintendo / Epic / itch.io platforms — sync paths shipped, manual-add is the fallback**
+Originally "no sync — no viable public API exists." Reversed during the M-series workstream (2026-05-28..29, plan at `docs/SYNC_EXPANSION_PLAN.md`). All 7 platform codes now have auto-sync: ST/PS/XB/GG via official OAuth or token-paste; IT via itch.io's public server-side API; EP via Epic's public "Fortnite Android" client credentials; NT via Nintendo's Parental Controls "Moon" API (with the quarterly version-constant maintenance tax captured as decision #43). Manual-add via IGDB search + `platformLabel` is now the floor — used for individual games the sync can't resolve (itch.io jam entries not in IGDB, Nintendo regional editions, unreleased titles). Hard Rule #6 in `CLAUDE.md` rewritten 2026-05-29 to reflect this. No CSV import (still out of scope).
 
 **3. Stats / Wrapped screen**
 Deferred to v2. The Dashboard covers the key numbers. Building a stats screen before there is real accumulated data is designing in a vacuum.
@@ -367,6 +367,22 @@ Two helpers now share the CM13 outcome rules:
 The trigger condition stays `existingStatus === 'Wishlist'`. The change is conceptual: CM13 isn't "ownership detection via playtime" but "ownership detection via ANY engagement evidence." Future engagement-signal additions (e.g. screenshots, presence detection) should follow the same pattern — call into a CM13-shaped helper that returns one of `OnHold | Completed | null`.
 
 Mirrors CM13 amendment 2026-05-27 in `docs/CONCEPTUAL_MODEL.md`.
+
+**43. Sync integrations get a quarterly maintenance budget when the upstream gates on a version-constant allowlist (M3 — 2026-05-29, mirrors M-D14 in `docs/SYNC_EXPANSION_PLAN.md`)**
+
+Nintendo's Parental Controls "Moon" API gates every request on a server-side allowlist of `(X-Moon-Os, X-Moon-App-Display-Version, X-Moon-App-Internal-Version)` tuples. The allowlist shifts every ~2-3 months when Nintendo ships a new Parental Controls app update; older tuples start returning `errorCode=update_required` (or 401s clustered around the rollout date) until the constants are bumped.
+
+The implementation in `apps/api/src/services/platforms/nintendo.ts` mirrors **pynintendoparental**'s `const.py` (the actively-maintained Python library that powers Home Assistant's Switch integration). When sync regresses with that error signature, the recipe is:
+1. Read the current `ZNMA_VERSION` / `ZNMA_BUILD` / `ANDROID_OS_VERSION` from https://github.com/pantherale0/pynintendoparental/blob/main/pynintendoparental/const.py.
+2. Bump the constants in `nintendo.ts` to match.
+3. Redeploy.
+
+This is **architectural-shaped maintenance**, not a one-off fix — the pattern applies to any future platform integration whose upstream gates on a client fingerprint. Captured here so the next contributor doesn't need to rediscover it from the activity log:
+- **Don't pull `pynintendoparental` (or `nxapi`, or any AGPL/GPL lib) as a runtime dependency.** Both are AGPL-3.0 and would relicense the entire Hoard codebase. M-D2 keeps every line in `apps/api/src/services/platforms/{itch,epic,nintendo}.ts` written from scratch.
+- **Do mirror their version constants and link the source-of-truth URL in code comments** so the next refresh is a one-file copy job.
+- **Plan for the maintenance tax up-front.** Don't add a new sync integration of this shape without budgeting time for quarterly constant refreshes. If the tax becomes too costly, fall back to manual-add per Hard Rule #6 (which is the FLOOR — every platform falls back to it gracefully).
+
+This is the M-series' sole architectural-shaped decision. M-D1 through M-D13 constrain M-series specifically (they govern shape-of-the-PR-sequence, achievement model, etc.) but the quarterly maintenance tax constrains how *future* platform integrations get designed and operated.
 
 ---
 

@@ -207,7 +207,7 @@ export function SettingsMobile() {
             const rawSyncStatus = detail?.syncStatus;
             const status: PlatConnectStatus = connected
               ? ((rawSyncStatus === 'ok' || !rawSyncStatus) ? 'connected' : rawSyncStatus as PlatConnectStatus)
-              : code === 'NT' ? 'unsupported' : 'available';
+              : 'available';
             const fullName = MOBILE_PLATFORM_NAMES[code] ?? code;
             const gameCount = detail?.gameCount ?? null;
             const lastSyncStr = detail?.lastSyncAt ? relativeTime(detail.lastSyncAt) : null;

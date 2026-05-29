@@ -318,6 +318,19 @@ jest.mock('../services/platforms/epic', () => {
   };
 });
 
+/* ── POST /api/platforms/nintendo/connect + GET auth-url (M3) ── */
+
+jest.mock('../services/platforms/nintendo', () => {
+  const actual = jest.requireActual('../services/platforms/nintendo');
+  return {
+    ...actual,
+    exchangeNintendoSessionTokenCode: jest.fn(),
+    exchangeNintendoAccessToken: jest.fn(),
+    getNintendoAccountUser: jest.fn(),
+    getNintendoUsername: jest.fn(),
+  };
+});
+
 import { exchangeEpicAuthCode as mockedExchangeEpicCode, getEpicUsername as mockedGetEpicUsername, EPIC_LOGIN_URL } from '../services/platforms/epic';
 
 describe('GET /api/platforms/epic/auth-url', () => {
@@ -1354,5 +1367,193 @@ describe('POST /api/games/manual', () => {
       // wishlistedPlatforms is in the UserGameDetail shape too.
       expect(res.body.wishlistedPlatforms).toEqual([]);
     });
+  });
+});
+
+/* ── M3: Nintendo route tests ── */
+
+import {
+  exchangeNintendoSessionTokenCode as mockedExchangeNTCode,
+  exchangeNintendoAccessToken as mockedExchangeNTAccess,
+  getNintendoAccountUser as mockedGetNTAccountUser,
+} from '../services/platforms/nintendo';
+
+describe('GET /api/platforms/nintendo/auth-url', () => {
+  it('returns the Nintendo authorize URL + a fresh PKCE verifier + a state', async () => {
+    const res = await request(app).get('/api/platforms/nintendo/auth-url');
+    expect(res.status).toBe(200);
+    expect(typeof res.body.url).toBe('string');
+    expect(res.body.url).toContain('accounts.nintendo.com/connect/1.0.0/authorize');
+    expect(res.body.url).toContain('client_id=54789befb391a838');
+    expect(typeof res.body.verifier).toBe('string');
+    expect(res.body.verifier.length).toBeGreaterThanOrEqual(43);
+    expect(typeof res.body.state).toBe('string');
+    expect(res.body.state.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it('rotates the verifier + state on every call (each PKCE pair is single-use)', async () => {
+    const a = await request(app).get('/api/platforms/nintendo/auth-url');
+    const b = await request(app).get('/api/platforms/nintendo/auth-url');
+    expect(a.body.verifier).not.toBe(b.body.verifier);
+    expect(a.body.state).not.toBe(b.body.state);
+  });
+});
+
+describe('POST /api/platforms/nintendo/connect', () => {
+  it('returns 400 when both redirectUrl and code are missing', async () => {
+    const res = await request(app).post('/api/platforms/nintendo/connect').send({ verifier: 'V'.repeat(43) });
+    expect(res.status).toBe(400);
+    expect(mockedExchangeNTCode).not.toHaveBeenCalled();
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when verifier is too short (zod min(20))", async () => {
+    const res = await request(app).post('/api/platforms/nintendo/connect').send({ code: 'eyJh.abc.def.20chars', verifier: 'short' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when the input has no extractable session_token_code', async () => {
+    const res = await request(app)
+      .post('/api/platforms/nintendo/connect')
+      .send({ redirectUrl: 'https://example.com/no-fragment', verifier: 'V'.repeat(43) });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/session_token_code/);
+    expect(mockedExchangeNTCode).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when Nintendo rejects the session_token exchange (no DB write)', async () => {
+    (mockedExchangeNTCode as jest.Mock).mockRejectedValue(new Error('Nintendo session_token exchange failed (400)'));
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await request(app)
+      .post('/api/platforms/nintendo/connect')
+      .send({
+        redirectUrl: 'npf54789befb391a838://auth#session_token_code=eyJhbGc.expired.payload&state=ST',
+        verifier: 'V'.repeat(43),
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/single-use|expire|start.*over/i);
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it('returns 500 when the access_token exchange fails after a valid session_token (no DB write)', async () => {
+    (mockedExchangeNTCode as jest.Mock).mockResolvedValue('ST-long-lived');
+    (mockedExchangeNTAccess as jest.Mock).mockRejectedValue(new Error('Nintendo access_token exchange failed (502)'));
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await request(app)
+      .post('/api/platforms/nintendo/connect')
+      .send({
+        redirectUrl: 'npf54789befb391a838://auth#session_token_code=eyJhbGc.valid.payload&state=ST',
+        verifier: 'V'.repeat(43),
+      });
+
+    expect(res.status).toBe(500);
+    expect(prisma.platform.upsert).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it('exchanges, fetches Nintendo Account profile, persists all 4 cred fields + username on success', async () => {
+    (mockedExchangeNTCode as jest.Mock).mockResolvedValue('ST-long-lived');
+    (mockedExchangeNTAccess as jest.Mock).mockResolvedValue({ accessToken: 'AT', idToken: 'IT', expiresIn: 900 });
+    (mockedGetNTAccountUser as jest.Mock).mockResolvedValue({ id: 'NAID-16-HEX', nickname: 'AndreaC' });
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-nt-1' });
+
+    const res = await request(app)
+      .post('/api/platforms/nintendo/connect')
+      .send({
+        redirectUrl: 'npf54789befb391a838://auth#session_token_code=eyJhbGc.fresh.payload&state=ST',
+        verifier: 'V'.repeat(43),
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.platformId).toBe('plat-nt-1');
+
+    expect(mockedExchangeNTCode).toHaveBeenCalledWith('eyJhbGc.fresh.payload', 'V'.repeat(43));
+    expect(prisma.platform.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_code: { userId: 'test-user-id', code: 'NT' } },
+        create: expect.objectContaining({
+          code: 'NT',
+          syncable: true,
+          syncStatus: 'ok',
+          credentials: expect.objectContaining({
+            sessionToken: 'ST-long-lived',
+            accessToken: 'AT',
+            naId: 'NAID-16-HEX',
+            expiresAt: expect.any(String),
+            username: 'AndreaC',
+          }),
+        }),
+      }),
+    );
+
+    // expiresAt should reflect the 60-second safety margin against 900s.
+    const credentials = (prisma.platform.upsert as jest.Mock).mock.calls[0][0].create.credentials;
+    const expiresAt = new Date(credentials.expiresAt as string).getTime();
+    expect(expiresAt).toBeGreaterThan(Date.now() + (900 - 65) * 1000);
+    expect(expiresAt).toBeLessThan(Date.now() + 900 * 1000);
+  });
+
+  it('persists without a username when the Nintendo Account profile has no nickname', async () => {
+    (mockedExchangeNTCode as jest.Mock).mockResolvedValue('ST-long-lived');
+    (mockedExchangeNTAccess as jest.Mock).mockResolvedValue({ accessToken: 'AT', idToken: 'IT', expiresIn: 900 });
+    (mockedGetNTAccountUser as jest.Mock).mockResolvedValue({ id: 'NAID', nickname: undefined });
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-nt-2' });
+
+    const res = await request(app)
+      .post('/api/platforms/nintendo/connect')
+      .send({
+        redirectUrl: 'npf54789befb391a838://auth#session_token_code=eyJhbGc.fresh.nickless&state=ST',
+        verifier: 'V'.repeat(43),
+      });
+
+    expect(res.status).toBe(200);
+    const call = (prisma.platform.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.create.credentials.username).toBeUndefined();
+    expect(call.create.credentials.naId).toBe('NAID');
+  });
+
+  it('accepts a bare session_token_code in the `code` field as an alternative to redirectUrl', async () => {
+    (mockedExchangeNTCode as jest.Mock).mockResolvedValue('ST');
+    (mockedExchangeNTAccess as jest.Mock).mockResolvedValue({ accessToken: 'AT', idToken: 'IT', expiresIn: 900 });
+    (mockedGetNTAccountUser as jest.Mock).mockResolvedValue({ id: 'NAID' });
+    (prisma.platform.upsert as jest.Mock).mockResolvedValue({ id: 'plat-nt-3' });
+
+    const res = await request(app)
+      .post('/api/platforms/nintendo/connect')
+      .send({
+        code: 'eyJhbGciOiJIUzI1NiJ9.payload.signature',
+        verifier: 'V'.repeat(43),
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockedExchangeNTCode).toHaveBeenCalledWith('eyJhbGciOiJIUzI1NiJ9.payload.signature', 'V'.repeat(43));
+  });
+});
+
+/* ── M3: Nintendo /credentials reveal endpoint ── */
+
+describe('GET /api/platforms/nt/credentials', () => {
+  it("returns the naId (and NOT the session_token — never exposed)", async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue({
+      id: 'plat-nt-1',
+      credentials: { sessionToken: 'STsensitive', accessToken: 'AT', naId: 'NAID-revealable', username: 'AndreaC' },
+    });
+
+    const res = await request(app).get('/api/platforms/nt/credentials');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ naId: 'NAID-revealable' });
+    expect(res.body.sessionToken).toBeUndefined();
+    expect(res.body.accessToken).toBeUndefined();
+  });
+
+  it('returns 404 when the Nintendo platform is not connected', async () => {
+    (prisma.platform.findUnique as jest.Mock).mockResolvedValue(null);
+    const res = await request(app).get('/api/platforms/nt/credentials');
+    expect(res.status).toBe(404);
   });
 });
