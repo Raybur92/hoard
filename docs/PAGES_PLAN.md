@@ -26,6 +26,7 @@ The pages Hoard ships and their current status. Pages that recently passed an au
 | Library | `/library`, `/library/:status` | Existing; gaps TBD | Yes |
 | Releases | `/releases`, `/releases/recent` | Existing; gaps TBD (regional dates partly overlap with GameDetail) | Yes |
 | **Events** | `/events` (new) | **Spec from scratch** — top-level peer of Library / Releases per Andrea 2026-05-29 | Yes |
+| **Deals** | `/deals` (new) | **Spec from scratch** — top-level peer; aggregator of storefront discounts + trusted third-party-reseller offers per Andrea 2026-05-29 | Yes |
 | GameDetail | `/game/:id` today; route shape changes in v2 (see OQ-GD-1) | State-monolithic; **biggest gap** | **Yes — drill first** |
 | Settings | `/settings`, `/settings/:section`, `/settings/platforms/:code` | Recently audited (S1–S4 + L1–L4, 2026-05-08) | Skip |
 | Admin | `/admin/*` (5 sub-routes) | Just shipped (A-series A2, 2026-05-29) | Skip |
@@ -69,6 +70,21 @@ Already-shipped or already-rejected items omitted — those are locked. The rema
 - **B-HLTB-1** Reviews filtered per platform (PS5 review experience ≠ PC review experience for the same game). Hoard will define its own review primitive; this is *inspiration* for the per-platform dimension, not a copy-the-UI mandate. *Deferred — slot only.*
 - **B-HLTB-2** Per-style time-to-beat grid (main / extras / completionist) — Hoard already has this via the HLTB scraper.
 - **B-HLTB-3** User-time-vs-community comparison: "your 47h vs community-main 38h vs community-100% 75h" framing on completed games.
+
+### B-Storefront (preorder + price-offer surfaces, added 2026-05-29)
+
+- **B-Storefront-1** Preorder deep-links per platform on State 2 (upcoming-not-owned) GameDetail. Linkable platforms: Steam (`store.steampowered.com/app/{steamAppId}/`), PSN (`store.playstation.com/.../concept/{psnConceptId}`), Xbox (`microsoft.com/.../{slug}/{xboxTitleId}`), GOG (`gog.com/game/{slug}`), Epic (`store.epicgames.com/.../p/{slug}`), Nintendo (`nintendo.com/store/products/{slug}/`). All six stable platform IDs are already stored on `Game` from the M-series sync work; *some* storefronts also need a slug we don't yet capture (Xbox / Epic / Nintendo — see OQ-GD-14).
+- **B-Storefront-2** Current price offers on State 1 (released-not-owned) GameDetail — official-platform discounts + trusted third-party-reseller pricing. Data source most likely IsThereAnyDeal (ITAD) API, which is the canonical games-price aggregator covering all major storefronts + key resellers (CDKeys, GamesPlanet, GMG, Humble, Fanatical, etc.). Same underlying source powers the Deals top-level surface (§8).
+
+### B-News (added 2026-05-29)
+
+- **B-News-1** "Latest news regarding this title" section on State 2 (upcoming-not-owned) GameDetail. Replaces the HLTB block — which is meaningless for unreleased titles because nobody has played them yet. Data source TBD (IGDB has `pulses` + `articles` with limited coverage; ToS-clean alternatives include RSS aggregation from a curated allow-list of game press sites — see OQ-GD-15).
+
+### B-Hoard (Hoard-native identity, added 2026-05-29)
+
+Not benchmarked from a competitor — this is Hoard's own product-identity territory.
+
+- **B-Hoard-1** **Archivist relic** — completing a game (Playing/Backlog/OnHold → Completed transition) creates a permanent visual artifact on the State 4 GameDetail page. The relationship framing per Andrea: a collector with their collection is closer to *sacred* than utilitarian; the example given is a friend who keeps his retro-console collection arranged as an altar. Stylistic inspiration: Warhammer 40k techno-priests sealing a techno-relic. The artifact should be permanent, visible whenever State 4 renders, and should make the act of completion *feel* impactful rather than just a status flip. Concrete shape is open (see OQ-GD-13) — candidates include deterministic ASCII sigils generated from `(igdbId, completedAt, userId)`, "sealed receipt" treatments with the run's stats burned in (playtime, achievements, rating, date), unique color/glyph palettes per game, or animated "consecration" stamps that play once at the transition moment and persist statically afterward. Anchors Hoard's collector-tool identity against the utilitarian-tracker identity Stash/Backloggd occupy.
 
 ---
 
@@ -121,6 +137,12 @@ The current page assumes only the third job exists. The other three either have 
 | No personal-collections membership display | B-Stash-4 | Requires `UserCollection` entity first |
 | No user-vs-community HLTB comparison | B-HLTB-3 | Data already on hand (UserGame total + HltbData community); pure UI work |
 | No "mark uncompleted" path on Completed games | (UX) | Once a game flips to Completed, the user can still status-pick away from it, but the *natural* affordance for "actually, I'm replaying this" is missing |
+| No preorder deep-links on upcoming games | B-Storefront-1 | Stable platform IDs already on `Game` (steamAppId / psnConceptId / xboxTitleId / gogAppId / epicCatalogItemId / nintendoTitleId). Some need a slug we don't capture (OQ-GD-14) |
+| No price offers on released-not-owned games | B-Storefront-2 | New data integration (ITAD API the canonical source); shares pipeline with the Deals top-level surface |
+| HLTB renders on upcoming-not-owned where it's meaningless | (UX) | Nobody has played the game yet; community time data doesn't exist or is bogus. Removed in v2; replaced with **latest news** section (B-News-1) |
+| No latest-news surface for upcoming titles | B-News-1 | Data source TBD; OQ-GD-15 |
+| No wishlist CTA on State 1 (released-not-owned) | (UX) | Today only `[+ add to library]` makes sense for already-released games, but the user may want to wishlist a released game they're not ready to buy/start yet. Add as alternative path |
+| **Completing a game feels like a status flip, not a moment** | B-Hoard-1 | The Playing→Completed transition deserves an *artifact* — permanent, visible whenever State 4 renders. Anchors Hoard's collector identity. Concrete shape open (OQ-GD-13) |
 
 ### 3.4 Target state — 4-state rendering matrix
 
@@ -133,12 +155,16 @@ The page renders the same identity surface (cover / title / genres / videos / sc
 | Description / plot | ✓ | ✓ | ✓ | ✓ |
 | Video carousel | ✓ | ★ | ✓ | ✓ |
 | Screenshot gallery | ✓ | ★ | ✓ | ✓ |
-| **Giant countdown** | — | **★ dominant** | — | — |
+| **Giant countdown (IMDB-style)** | — | **★ dominant** | — | — |
+| **Archivist-relic artifact (B-Hoard-1)** | — | — | — | **★ dominant** |
 | Release date (single line) | ✓ | — | — | — |
 | Release dates per region + platform (expandable) | ✓ | ✓ | — | — |
 | `[+ add to library]` CTA | **★ dominant** | — | — | — |
-| `[+ wishlist]` CTA | — | **★ dominant** | — | — |
+| `[+ wishlist]` CTA (alternative on S1; dominant on S2) | ✓ | **★ dominant** | — | — |
 | Wishlist hype score (B-IGDB-1 derived) | — | ✓ | — | — |
+| **Preorder deep-links per platform (B-Storefront-1)** | — | **★** | — | — |
+| **Current price offers across storefronts (B-Storefront-2)** | **★** | — | — | — |
+| **Latest news section (B-News-1)** | — | ★ | — | — |
 | PROGRESS receipt block (per-platform playtime + HLTB grid + achievements) | — | — | ✓ | ✓ |
 | Status picker | — | — | **★ dominant** | ✓ (with `[mark uncompleted / replay]`) |
 | Sub-status (Playing → infinite / paused) | — | — | ★ | — |
@@ -146,7 +172,7 @@ The page renders the same identity surface (cover / title / genres / videos / sc
 | Times-beaten counter | — | — | ✓ | ★ |
 | Score / rating UI | — | — | ✓ | **★ dominant** |
 | Notes editor | — | — | ✓ | ✓ |
-| HLTB community grid | ✓ | ✓ | ✓ | ✓ |
+| HLTB community grid | ✓ | — *(meaningless pre-release)* | ✓ | ✓ |
 | HLTB user-vs-community comparison | — | — | ✓ | ★ |
 | Play date range | — | — | ✓ | ★ |
 | Trophies / achievements | — | — | ✓ | ✓ |
@@ -160,32 +186,67 @@ The page renders the same identity surface (cover / title / genres / videos / sc
 
 Legend: ✓ = present · ★ = emphasised / visually dominant · — = absent.
 
+**Per-state visual hierarchy summary** (top-to-bottom scan):
+
+- **S1 (released, not owned)** — cover + meta → `[+ add to library]` (dominant) + `[+ wishlist]` (alt) → current price offers across storefronts → screenshots + videos → description → HLTB → lateral nav / events back-links.
+- **S2 (upcoming, not owned)** — cover + meta → **giant countdown** + `[+ wishlist]` (dominant) → release-dates-per-region-platform expandable → preorder deep-links → screenshots + videos → latest news → description → lateral nav / events back-links. *No HLTB — nobody has played it yet.*
+- **S3 (owned, in-progress)** — cover + meta → **status picker** (dominant) + sub-status → PROGRESS receipt block (playtime + HLTB + achievements + user-vs-community pace) → notes editor → rating UI → times-beaten → manual-playtime edit (non-synced rows) → share receipt → lateral nav.
+- **S4 (owned, completed)** — cover + meta → **archivist-relic artifact** (dominant, permanent) → score / rating (dominant) + sub-status (main / +side / 100%) → PROGRESS receipt block with user-vs-community pace highlighted → times-beaten + play-date-range → notes → share receipt → lateral nav. The mood differs from S3: where S3 is *active workspace*, S4 is *archived monument*.
+
 ### 3.5 Open questions
 
-- **OQ-GD-1 — Route shape.** `/game/:igdbId` everywhere (IGDB ID as the addressable key, UserGame lookup happens server-side based on the auth context) vs. dual routes `/game/:userGameId` + `/game/by-igdb/:igdbId`? The single-route variant is cleaner from a UX standpoint (one URL shape, share-links work for any user); the dual variant preserves the existing cuid-based deep-links from search and lists. Recommendation: migrate to `/game/:igdbId` with a transition window where the cuid form 301s to the IGDB form.
-- **OQ-GD-2 — Sub-status data model.** New column `UserGame.subStatus: SubStatus?` (enum union of all variants across states), or a `subStatus` JSON column with status-gated keys, or a related-row table (`UserGameSubStatus`) for extensibility? Recommendation: enum column with a runtime guard that only allows values matching the current `status`.
-- **OQ-GD-3 — Times-beaten schema.** `UserGame.completionsCount: Int?` column (simple, decided here) vs. derived from a future Session log (richer, but Session is CM2-deferred)? Recommendation: ship the column now; refactor when Session lands. The column is cheap and the integer count survives a future migration to derived data.
-- **OQ-GD-4 — Rating shape.** `UserGame.rating: Int?` (1–10) — single dimension matches Stash. Question is the input UI: stepper, slider, click-to-fill star row, or numeric input? Recommendation: 1–10 click-to-fill grid (10 boxes) with hover-preview; matches the terminal aesthetic better than stars or slider.
-- **OQ-GD-5 — HLTB user-vs-community comparison UI.** Where does "your 47h vs main 38h" actually render? Inside the existing PROGRESS receipt block as an extra row, or as a separate `// pace` block? Recommendation: extra row inside PROGRESS — "pace: your 47h vs main 38h (+24%)". Single line, scannable.
-- **OQ-GD-6 — Cross-state transition behaviour.** When a user clicks `[+ add to library]` on State 1, do we re-render the page in place as State 3, or navigate to the newly-created UserGame URL? Recommendation: re-render in place — the IGDB ID in the URL didn't change, only the underlying state did.
-- **OQ-GD-7 — "Shown at events" cross-link.** Requires Events surface (B-IGDB-1) to exist first. Defer the cross-link to whichever workstream ships Events. Page reserves the slot but renders empty until Events lands.
-- **OQ-GD-8 — Reference-data lateral nav (developer / publisher / series).** Requires B-Stash-5 reference entities. Big schema lift. Decision: do we ship GameDetail v2 with placeholder text "lateral nav: developer / publisher / series — coming with the reference-data workstream" or wait for B-Stash-5 to ship first? Recommendation: ship GameDetail v2 first with the placeholder; reference-data is a substantial separate workstream and shouldn't gate the 4-state rebuild.
-- **OQ-GD-9 — Personal-Collections membership chip.** Requires B-Stash-4 to ship first. Same defer-with-placeholder treatment as OQ-GD-8.
-- **OQ-GD-10 — Mobile shape.** The desktop matrix above is dense. Mobile needs to retain the 4-state distinction but compress the dense States 3+4 receipt block into a scrollable single column. Worth a separate mockup pass before implementation. (Mobile parity has been a hard requirement since Phase 8.)
-- **OQ-GD-11 — State boundary: "completed" vs "in-progress" for sub-status purposes.** If a user has `status: Completed` but `completionsCount: 0` (just marked it as completed without specifying 100% / +side / main), do we treat that as State 4 with sub-status unset, or downgrade to State 3 until sub-status is picked? Recommendation: State 4 always for `status: Completed`; sub-status renders as "not specified yet" with a prompt.
-- **OQ-GD-12 — Wishlist relationship to State 2.** A game with `status: Wishlist` is "in collection" technically (CM13 + the wishlist-as-library work created the UserGame), but the user-job is closer to State 2 than State 3. Do we render Wishlist-status owned games as State 2 (dominant countdown, `[+ wishlist]` becomes `[× un-wishlist]`) or State 3 (status picker, library citizen)? Recommendation: State 2 *if* the release date is in the future, State 3 *if* the release date is past (i.e., already-released wishlist items are library decisions, not anticipation tracking).
+**LOCKED** (Andrea 2026-05-29):
+
+- **OQ-GD-1 — Route shape.** ✅ **Migrate to `/game/:igdbId`** with a transition window where the cuid form 301s to the IGDB form. Single URL shape; share-links work for any user; aligns with the State-1/State-2 architectural need (those states have no UserGame to address by cuid). Implementation note for GD-PR1: keep the existing `/game/:userGameId` route as a backward-compat 301 redirect during the transition window so external links don't break.
+- **OQ-GD-2 — Sub-status data model.** ✅ **Enum column with runtime guard.** `UserGame.subStatus: SubStatus?` (enum union of all variants across states); a runtime check at write-time rejects values that don't match the current `status` so we can't end up with e.g. `status: Playing + subStatus: '100%'`.
+- **OQ-GD-3 — Times-beaten schema.** ✅ **Ship `UserGame.completionsCount: Int?` column now**, refactor to derived-from-Session when CM2 Session entity lands. Cheap, survives the future migration.
+- **OQ-GD-4 — Rating shape.** ✅ **`UserGame.rating: Int?` (1–10)**, UI = 10-box click-to-fill grid with hover preview. Matches the terminal aesthetic better than stars or slider.
+- **OQ-GD-5 — HLTB user-vs-community comparison UI.** ✅ **Extra row inside PROGRESS receipt block.** Format: `pace: your 47h vs main 38h (+24%)`. Single line, scannable.
+- **OQ-GD-6 — Cross-state transition behaviour.** ✅ **Re-render in place.** Adding a game to library on S1 transitions to S3 without navigating away — the IGDB ID in the URL didn't change.
+- **OQ-GD-7 — "Shown at events" cross-link.** ✅ **Placeholder slot in GameDetail v2; Events workstream fills it.**
+- **OQ-GD-8 — Reference-data lateral nav (developer / publisher / series).** ✅ **Ship GameDetail v2 first with placeholders**; reference-data workstream fills them later.
+- **OQ-GD-9 — Personal-Collections membership chip.** **Same defer-with-placeholder treatment as OQ-GD-8** — ✅ confirmed by Andrea after clarification 2026-05-29. **Clarification of what this means:** B-Stash-4 introduces *personal Collections* — user-defined groupings of games orthogonal to status (e.g. "Cyberpunk vault", "Pokemon completionist run", "Dad's PS2 favorites"). A game can belong to zero, one, or many Collections. When that ships, GameDetail should show *which Collections this game belongs to* as small chips below the cover/title block — e.g. `[in: Cyberpunk vault] [in: replay queue]` — and the user can `[+ add to collection]` from there. GameDetail v2 reserves the slot but renders empty until the Collections workstream lands.
+- **OQ-GD-10 — Mobile shape.** ✅ **Separate mobile mockup pass** before implementation. The desktop matrix is dense; mobile compresses S3+S4 into a scrollable single column while retaining the 4-state distinction.
+- **OQ-GD-11 — State boundary: "completed" vs "in-progress" for sub-status purposes.** ✅ **State 4 always for `status: Completed`**; sub-status renders as "not specified yet" with a prompt.
+- **OQ-GD-12 — Wishlist relationship to State 2.** ✅ **Switch on release date.** Wishlist-status game with release date in the future → render as State 2 (anticipation framing, dominant countdown). Wishlist-status game with release date in the past or null → render as State 3 (library citizen — gets reviews + other library treatments per Andrea's framing). The CM12 per-platform wishlist remains orthogonal to this state switch.
+
+**OPEN** (added 2026-05-29 alongside the new gaps):
+
+- **OQ-GD-13 — Archivist-relic visual treatment.** What shape does B-Hoard-1 actually take? The intent is clear (permanent artifact, sacred-collector framing, Warhammer-techno-priest aesthetic inspiration); the *concrete render* is open. Candidate directions:
+    1. **Deterministic ASCII sigil** generated from `(igdbId, completedAt, userId)` — unique per (game × user × completion-instance). Pure terminal aesthetic, no asset dependencies.
+    2. **Sealed-receipt treatment** — the completion stats (date, total playtime, achievements earned, rating, sub-status) burned into a receipt with a `[SEALED ON YYYY-MM-DD]` stamp and scanline / barcode treatment.
+    3. **Unique color/glyph palette** — game-derived palette that re-skins the State 4 page in a way no other page renders.
+    4. **Animated "consecration" stamp** that plays once at the Playing→Completed transition moment and persists statically afterward (combines #1 or #2 with a moment-of-impact animation).
+    Probably worth a dedicated design exploration session — write up sketches, mock 2-3 candidate directions, pick. Standalone deliverable, ahead of GameDetail v2 implementation.
+- **OQ-GD-14 — Storefront slugs.** B-Storefront-1 deep-links work directly for storefronts where the URL is fully derivable from a stable ID we already store (Steam needs only `steamAppId`; GOG can use `gogAppId` though a slug is friendlier). For Xbox / Epic / Nintendo / PSN the canonical store URL also needs a slug we don't currently capture. Three options:
+    1. **Always-derivable URLs only** — show Steam + GOG preorder links; omit the rest. Simple, ships fast, but misses 4/6 platforms.
+    2. **Capture slugs during sync** — extend each platform sync to persist a `storefrontSlug` per platform on the `Game` row. Schema lift; happens incrementally as users sync.
+    3. **Use ID-only fallback URLs** — Xbox's `microsoft.com/.../{titleId}` and Nintendo's `nintendo.com/store/products/{titleId}` etc. *sometimes* redirect; PSN's `concept/{conceptId}` does. Not all stable, browser may show 404 for some IDs.
+    Recommendation: ship #1 in GD-PR2 (Steam + GOG + PSN where the concept-URL works), file #2 as a Storefront-polish follow-up workstream so each sync writer adds slug capture incrementally.
+- **OQ-GD-15 — Latest-news data source.** Where does B-News-1 actually pull data from? Candidates:
+    1. **IGDB `pulses` + `articles`** — already integrated, low effort, but coverage is *thin*. Most high-profile titles have a handful of articles; B-tier titles have nothing.
+    2. **Curated RSS allow-list** — Hoard subscribes to a curated set of game-press RSS feeds (Eurogamer, RPS, PC Gamer, GamesIndustry, etc.), filters by title match. ToS-clean if we link out rather than rehost; quality depends on the allow-list curation.
+    3. **No news feature on day-one of GameDetail v2** — render the section as a placeholder ("// news feed coming soon") and defer the data integration to a separate workstream. Reduces GD-PR2 scope.
+    Recommendation: ship #3 with the placeholder; pick #1 vs #2 in a separate session once we see how often the news section is actually wanted on real games. The placeholder gives us the slot without forcing the data-quality question.
+- **OQ-GD-16 — ITAD vs DIY for price-offer + Deals data.** B-Storefront-2 (price offers on S1) and the Deals top-level surface (§8) both need real-time price aggregation across storefronts + third-party resellers. ITAD (`isthereanydeal.com`) is the canonical API for this — free tier exists, covers Steam / GOG / Epic / Humble / Fanatical / GMG / GamesPlanet / CDKeys / and most major sources. Console storefronts (PSN / Xbox / Nintendo) are weaker on ITAD; their pricing changes less often anyway. DIY scraping would be substantial engineering + ToS-risky. Recommendation: **ITAD**, ship the Deals page + S1 price section in the same workstream that adds the ITAD client. Pre-deploy gotcha: ITAD requires an API key from their dashboard; env-var pattern same as IGDB/Steam.
 
 ### 3.6 Sequencing notes
 
-GameDetail v2 is a multi-PR workstream once decisions land. Likely shape:
+GameDetail v2 is a multi-PR workstream once decisions land. Likely shape after the 2026-05-29 expansion:
 
-- **GD-PR1** Route migration to `/game/:igdbId` + state-aware shell rendering + S1 (released-not-owned) basics. Establishes the architecture.
-- **GD-PR2** S2 (upcoming-not-owned) with HeroCountdown promoted to dominant page element + region/platform date drilldown + IGDB videos + screenshots gallery.
-- **GD-PR3** S3 enrichments — sub-status data model, rating UI, HLTB user-vs-community row, manual-playtime edit affordance.
-- **GD-PR4** S4 enrichments — Completed sub-statuses, times-beaten counter, play-date-range, share-receipt promotion.
-- **GD-PR5** Lateral nav placeholders + collection membership placeholders + events back-link placeholder (gated on those workstreams).
+- **GD-PR1** Route migration to `/game/:igdbId` (with cuid → IGDB 301) + state-aware shell rendering + S1 (released-not-owned) basics: cover, meta, `[+ add to library]` (dominant) + `[+ wishlist]` (alt), description, lateral-nav + Collections + events placeholders. Establishes the architecture.
+- **GD-PR2** S2 (upcoming-not-owned) with HeroCountdown promoted to dominant page element + region/platform date drilldown + IGDB videos + screenshots gallery + preorder deep-links (Steam + GOG + PSN; rest deferred per OQ-GD-14) + latest-news placeholder. HLTB row *removed* from S2 per spec.
+- **GD-PR3** S3 enrichments — sub-status data model, rating UI (1–10 click-to-fill), HLTB user-vs-community row, manual-playtime edit affordance (non-synced rows only per O14 lock).
+- **GD-PR4** S4 enrichments — Completed sub-statuses, times-beaten counter, play-date-range, share-receipt promotion, **archivist-relic placeholder slot** (visual treatment per OQ-GD-13 lands in a separate design-exploration deliverable that GD-PR4 consumes).
+- **GD-PR5** Polish + dependency-fill — once Events / Collections / reference-data workstreams ship their data, GD-PR5 fills the placeholders in place.
 
-Open whether B-Stash-5 (reference entities) and B-IGDB-1 (Events) should ship before or after GD-PR1–4. Recommendation per OQ-GD-8: ship GameDetail v2 first with placeholders; the reference-data + Events workstreams can fill those slots in.
+Standalone work that runs alongside but is not gated by GD-PR1–5:
+- **Archivist-relic design exploration** (OQ-GD-13) — 2–3 candidate visual directions mocked + picked. Deliverable consumed by GD-PR4.
+- **ITAD-integration workstream** (OQ-GD-16) — adds the price-aggregation client; ships the Deals top-level page (§8) and unblocks the S1 price-offers row.
+- **Latest-news data source** (OQ-GD-15) — picks IGDB pulses vs. RSS allow-list; ships the data behind the GD-PR2 placeholder.
+- **Storefront-slug capture** (OQ-GD-14) — extends each platform sync to persist `storefrontSlug` on `Game`; unblocks the full preorder coverage on S2.
+
+Order between GD-PRs and the standalone workstreams is open — Andrea drives prioritisation. The dependency graph: GD-PR4 needs the archivist design done; everything else can sequence in any order.
 
 ---
 
@@ -229,6 +290,42 @@ Spec from scratch:
 *To be filled in next session.*
 
 Likely focus areas: less benchmark pressure (Stash has no Dashboard analogue, IMDB/HLTB don't ship a personal-dashboard view). More about polish + alignment with the other pages.
+
+---
+
+## 8. Deals (new top-level surface)
+
+*Stub — to be filled in next session.*
+
+### 8.1 Purpose (working hypothesis)
+
+Hoard already knows what platforms each user owns games on and what they wishlist. The Deals page leverages that to surface **right-now buying opportunities** the user might not otherwise see: official-platform sales, third-party-reseller discounts on already-wishlisted titles, and aggregator-style "best price across all storefronts" for any game in the library or wishlist.
+
+Two natural user jobs:
+1. **"Is anything on my wishlist on sale right now?"** — primary surface filtered to wishlisted titles, sorted by discount % or absolute savings.
+2. **"What's broadly on sale that I might want?"** — secondary surface, broader feed of high-discount titles that match the user's owned-platforms set.
+
+### 8.2 Spec direction (TBD)
+
+Data source: **IsThereAnyDeal (ITAD) API** is the locked candidate per OQ-GD-16 (also powers B-Storefront-2 price-offers on GameDetail S1). Same client, two surfaces.
+
+Likely sections on `/deals`:
+- **wishlist deals (★ dominant)** — every wishlist game currently discounted, sorted by % off
+- **library completion** — sequel/series-mate games on sale where the user already owns earlier entries (depends on B-Stash-5 reference entities for series data)
+- **platform-scoped feed** — high-discount titles on the user's owned platforms, excluding already-owned
+
+Out of scope (to flag, not build):
+- Cross-region price comparison (Steam US vs Steam EU etc. — ToS-grey)
+- Affiliate-link revenue routing — Hoard is personal-tool, not a monetisation surface
+- Price-drop alerts as push notifications (could come later as a notifications-channel workstream; out of scope for the page itself)
+
+### 8.3 Open questions (TBD)
+
+To be filled in the Deals drill session. Pre-seeded:
+- OQ-DEALS-1: ITAD API key acquisition + env-var setup
+- OQ-DEALS-2: Refresh cadence — every page-load is wasteful; nightly cron vs. on-demand-with-stale-cache?
+- OQ-DEALS-3: Console storefront coverage gap (ITAD is weak on PSN/Xbox/Nintendo pricing) — accept as-is or supplement?
+- OQ-DEALS-4: Mobile shape — Deals is a list-heavy page; mobile compression strategy
 
 ---
 
