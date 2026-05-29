@@ -275,13 +275,177 @@ Likely focus areas:
 
 ## 6. Events (new top-level surface)
 
-*To be filled in next session.*
+### 6.1 Purpose
 
-Spec from scratch:
-- IGDB `events` + `event_games` integration
-- List view (`/events`) — past + upcoming events, chronological
-- Detail view (`/events/:slug`) — cover + description + dates + grid of games announced/shown
-- Sidebar nav peer of Library / Releases / Settings
+Events is the surface that turns IGDB's per-showcase data into a discovery instrument for *what was announced and where*. The shape rhymes with GameDetail's state-pair split — there's a clear difference between an event you missed (retrospective: "what did they show?") and an event you're anticipating (prospective: "when does it air, where can I watch?").
+
+User jobs:
+1. **"I missed [State of Play / Direct / Showcase] — what was announced?"** (retrospective, the primary job per Andrea's framing)
+2. **"What's coming up?"** — browse upcoming events to know when to tune in
+3. **"Is anything happening right now?"** — live-event awareness
+4. **"What game came out of which event?"** — trail-tracing from games back to their reveal moment
+5. **Discovery loop** — drilling from event → game → wishlist, then back to the event's other games
+
+The page is net-new. No equivalent surface exists in Hoard today.
+
+### 6.2 Current state
+
+*Does not exist.* Closest adjacency in Hoard's current surface set:
+- Releases page surfaces upcoming game release dates but not the *announcement provenance* (what showcase a game was revealed at)
+- GameDetail v2 reserves an "Shown at events" cross-link slot (OQ-GD-7), gated on this page existing
+- Sidebar nav has no Events entry yet
+
+### 6.3 Gaps vs benchmark
+
+| Gap | Sources | Notes |
+|---|---|---|
+| No Events page at all | B-IGDB-1 | The entire surface — list view + detail view + sync pipeline |
+| No game ↔ event association data | B-IGDB-1 | New schema: `Event` table + `EventGame` join + IGDB sync. The IGDB `events` endpoint returns a `games` field — direct join data, no inference needed |
+| No "you missed it" surfacing | B-IGDB-1, B-IMDB-1 (countdown adjacency) | Events that aired since the user's last visit could be highlighted on Dashboard. Adjacent to the Dashboard analysis (§7) |
+| No live-stream embedding when an event is in progress | B-IGDB-1 | IGDB events carry a `live_stream_url` field on some entries; YouTube/Twitch embeds during the airing window |
+| No back-link from GameDetail to events | B-IGDB-2 | GameDetail v2 placeholder slot exists (OQ-GD-7); requires Event data to render meaningfully |
+
+### 6.4 Target state — two views, two moods
+
+The page renders as a *pair of views* with two clear time-axis states:
+
+| View | URL | Time-axis state | Mood |
+|---|---|---|---|
+| List | `/events` | mixes upcoming + past, sectioned | scan-and-browse |
+| Detail (upcoming) | `/events/:slug` (start_time > now) | prospective | anticipation — countdown dominant |
+| Detail (past) | `/events/:slug` (end_time < now) | retrospective | archive — game grid dominant |
+| Detail (live) | `/events/:slug` (start_time ≤ now ≤ end_time) | in-progress | live banner + stream embed dominant |
+
+**List view (`/events`) element shape:**
+
+```
+// EVENTS · 14 upcoming · 247 past
+┌──────────────────────────────────────────────────┐
+│ // upcoming                                       │
+│   ▣ Summer Game Fest 2026     · 12d · Geoff K…    │
+│   ▣ Nintendo Direct           · 21d · Nintendo    │
+│   ▣ Xbox Showcase 2026        · 26d · Microsoft   │
+│   ▣ State of Play             · TBA · Sony        │
+│                                                   │
+│ // recent · last 30 days                         │
+│   ▣ The Game Awards 2025      · 18 games · 14d ago│
+│   ▣ Wholesome Direct 2025     · 32 games · 22d ago│
+│                                                   │
+│ // archive · 2025                                 │
+│   ▣ ...                                           │
+└──────────────────────────────────────────────────┘
+```
+
+Filter chips: `[ upcoming ] [ recent ] [ past ] [ live now ]` + network filter (see OQ-EV-6).
+
+**Detail view (`/events/:slug`) element matrix:**
+
+| Element | Upcoming | Live | Past |
+|---|---|---|---|
+| Event logo / cover | ✓ | ✓ | ✓ |
+| Name + network + time-zone-aware date | ✓ | ✓ | ✓ |
+| **Giant countdown** | **★ dominant** | — | — |
+| **Live banner + stream embed** | — | **★ dominant** | — |
+| **Game grid (announced/shown)** | ✓ (planned reveals if data is available) | ★ (filling in real-time if IGDB updates during stream) | **★ dominant** |
+| Description | ✓ | ✓ | ✓ |
+| `[+ remind me]` / `[+ add to calendar]` | ★ | — | — |
+| Video recap embed | — | — | ★ |
+| Watch-now stream link (deep-link out) | ✓ | ★ (also embeds) | — |
+| Game-grid filter: my-platforms / wishlisted / all | — | ✓ | ✓ |
+| Per-game card: cover + title + announcement-type chip (announced / shown / demo-released / released) | — *(if data exists)* | ✓ | ✓ |
+| Total game count + "X of these are on your wishlist" personalisation | — | ✓ | ✓ |
+
+Legend: ✓ = present · ★ = emphasised / visually dominant · — = absent.
+
+Cards in the game grid each link to GameDetail (which handles States 1/2/3/4 internally), closing the discovery loop. The "back to event" link on those GameDetail pages is OQ-GD-7's placeholder slot.
+
+### 6.5 Schema sketch
+
+New Prisma models. Shape illustrative — exact field names + types lock during EV-PR1 planning.
+
+```prisma
+model Event {
+  id            String   @id @default(cuid())
+  igdbId        Int      @unique           // IGDB event ID — stable
+  slug          String   @unique           // e.g. "state-of-play-2026-04"
+  name          String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime?
+  liveStreamUrl String?                    // YouTube/Twitch when IGDB has it
+  timeZone      String?
+  logoUrl       String?
+  networks      Json?                      // [{name, type, url}, ...] from IGDB
+  videos        Json?                      // [{youtubeId, name}, ...] recap clips
+  games         EventGame[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([startTime])
+  @@index([slug])
+}
+
+model EventGame {
+  id               String @id @default(cuid())
+  eventId          String
+  gameId           String                  // FK to existing Game
+  announcementType String?                 // "announced" / "shown" / "released" / null
+  event            Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  game             Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  @@unique([eventId, gameId])
+  @@index([gameId])                         // "this game was at these events" lookup
+}
+```
+
+Existing `Game` model gains a reverse relation: `events EventGame[]`.
+
+The `EventGame.announcementType` field is null-default because IGDB doesn't strongly type the relationship — some events have it inferable from context, others don't. Worth ~30 lines of derivation logic at sync time if patterns are extractable from the IGDB data; safe to ship as always-null in EV-PR1 and enrich in EV-PR3.
+
+### 6.6 Open questions
+
+- **OQ-EV-1 — URL key.** Use IGDB's `slug` as the URL key (`/events/state-of-play-2026-04`) for shareability + memorability vs. opaque IGDB ID? **Recommendation: slug.** Cleaner share-links, easier debugging. Server resolves slug → IGDB ID → DB row.
+- **OQ-EV-2 — Sync cadence.** IGDB events shift in two ways: new events get added, past events get their game associations enriched (community curation lags the actual showcase). Different parts of the data have different staleness profiles:
+    - Upcoming events list — refresh hourly (cron)
+    - Past event detail pages — refresh on-demand with 24h stale cache
+    - Live event detail page — refresh every 5 min during start_time..end_time window
+    Probably implement as a single nightly full sync + an hourly-during-business-hours light sync, then on-demand refresh per detail page. Tunable per event state.
+- **OQ-EV-3 — Dashboard "you missed" prompt.** Should Dashboard surface "X events aired since you last visited, with N games newly announced from your wishlist platforms"? **Recommendation: yes, but in the Dashboard drill session not the Events session.** Treat it as a Dashboard consumer of Events data, not a sub-feature of Events.
+- **OQ-EV-4 — IGDB game-association completeness.** Some events have full game lists; others have nothing or a handful. Three options for sparse events:
+    1. Show what we have + a "// game list is community-curated · X games linked so far" disclaimer
+    2. Hide events with < N (e.g. 5) linked games entirely
+    3. Show all events but sort sparse-data ones lower in the list
+    **Recommendation: #1.** Even a sparse list is useful (especially right after the event airs, before community catches up); the disclaimer manages expectations honestly.
+- **OQ-EV-5 — Live stream embedding.** When an event is live (`start_time ≤ now ≤ end_time` AND `liveStreamUrl` set), embed the stream inline as the dominant element? CSP needs `frame-src https://www.youtube.com https://player.twitch.tv` exception. **Recommendation: yes**, with a "// streaming embedded — click to open in new tab if it doesn't play" fallback link.
+- **OQ-EV-6 — Filter taxonomy.** Network filters (Nintendo / Sony / Xbox / Indie / Industry) — IGDB has `event_networks` but it's a free-form metadata field, not a simple enum. Two paths:
+    1. Derive a small curated set (Sony / Nintendo / Xbox / Indie / Other) from network metadata heuristics during sync — robust but writes opinion into the data
+    2. No network filter; rely on naming patterns + search instead — simpler
+    **Recommendation: #2 for EV-PR1.** Add #1 in EV-PR2 only if the unfiltered list is actually painful at our event-count scale.
+- **OQ-EV-7 — Past-events archive depth.** Show all past events ever, or limit? IGDB has events going back ~10+ years. Cheap to store; arguably useful for trail-tracing ("which Direct first showed Breath of the Wild?"). **Recommendation: store all, limit list-view default to last 24 months; deeper years accessible via filter or year-jump.**
+- **OQ-EV-8 — Cross-link from `Game` to its events.** The `Game.events` reverse relation makes this a trivial query. GameDetail v2 OQ-GD-7's placeholder slot consumes it. **Sequencing decision: GameDetail v2 ships the placeholder; Events ships the data; the cross-link goes live when both are deployed.** No coordination beyond shipping order.
+- **OQ-EV-9 — Mobile shape.** List view is naturally mobile-friendly (vertical list of cards). Detail view's *game grid* is the dense bit — on mobile compress to 2-column grid or vertical list with smaller covers. Worth a mockup pass during EV-PR4.
+- **OQ-EV-10 — `[+ remind me]` and calendar export.** For upcoming events, a "remind me" CTA could either:
+    1. Add an in-app notification (deferred — no notifications channel exists yet; would need to ship that infra first)
+    2. Generate an `.ics` calendar file the user downloads + imports
+    3. Both
+    **Recommendation: #2 for EV-PR1** (cheap, no infra dependency). Add #1 when a notifications-channel workstream lands.
+
+### 6.7 Sequencing notes
+
+Events ships as its own workstream — call it EV-series:
+
+- **EV-PR1 — Foundation.** Schema (`Event` + `EventGame` + Game reverse relation), IGDB sync service (`apps/api/src/services/events.ts`), sync route (`POST /api/admin/events/sync` for manual trigger + cron entry), list view `/events`, detail view `/events/:slug`, sidebar nav integration. **Smallest shippable version** — basic list + detail, no filtering beyond upcoming/past sections, no live embedding, no "you missed" Dashboard prompt.
+- **EV-PR2 — Filter + search + grouping.** Filter chips, search by name, year-jump in past archive, game-grid filter (my-platforms / wishlisted / all).
+- **EV-PR3 — Live + Dashboard prompt + announcement-type derivation.** Live-stream embedding, Dashboard "you missed" widget, `EventGame.announcementType` derivation logic at sync time, GameDetail back-link wiring (closes the OQ-GD-7 placeholder).
+- **EV-PR4 — Polish.** Mobile layout pass, axe-core a11y verification, `[+ remind me]` `.ics` export.
+
+The standalone dependency: this workstream unblocks GD-PR5's "Shown at events" placeholder slot on GameDetail v2. GD-PR1–4 can ship without Events; the back-link slot stays placeholder until both EV-PR3 + GD-PR5 deploy.
+
+Net-new infrastructure considerations:
+- New IGDB endpoint integration (`events` + nested `games` query)
+- New cron job (cadence per OQ-EV-2)
+- New schema (2 tables + 1 reverse relation)
+- CSP exception for YouTube + Twitch embedding (lands with OQ-EV-5)
+- ITAD-style "let cron own the freshness; render from DB" pattern reused
 
 ---
 
