@@ -150,10 +150,11 @@ describe('computeExpiresAt', () => {
 });
 
 describe('ensureFreshNintendoCredentials', () => {
-  it('returns the same object when the access token is still valid (identity equality)', async () => {
+  it('returns the same object when both tokens are valid (identity equality)', async () => {
     const creds = {
       sessionToken: 'ST',
       accessToken: 'AT',
+      idToken: 'IT',
       naId: 'NAID',
       expiresAt: new Date(Date.now() + 600 * 1000).toISOString(),
     };
@@ -162,19 +163,39 @@ describe('ensureFreshNintendoCredentials', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('refreshes only the access token; session_token + naId are preserved', async () => {
+  it('refreshes both access_token + id_token; session_token + naId preserved', async () => {
     (global.fetch as jest.Mock).mockResolvedValue(ok({ access_token: 'AT-2', id_token: 'IT-2', expires_in: 900 }));
     const creds = {
       sessionToken: 'ST',
       accessToken: 'AT-1',
+      idToken: 'IT-1',
       naId: 'NAID',
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     };
     const fresh = await ensureFreshNintendoCredentials(creds);
     expect(fresh).not.toBe(creds);
     expect(fresh.accessToken).toBe('AT-2');
+    expect(fresh.idToken).toBe('IT-2');
     expect(fresh.sessionToken).toBe('ST');
     expect(fresh.naId).toBe('NAID');
+  });
+
+  it('force-refreshes when idToken is missing (legacy-row migration path)', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(ok({ access_token: 'AT-2', id_token: 'IT-fresh', expires_in: 900 }));
+    // Legacy row: accessToken is still within its expiry window, but no
+    // idToken was persisted by the pre-2026-05-29 connect code. Must
+    // refresh anyway so subsequent Moon calls have an idToken to send.
+    const creds = {
+      sessionToken: 'ST',
+      accessToken: 'AT-legacy',
+      idToken: '',
+      naId: 'NAID',
+      expiresAt: new Date(Date.now() + 600 * 1000).toISOString(),
+    };
+    const fresh = await ensureFreshNintendoCredentials(creds);
+    expect(fresh).not.toBe(creds);
+    expect(fresh.idToken).toBe('IT-fresh');
+    expect(fresh.accessToken).toBe('AT-2');
   });
 });
 
@@ -274,6 +295,7 @@ describe('syncNintendoLibrary', () => {
   const creds = {
     sessionToken: 'ST',
     accessToken: 'AT',
+    idToken: 'IT',
     naId: 'NAID',
     expiresAt: new Date(Date.now() + 600 * 1000).toISOString(),
   };
@@ -346,8 +368,8 @@ describe('syncNintendoLibrary', () => {
     errSpy.mockRestore();
   });
 
-  it('throws when access token is missing (defensive guard)', async () => {
-    await expect(syncNintendoLibrary({ ...creds, accessToken: '' })).rejects.toThrow(/access token missing/);
+  it('throws when id token is missing (defensive guard — Moon API needs idToken, not accessToken)', async () => {
+    await expect(syncNintendoLibrary({ ...creds, idToken: '' })).rejects.toThrow(/id token missing/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 

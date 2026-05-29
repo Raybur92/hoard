@@ -400,14 +400,20 @@ router.post('/platforms/:code/sync', requireUser, requireActive, async (req: Req
         // connect time and persisted alongside credentials so we
         // don't re-fetch the Nintendo Account user on every sync.
         const creds = platform.credentials as
-          | { sessionToken?: string; accessToken?: string; naId?: string; expiresAt?: string }
+          | { sessionToken?: string; accessToken?: string; idToken?: string; naId?: string; expiresAt?: string }
           | null;
         if (!creds?.sessionToken || !creds?.accessToken || !creds?.naId || !creds?.expiresAt) {
           throw new Error('Nintendo credentials missing');
         }
+        // idToken is optional on the read side — legacy rows persisted by
+        // the pre-2026-05-29 connect code only stored accessToken. Pass an
+        // empty string into ensureFreshNintendoCredentials and let the
+        // missing-idToken refresh trigger pull a fresh pair on first sync
+        // after deploy.
         const fresh = await ensureFreshNintendoCredentials({
           sessionToken: creds.sessionToken,
           accessToken: creds.accessToken,
+          idToken: creds.idToken ?? '',
           naId: creds.naId,
           expiresAt: creds.expiresAt,
         });
@@ -1036,6 +1042,11 @@ router.post('/platforms/nintendo/connect', requireUser, requireActive, async (re
   const credentials = {
     sessionToken,
     accessToken: accessTokenData.accessToken,
+    // The id_token is what every Moon API call uses as its bearer
+    // credential — NOT the access_token (which is for the NA-account
+    // API only). Persist both; ensureFreshNintendoCredentials refreshes
+    // them together. See nintendo.ts moonHeaders + NintendoCredentials.
+    idToken: accessTokenData.idToken,
     naId: naUser.id,
     expiresAt: computeNintendoExpiresAt(accessTokenData.expiresIn),
     ...(naUser.nickname ? { username: naUser.nickname } : {}),

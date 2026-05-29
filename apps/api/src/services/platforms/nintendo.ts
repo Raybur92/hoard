@@ -93,9 +93,20 @@ const NA_API_BASE = 'https://api.accounts.nintendo.com';
  *  newly-paired accounts as of 2026. */
 const MOON_BASE = 'https://app.lp1.znma.srv.nintendo.net';
 
-function moonHeaders(accessToken: string): Record<string, string> {
+/** Non-standard Nintendo quirk: the Moon API validates the
+ *  `id_token` from the OAuth exchange, NOT the `access_token`.
+ *  Verified against pynintendoauth's `access_token` property which
+ *  returns `f"Bearer {self._id_token}"`. The naming is confusing —
+ *  pynintendoauth's `_id_token` is what every Moon-authenticated
+ *  request uses as the bearer credential.
+ *
+ *  Sending the actual `access_token` here returns 403 forbidden
+ *  even with the full 13-scope set. (The access_token IS the right
+ *  bearer for the NA-account API at `api.accounts.nintendo.com` —
+ *  that's why `getNintendoAccountUser` works using it.) */
+function moonHeaders(idToken: string): Record<string, string> {
   return {
-    'Authorization': `Bearer ${accessToken}`,
+    'Authorization': `Bearer ${idToken}`,
     'Cache-Control': 'no-store',
     'Content-Type': 'application/json; charset=utf-8',
     'X-Moon-App-Id': 'com.nintendo.znma',
@@ -158,12 +169,22 @@ export interface NintendoCredentials {
   /** Long-lived (months) refresh-token equivalent. Persisted on
    *  Platform.credentials.sessionToken. */
   sessionToken: string;
-  /** Short-lived (~15 min) bearer token used for Moon calls. */
+  /** Short-lived (~15 min) bearer for the Nintendo Account API
+   *  (`api.accounts.nintendo.com`). Used by `getNintendoAccountUser`
+   *  to read profile / nickname. NOT what Moon endpoints validate
+   *  (see moonHeaders + idToken). */
   accessToken: string;
+  /** Short-lived JWT used as the bearer for ALL Moon API calls.
+   *  Despite the name, this is what Nintendo's Moon backend
+   *  actually validates — sending `accessToken` to Moon endpoints
+   *  returns 403 forbidden. Refreshed in lockstep with accessToken
+   *  via `exchangeNintendoAccessToken`. */
+  idToken: string;
   /** Nintendo Account ID (16-char hex). Derived once at connect time
    *  from the Nintendo Account /users/me response; doesn't change. */
   naId: string;
-  /** ISO 8601 timestamp when accessToken expires. */
+  /** ISO 8601 timestamp when accessToken/idToken expires.
+   *  Both rotate together on each `exchangeNintendoAccessToken` call. */
   expiresAt: string;
 }
 
@@ -230,14 +251,22 @@ export function computeExpiresAt(expiresIn: number): string {
 }
 
 /** Identity-equality refresh (GOG pattern). Returns same object when
- *  the access token is still valid, NEW object when refreshed —
- *  caller checks `fresh === creds` to decide whether to persist. */
+ *  the cached tokens are still valid, NEW object when refreshed —
+ *  caller checks `fresh === creds` to decide whether to persist.
+ *
+ *  Also force-refreshes when `idToken` is missing on the input creds
+ *  — that's the migration path for rows persisted by the older
+ *  connect code (pre-2026-05-29 fix) that only stored accessToken.
+ *  On the next sync after the deploy lands, those rows refresh once
+ *  to pick up the idToken; from then on the refresh cadence is the
+ *  normal expiry-based one. */
 export async function ensureFreshNintendoCredentials(creds: NintendoCredentials): Promise<NintendoCredentials> {
-  if (Date.now() < new Date(creds.expiresAt).getTime()) return creds;
+  if (creds.idToken && Date.now() < new Date(creds.expiresAt).getTime()) return creds;
   const fresh = await exchangeNintendoAccessToken(creds.sessionToken);
   return {
     sessionToken: creds.sessionToken,
     accessToken: fresh.accessToken,
+    idToken: fresh.idToken,
     naId: creds.naId,
     expiresAt: computeExpiresAt(fresh.expiresIn),
   };
@@ -297,10 +326,11 @@ interface MoonDevicesResponse {
   items?: MoonDeviceItem[];
 }
 
-/** List the paired Switch consoles for the authenticated account. */
-export async function getNintendoDevices(accessToken: string): Promise<MoonDeviceItem[]> {
+/** List the paired Switch consoles for the authenticated account.
+ *  Takes the `id_token` (NOT the `access_token`) — see moonHeaders. */
+export async function getNintendoDevices(idToken: string): Promise<MoonDeviceItem[]> {
   const res = await fetch(`${MOON_BASE}/v2/actions/user/fetchOwnedDevices`, {
-    headers: moonHeaders(accessToken),
+    headers: moonHeaders(idToken),
   });
   const text = await res.text();
   if (!res.ok) {
@@ -341,12 +371,12 @@ interface MoonMonthlySummary {
  *  Returns null when the device has no playtime data yet (newly paired
  *  consoles take 24h+ to generate the first daily summary). */
 export async function getNintendoLatestMonthlySummary(
-  accessToken: string,
+  idToken: string,
   deviceId: string,
 ): Promise<MoonMonthlySummary | null> {
   const res = await fetch(
     `${MOON_BASE}/v2/actions/playSummary/fetchLatestMonthlySummary?deviceId=${encodeURIComponent(deviceId)}`,
-    { headers: moonHeaders(accessToken) },
+    { headers: moonHeaders(idToken) },
   );
   const text = await res.text();
   if (res.status === 404) return null; // No summary yet
@@ -432,9 +462,9 @@ function aggregateNintendoTitles(summary: MoonMonthlySummary): Map<string, Synce
  *  Throws on auth failures (401 → caller should refresh via
  *  ensureFreshNintendoCredentials and retry). */
 export async function syncNintendoLibrary(creds: NintendoCredentials): Promise<SyncedGame[]> {
-  if (!creds.accessToken) throw new Error('Nintendo access token missing');
+  if (!creds.idToken) throw new Error('Nintendo id token missing');
 
-  const devices = await getNintendoDevices(creds.accessToken);
+  const devices = await getNintendoDevices(creds.idToken);
   if (devices.length === 0) {
     // No devices paired — user needs to complete Parental Controls
     // setup before sync produces anything. M3's guided flow walks
@@ -449,7 +479,7 @@ export async function syncNintendoLibrary(creds: NintendoCredentials): Promise<S
     const deviceId = deviceItem.deviceId ?? deviceItem.device?.id;
     if (!deviceId) continue;
     try {
-      const summary = await getNintendoLatestMonthlySummary(creds.accessToken, deviceId);
+      const summary = await getNintendoLatestMonthlySummary(creds.idToken, deviceId);
       if (!summary) continue; // No playtime data yet for this device
       for (const [appId, sg] of aggregateNintendoTitles(summary)) {
         const existing = aggregate.get(appId);
