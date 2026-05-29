@@ -382,7 +382,26 @@ This is **architectural-shaped maintenance**, not a one-off fix — the pattern 
 - **Do mirror their version constants and link the source-of-truth URL in code comments** so the next refresh is a one-file copy job.
 - **Plan for the maintenance tax up-front.** Don't add a new sync integration of this shape without budgeting time for quarterly constant refreshes. If the tax becomes too costly, fall back to manual-add per Hard Rule #6 (which is the FLOOR — every platform falls back to it gracefully).
 
-This is the M-series' sole architectural-shaped decision. M-D1 through M-D13 constrain M-series specifically (they govern shape-of-the-PR-sequence, achievement model, etc.) but the quarterly maintenance tax constrains how *future* platform integrations get designed and operated.
+This is one of two architectural-shaped decisions from the M-series — see also #44 below. M-D1 through M-D13 constrain M-series specifically (they govern shape-of-the-PR-sequence, achievement model, etc.) but these two constrain how *future* platform integrations get designed and operated.
+
+**44. Probe spikes for new platform integrations MUST hit a real target endpoint, not just verify the OAuth chain (M3 hotfix lessons — 2026-05-29)**
+
+M3 (Nintendo Switch / Parental Controls "Moon" API) shipped with a backend WIP whose probe spike stopped at "session_token_code → session_token → access_token → NA `/users/me` profile fetch works." On that basis the WIP commit claimed two things that production smoke-test invalidated within an hour:
+1. The 5-scope subset (`openid`, `user`, `moonDailySummary`, `moonMonthlySummary`, `moonUser:administration`) was sufficient. It wasn't — Moon `fetchOwnedDevices` needs `moonOwnedDevice:administration` from the canonical 13-scope set (mirrored from pynintendoauth).
+2. The `access_token` was the right Authorization bearer for Moon. It wasn't — Nintendo's Moon API validates the `id_token`, not the `access_token` (confirmed against pynintendoauth's `access_token` property which returns `f"Bearer {self._id_token}"`).
+
+Both bugs share a root cause: the probe never actually called a Moon endpoint. The OAuth chain verified that Nintendo issued *some* token under *some* scope set and that the NA-account API (a different domain) accepted it. Neither correctness property transferred to the actual target.
+
+**Rule for future platform integrations:** every probe spike must end by calling a representative real-target endpoint. Concretely:
+- **GOG** — call `/account/getFilteredProducts` with the freshly-exchanged access token, parse one product, confirm shape.
+- **Epic** — call `library/api/public/items` with cursor pagination, parse one record.
+- **itch.io** — call `/my-owned-keys?page=1` with the API key, confirm a non-empty response on a user with games.
+- **Nintendo Moon** — call `fetchOwnedDevices` with the JWT-as-bearer-via-id_token convention, confirm at least one device.
+- **Any future N-series platform** — apply the same pattern. The probe shows it works end-to-end only when the last step is a real call to the target endpoint that production will hit.
+
+**Corollary:** when mirroring an open-source library's auth flow (pynintendoparental / nxapi / Heroic / Legendary / etc.), don't trust comments or method names in isolation — read the actual wire-level behavior. pynintendoauth's `access_token` getter doesn't return the access_token; it returns `f"Bearer {self._id_token}"`. A naming-only read would have missed both the scope set AND the bearer-token-type. Read the request the library actually sends.
+
+The cost of the two M3 hotfixes was ~1h each of investigate-fix-deploy. The cost of doing the extra probe step would have been ~5 minutes. This budget should be assumed up-front for every M-class platform integration.
 
 ---
 
