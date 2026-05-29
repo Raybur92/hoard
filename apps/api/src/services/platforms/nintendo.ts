@@ -52,16 +52,29 @@ const PARENTAL_CONTROLS_CLIENT_ID = '54789befb391a838';
  *  cannot change it (third-party redirects would be rejected). */
 const REDIRECT_URI = `npf${PARENTAL_CONTROLS_CLIENT_ID}://auth`;
 
-/** Minimal scope set — confirmed grantable + sufficient for Moon
- *  library/playtime reads per the 2026-05-28 probe spike. The full
- *  13-scope list nxapi uses has scopes Nintendo no longer grants on
- *  fresh authorizations; this 5-scope subset works. */
+/** Canonical 13-scope set for the Parental Controls client, mirrored
+ *  from pynintendoauth's `KNOWN_NINTENDO_SERVICES` map. The 2026-05-28
+ *  M3 probe spike claimed a 5-scope subset was sufficient — that was
+ *  wrong. The probe only verified the auth chain (session_token →
+ *  access_token → NA profile), never actually called any Moon endpoint.
+ *  Production smoke against fetchOwnedDevices returned 403 forbidden
+ *  on 2026-05-29 because the subset was missing `moonOwnedDevice:...`,
+ *  the scope that actually authorizes device-list reads. Always mirror
+ *  pynintendoauth's list verbatim — it's the actively-maintained
+ *  source-of-truth for this client. */
 const ZNMA_SCOPES = [
   'openid',
   'user',
+  'moonUser:administration',
+  'moonDevice:create',
+  'moonOwnedDevice:administration',
+  'moonParentalControlSetting',
+  'moonParentalControlSetting:update',
+  'moonParentalControlSettingState',
+  'moonPairingState',
+  'moonSmartDevice:administration',
   'moonDailySummary',
   'moonMonthlySummary',
-  'moonUser:administration',
 ].join(' ');
 
 /** Moon API version constants mirrored from pynintendoparental.
