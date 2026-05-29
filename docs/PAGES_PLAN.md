@@ -264,12 +264,75 @@ Likely focus areas based on existing observations:
 
 ## 5. Releases
 
-*To be filled in next session.*
+### 5.1 Purpose
 
-Likely focus areas:
-- Region / platform date drilldown overlap with GameDetail v2 (B-IMDB-2)
-- Cross-link to Events (B-IGDB-2)
-- Card hover / focus → preview of S2 GameDetail?
+Releases is the *anticipation + recent-retrospective* surface — the answer to "what's coming, what just dropped." It serves three closely-related user jobs:
+
+1. **"What am I waiting for?"** — wishlist-mode browsing of starred upcoming releases (the hero countdown to next-soonest, time-distribution view across months/quarters)
+2. **"What's coming that I haven't noticed?"** — all-releases mode, hype-filtered, scoped to user's owned platforms
+3. **"What dropped while I wasn't paying attention?"** — `/releases/recent` (14-day window) split into `// just out · starred` + `// also released · not starred`
+
+The page rhymes with Events (both anticipation-flavored) and feeds into GameDetail State 2 (every release card click → GameDetail S2). The R-series rework (2026-05-07) overhauled the IA, primitives, and bucketing — Releases is *substantially more complete* than the other pages in this round.
+
+### 5.2 Current state
+
+Post-R1..R6 (complete 2026-05-07). Existing surface:
+
+- **Two URL paths:** `/releases` (main) + `/releases/recent` (last-14-day window)
+- **Main page: two modes + two zoom levels** — URL state `?mode={wishlist|my-platforms|all}&zoom={months|quarters}&bucket=…`
+- **HeroCountdown** on wishlist mode (next-soonest starred release, live-ticking)
+- **TimeNav** — bars + counts per time bucket; hatched diagonal for TBA
+- **ReleaseCard** primitives — 3 variants (wishlist / all / recent)
+- **AgendaRail** — chronological right-rail flat list
+- **RecentBanner** with 2 variants pointing to `/releases/recent`
+- **WishlistEmptyRecommendation** — top-3 hype-sorted picks when wishlist is empty
+- **Mobile uses different IA per handoff §7** — view-sheet pattern (mode/scope/zoom/bucket via chevron stepper)
+- **Card click** → `/game/:userGameId` for owned, otherwise dead-link (Wishlist toggle creates UserGame so the path always resolves post-wishlist-as-library work)
+
+Released-not-owned game cards currently render with a hollow `+ wishlist` star toggle. The post-r2 OQ-S-13 reversal (CM12 + wishlist-as-library, May 2026) locked that the toggle creates a `UserGame(status='Wishlist')` server-side, so the card click can always navigate cleanly.
+
+### 5.3 Gaps vs benchmark
+
+Compared to Events / GameDetail v2 / Deals which are big spec-from-scratch sections, **Releases needs only modest additions**. Most of the Andrea-2026-05-29 direction (region/platform date drilldown, preorder links, latest news) lands on GameDetail S2 rather than Releases — the cards stay compact, the drill happens on click-through.
+
+| Gap | Sources | Notes |
+|---|---|---|
+| No Events back-link chip on cards | B-IGDB-2 | Small visual: "▢ shown at State of Play 2026-04" chip below the title when a release card's game has an `EventGame` association. Requires Events workstream first |
+| Release cards don't surface "wishlisted by you for: PS5, Switch" platform-array context | (CM12 follow-through) | After CM12 + per-platform-wishlist work, a single game can be wishlisted on a subset of its release platforms. Cards today show only the IGDB platform-array generically. Worth a chip-row showing *which platforms* the user starred — closes a CM12 follow-through gap |
+| Click-through behaviour assumes UserGame ID; needs to align with GameDetail v2 route migration | (OQ-GD-1 follow-through) | When GameDetail v2 migrates to `/game/:igdbId`, the ReleaseCard `onOpen` handlers need to switch from `userGameId` to `igdbId`. Affects every card variant + AgendaRail row + StarredPanelCard. Synchronisation work, not a feature gap |
+| Region/platform date drilldown on the card | B-IMDB-2 | **NOT a Releases gap — owned by GameDetail S2.** Cards stay compact (single release-date line); the drill happens on click-through. Documenting here to flag we considered it and assigned ownership |
+| Preorder deep-links on cards | B-Storefront-1 | **NOT a Releases gap — owned by GameDetail S2.** Same rationale: keep cards scan-friendly, the action belongs on the destination page |
+| Latest-news section on cards | B-News-1 | **NOT a Releases gap — owned by GameDetail S2.** Cards are list-density UI; news is detail-page-density UI |
+
+### 5.4 Target state
+
+The page concept doesn't change. Surface-level additions only:
+
+1. **Events back-link chip on cards** (when an `EventGame` association exists for the game). Renders as: `// ▢ first shown at Summer Game Fest 2025`. Single line, tappable, navigates to `/events/:slug`. Card variant matters: include on wishlist + all + recent cards; omit on agenda-rail rows (too cramped).
+2. **Per-platform wishlist context chip-row** for wishlist-mode cards. When `UserGame.wishlistedPlatforms` is a strict subset of the game's IGDB platforms, render: `// wishlisted: PS5 · Switch` instead of the generic platform array. When `wishlistedPlatforms` is empty or matches the full set, fall back to the current generic rendering. Resolves the CM12 follow-through ambiguity on the Releases page surface.
+3. **Card → GameDetail route alignment** with GameDetail v2's `/game/:igdbId` migration (OQ-GD-1). Mechanical change: `ReleaseCard` / `AgendaRail` / `StarredPanelCard` / `MobileReleaseRow` swap `userGameId` for `igdbId` on their `onOpen` props. Lands in the same workstream that ships GD-PR1.
+
+Everything else (region/platform date expansion, preorder links, news) stays on GameDetail S2.
+
+### 5.5 Open questions
+
+- **OQ-REL-1 — Region/platform date drilldown placement.** Cards stay compact; the drilldown is on GameDetail S2 only. ✅ **Locked.** Documenting here to flag we considered the alternative (expand-in-card) and rejected it (clutters the scan-density UI).
+- **OQ-REL-2 — Events back-link chip variants.** Show on which card variants? Recommendation: wishlist + all (always) + recent (always) cards; *omit* on AgendaRail rows (single-line UI, no space). Mobile: include on MobileReleaseRow but as a smaller second line.
+- **OQ-REL-3 — Per-platform wishlist context — display format.** When `wishlistedPlatforms` ⊊ `game.platforms`, render `// wishlisted: PS5 · Switch` vs the generic `// PS5 · Xbox · PC · Switch · iOS`. But what about the *opposite* case — wishlisted on platforms the user *doesn't have synced*? Show same way? Or call out as `// wishlisted on PS5 (not yet connected)`? Recommendation: same-way for v1; the "you wishlisted on a platform you don't own" UX is a Library / GameDetail concern, not a Releases-card concern.
+- **OQ-REL-4 — In-bucket sort options.** Current sort within a bucket is release-date asc (hard-coded). Add hype-desc as an option? Alphabetical? Recommendation: defer until cohort signal demands it. Single sort keeps the UI simpler; the bucket-grouping is the primary organising principle, not within-bucket sort.
+- **OQ-REL-5 — "Live now" highlight for today's releases.** Should games releasing *today* render with a distinct treatment on the main page (e.g. amber border + `// out today` chip)? Recommendation: yes, small chip. Cheap to compute (compare `releaseDate.toDateString() === today.toDateString()`); high information value at no UI cost.
+- **OQ-REL-6 — Releases cards as "preview" of GameDetail S2?** B-IMDB hover-preview-style — desktop hover on a card opens a popover showing the screenshot carousel + countdown + description from GameDetail S2? Recommendation: **no.** Cards click-through cheaply already; hover popovers add interaction complexity and don't translate to mobile. Skip.
+
+### 5.6 Sequencing notes
+
+Releases doesn't need its own multi-PR workstream — the page is mostly done. The remaining work threads into the workstreams that own the relevant data:
+
+- **Events back-link chip** ships in EV-PR3 (the GameDetail back-link wiring PR) — REL gets the chip by reusing the same `EventGame` query on a different surface.
+- **Per-platform wishlist context** is a 1-PR enhancement on Releases standalone. Call it **REL-PR1**. Modest scope: ReleaseCard render logic update + 3-4 visual regression tests + mobile mirror. Could ship any time.
+- **Card route alignment** lands in GD-PR1 (the GameDetail v2 route migration PR) — same atomic commit since the route source-of-truth migrates with the destination.
+- **"Live now" today-release chip** is another standalone REL-PR2 if/when prioritised. Smallest possible scope, no dependencies.
+
+No standalone "REL-series" needed. The work threads into other workstreams + 1-2 small enhancement PRs.
 
 ---
 
