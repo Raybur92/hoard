@@ -320,9 +320,19 @@ The page renders as a *pair of views* with two clear time-axis states:
 
 ```
 // EVENTS · 14 upcoming · 247 past
+
+┌─────────────────────────────────────┐
+│ // next showcase                    │   ← Hero countdown card, reuses
+│   SUMMER GAME FEST 2026             │     HeroCountdown component + useNow
+│   ┌──┐┌──┐┌──┐┌──┐                  │     hook from Releases (live-ticks
+│   │11││23││45││12│   d / h / m / s  │     1Hz, pauses on tab hidden)
+│   └──┘└──┘└──┘└──┘                  │     → next-soonest upcoming event
+│   geoff keighley · 2026-06-12 18:00 │     (dominant element at top of list)
+│   [+ remind me]  [watch on yt →]    │
+└─────────────────────────────────────┘
+
 ┌──────────────────────────────────────────────────┐
 │ // upcoming                                       │
-│   ▣ Summer Game Fest 2026     · 12d · Geoff K…    │
 │   ▣ Nintendo Direct           · 21d · Nintendo    │
 │   ▣ Xbox Showcase 2026        · 26d · Microsoft   │
 │   ▣ State of Play             · TBA · Sony        │
@@ -336,6 +346,8 @@ The page renders as a *pair of views* with two clear time-axis states:
 └──────────────────────────────────────────────────┘
 ```
 
+The hero countdown at the top mirrors the Releases-page wishlist hero pattern exactly — same `HeroCountdown` component + same `useNow` hook (1Hz live tick, paused when `document.hidden`). Surfaces the *next-soonest upcoming event* across all networks, ungated by filter (always shows the actual next thing). Per-row countdowns in the upcoming-section list stay as static `21d` labels rather than live-ticking — keeps the list cheap to render.
+
 Filter chips: `[ upcoming ] [ recent ] [ past ] [ live now ]` + network filter (see OQ-EV-6).
 
 **Detail view (`/events/:slug`) element matrix:**
@@ -344,7 +356,7 @@ Filter chips: `[ upcoming ] [ recent ] [ past ] [ live now ]` + network filter (
 |---|---|---|---|
 | Event logo / cover | ✓ | ✓ | ✓ |
 | Name + network + time-zone-aware date | ✓ | ✓ | ✓ |
-| **Giant countdown** | **★ dominant** | — | — |
+| **Giant countdown** (reuses `HeroCountdown` + `useNow` from Releases) | **★ dominant** | — | — |
 | **Live banner + stream embed** | — | **★ dominant** | — |
 | **Game grid (announced/shown)** | ✓ (planned reveals if data is available) | ★ (filling in real-time if IGDB updates during stream) | **★ dominant** |
 | Description | ✓ | ✓ | ✓ |
@@ -404,18 +416,14 @@ The `EventGame.announcementType` field is null-default because IGDB doesn't stro
 ### 6.6 Open questions
 
 - **OQ-EV-1 — URL key.** Use IGDB's `slug` as the URL key (`/events/state-of-play-2026-04`) for shareability + memorability vs. opaque IGDB ID? **Recommendation: slug.** Cleaner share-links, easier debugging. Server resolves slug → IGDB ID → DB row.
-- **OQ-EV-2 — Sync cadence.** IGDB events shift in two ways: new events get added, past events get their game associations enriched (community curation lags the actual showcase). Different parts of the data have different staleness profiles:
-    - Upcoming events list — refresh hourly (cron)
-    - Past event detail pages — refresh on-demand with 24h stale cache
-    - Live event detail page — refresh every 5 min during start_time..end_time window
-    Probably implement as a single nightly full sync + an hourly-during-business-hours light sync, then on-demand refresh per detail page. Tunable per event state.
+- **OQ-EV-2 — Sync cadence.** ✅ **LOCKED 2026-05-29: nightly cron + admin-triggered manual refresh button.** Original tiered proposal (hourly upcoming / on-demand past / 5-min live) was over-engineered. The nightly job covers new-event discovery + community curation backfill; the manual `[refresh events]` button on the admin surface handles the "I want to see what just got added" case without infrastructure cost.
 - **OQ-EV-3 — Dashboard "you missed" prompt.** Should Dashboard surface "X events aired since you last visited, with N games newly announced from your wishlist platforms"? **Recommendation: yes, but in the Dashboard drill session not the Events session.** Treat it as a Dashboard consumer of Events data, not a sub-feature of Events.
 - **OQ-EV-4 — IGDB game-association completeness.** Some events have full game lists; others have nothing or a handful. Three options for sparse events:
     1. Show what we have + a "// game list is community-curated · X games linked so far" disclaimer
     2. Hide events with < N (e.g. 5) linked games entirely
     3. Show all events but sort sparse-data ones lower in the list
     **Recommendation: #1.** Even a sparse list is useful (especially right after the event airs, before community catches up); the disclaimer manages expectations honestly.
-- **OQ-EV-5 — Live stream embedding.** When an event is live (`start_time ≤ now ≤ end_time` AND `liveStreamUrl` set), embed the stream inline as the dominant element? CSP needs `frame-src https://www.youtube.com https://player.twitch.tv` exception. **Recommendation: yes**, with a "// streaming embedded — click to open in new tab if it doesn't play" fallback link.
+- **OQ-EV-5 — Live stream embedding.** ✅ **LOCKED 2026-05-29: embed inline + deep-link-out fallback rendered below.** CSP gains a `frame-src https://www.youtube.com https://player.twitch.tv` exception (small, scoped, well-understood pattern). Embed handles streaming UX natively (autoplay, fullscreen, captions, ads all server-side). Broken embeds (region-locked, uploader disabled embedding) degrade gracefully to the fallback `[watch on YouTube/Twitch →]` link rendered immediately below. Privacy outcome is identical between the two options — YouTube/Twitch see the visit either way; embed adds no Hoard-side surveillance.
 - **OQ-EV-6 — Filter taxonomy.** Network filters (Nintendo / Sony / Xbox / Indie / Industry) — IGDB has `event_networks` but it's a free-form metadata field, not a simple enum. Two paths:
     1. Derive a small curated set (Sony / Nintendo / Xbox / Indie / Other) from network metadata heuristics during sync — robust but writes opinion into the data
     2. No network filter; rely on naming patterns + search instead — simpler
@@ -423,11 +431,7 @@ The `EventGame.announcementType` field is null-default because IGDB doesn't stro
 - **OQ-EV-7 — Past-events archive depth.** Show all past events ever, or limit? IGDB has events going back ~10+ years. Cheap to store; arguably useful for trail-tracing ("which Direct first showed Breath of the Wild?"). **Recommendation: store all, limit list-view default to last 24 months; deeper years accessible via filter or year-jump.**
 - **OQ-EV-8 — Cross-link from `Game` to its events.** The `Game.events` reverse relation makes this a trivial query. GameDetail v2 OQ-GD-7's placeholder slot consumes it. **Sequencing decision: GameDetail v2 ships the placeholder; Events ships the data; the cross-link goes live when both are deployed.** No coordination beyond shipping order.
 - **OQ-EV-9 — Mobile shape.** List view is naturally mobile-friendly (vertical list of cards). Detail view's *game grid* is the dense bit — on mobile compress to 2-column grid or vertical list with smaller covers. Worth a mockup pass during EV-PR4.
-- **OQ-EV-10 — `[+ remind me]` and calendar export.** For upcoming events, a "remind me" CTA could either:
-    1. Add an in-app notification (deferred — no notifications channel exists yet; would need to ship that infra first)
-    2. Generate an `.ics` calendar file the user downloads + imports
-    3. Both
-    **Recommendation: #2 for EV-PR1** (cheap, no infra dependency). Add #1 when a notifications-channel workstream lands.
+- **OQ-EV-10 — `[+ remind me]` and calendar export.** ✅ **LOCKED 2026-05-29: `.ics` file download in EV-PR1, per-vendor deep-links (Google / Apple / Outlook) in EV-PR2.** This matches the dominant industry pattern (TheGameAwards, Eurogamer, IGN, Gamescom all do `.ics`) and adds no infra debt. The per-vendor deep-links in EV-PR2 are a ~30-line URL-builder enhancement — Google Calendar accepts a `google.com/calendar/render?action=TEMPLATE&...` URL pattern; Outlook has its own URL shape; Apple uses the same `.ics` file. Subscription feeds (`webcal://`) and in-app push notifications are explicitly deferred — they need infrastructure Hoard doesn't have yet (PWA push subscriptions / email service / dedicated notifications channel) and `.ics` covers the actual reminder use case without it.
 
 ### 6.7 Sequencing notes
 
