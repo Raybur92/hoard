@@ -28,6 +28,8 @@ function release(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcomingRele
     hype: null,
     userGameId: null,
     wishlistedPlatforms: [],
+    themes: [],
+    playerPerspectives: [],
     ...overrides,
   };
 }

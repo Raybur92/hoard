@@ -48,6 +48,12 @@ function toPrismaStatus(s: string): PrismaGameStatus {
 const gamesQuerySchema = z.object({
   status: z.enum(['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist']).optional(),
   platform: z.string().max(10).optional(),
+  // B-IGDB-3 — IGDB-tag triple as composable secondary filters. All three
+  // intersect with the primary status lens AND with each other. Length cap
+  // matches the longest IGDB value seen in the wild (~40 chars: "Open World").
+  genre: z.string().max(50).optional(),
+  theme: z.string().max(50).optional(),
+  perspective: z.string().max(50).optional(),
   q: z.string().max(100).optional(),
   sort: z.enum(['lastPlayed', 'title', 'playtime']).default('lastPlayed'),
   page: z.coerce.number().int().min(1).default(1),
@@ -63,12 +69,22 @@ router.get('/games', requireUser, requireActive, async (req: Request, res: Respo
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid query params' });
     return;
   }
-  const { status, platform, q, sort, page: pageNum, limit: limitNum } = parsed.data;
+  const { status, platform, genre, theme, perspective, q, sort, page: pageNum, limit: limitNum } = parsed.data;
 
+  // B-IGDB-3 — Game filter assembly. Multiple game.* conditions (title +
+  // tag arrays) need to compose under the same `game:` projection. Build
+  // it conditionally so we don't generate a `game: {}` clause when no
+  // game-scoped filter is active.
+  const gameFilter = {
+    ...(q ? { title: { contains: q, mode: 'insensitive' as const } } : {}),
+    ...(genre ? { genres: { has: genre } } : {}),
+    ...(theme ? { themes: { has: theme } } : {}),
+    ...(perspective ? { playerPerspectives: { has: perspective } } : {}),
+  };
   const where = {
     userId,
     ...(status ? { status: toPrismaStatus(status) } : {}),
-    ...(q ? { game: { title: { contains: q, mode: 'insensitive' as const } } } : {}),
+    ...(Object.keys(gameFilter).length > 0 ? { game: gameFilter } : {}),
   };
 
   const orderBy =
@@ -356,6 +372,9 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
       developer: igdb.developer,
       releaseYear: igdb.releaseYear,
       genres: igdb.genres,
+      // B-IGDB-3 — IGDB-tag triple. `igdb` is an IgdbSearchResult.
+      themes: igdb.themes,
+      playerPerspectives: igdb.playerPerspectives,
       coverUrl: igdb.coverUrl,
     },
     create: {
@@ -364,6 +383,8 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
       developer: igdb.developer,
       releaseYear: igdb.releaseYear,
       genres: igdb.genres,
+      themes: igdb.themes,
+      playerPerspectives: igdb.playerPerspectives,
       coverUrl: igdb.coverUrl,
     },
   });

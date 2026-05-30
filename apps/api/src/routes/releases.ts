@@ -51,6 +51,11 @@ function wishlistRowToUpcoming(
     releaseDateCategory: w.releaseDateCategory as ReleaseDateCategory,
     platforms: w.platforms,
     genres: w.genres,
+    // B-IGDB-3 — WishlistRelease doesn't snapshot themes / perspectives
+    // (see igdb.ts wishlist-scope branch comment). Default []; Releases
+    // cards don't display these axes today.
+    themes: [],
+    playerPerspectives: [],
     coverUrl: w.coverUrl,
     synopsis: w.synopsis,
     wishlisted: true,  // every row in `starred` is by definition wishlisted

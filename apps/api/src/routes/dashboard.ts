@@ -141,7 +141,10 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
         lastPlayedAt: true,
         status: true,
         achievementsByPlatform: true,
-        game: { select: { genres: true } },
+        // B-IGDB-3 — themes + playerPerspectives ride along on the same
+        // `game` projection used by the genre tally below. Three light
+        // String[] columns; no schema overhead.
+        game: { select: { genres: true, themes: true, playerPerspectives: true } },
       },
     }),
     prisma.wishlistRelease.findMany({
@@ -166,6 +169,10 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
   let totalPlaytimeMinutes = 0;
   const playtimeMap: Record<string, number> = {};
   const genreMap: Record<string, number> = {};
+  // B-IGDB-3 — IGDB-tag triple tallies. Same `+1 per occurrence on a
+  // UserGame` shape as `genreMap` since the three axes are independent.
+  const themeMap: Record<string, number> = {};
+  const perspectiveMap: Record<string, number> = {};
   for (const ug of aggUserGames) {
     const ptp = ug.playtimeByPlatform as Record<string, number | null>;
     for (const [code, mins] of Object.entries(ptp)) {
@@ -175,6 +182,12 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     }
     for (const g of ug.game.genres) {
       genreMap[g] = (genreMap[g] ?? 0) + 1;
+    }
+    for (const t of ug.game.themes) {
+      themeMap[t] = (themeMap[t] ?? 0) + 1;
+    }
+    for (const p of ug.game.playerPerspectives) {
+      perspectiveMap[p] = (perspectiveMap[p] ?? 0) + 1;
     }
   }
 
@@ -190,6 +203,17 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     }));
 
   const genres = Object.entries(genreMap)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, TOP_GENRES)
+    .map(([name, count]) => ({ name, count }));
+
+  // B-IGDB-3 — same Top-N slicing for themes + perspectives. The Dashboard
+  // breakdown card renders all three as switchable tabs.
+  const themes = Object.entries(themeMap)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, TOP_GENRES)
+    .map(([name, count]) => ({ name, count }));
+  const playerPerspectives = Object.entries(perspectiveMap)
     .sort(([, a], [, b]) => b - a)
     .slice(0, TOP_GENRES)
     .map(([name, count]) => ({ name, count }));
@@ -293,6 +317,8 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     weeklyAdded,
     playtimeByPlatform,
     genres,
+    themes,
+    playerPerspectives,
     achievementsRollup,
     // DASH-PR2 — top-level fields stay all-time; periodStats carries the
     // scoped variants for the completion + achievements cards.

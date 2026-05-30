@@ -210,6 +210,12 @@ export async function runSync(
             developer: igdbGame.developer,
             releaseYear: igdbGame.releaseYear,
             genres: igdbGame.genres,
+            // B-IGDB-3 — IGDB-tag triple. `igdbGame` is an `IgdbSearchResult`
+            // which now carries themes + playerPerspectives via the service
+            // factories. Persist them so the Library + Dashboard breakdown
+            // can read them off Game.
+            themes: igdbGame.themes,
+            playerPerspectives: igdbGame.playerPerspectives,
             coverUrl: igdbGame.coverUrl,
             ...(steamAppId ? { steamAppId } : {}),
             ...(xboxTitleId ? { xboxTitleId } : {}),
@@ -225,6 +231,8 @@ export async function runSync(
             developer: igdbGame.developer,
             releaseYear: igdbGame.releaseYear,
             genres: igdbGame.genres,
+            themes: igdbGame.themes,
+            playerPerspectives: igdbGame.playerPerspectives,
             coverUrl: igdbGame.coverUrl,
             steamAppId,
             xboxTitleId,

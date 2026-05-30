@@ -136,6 +136,9 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
         developer: igdbRelease.developer,
         releaseYear,
         genres: igdbRelease.genres,
+        // B-IGDB-3 — persist IGDB-tag triple.
+        themes: igdbRelease.themes,
+        playerPerspectives: igdbRelease.playerPerspectives,
         coverUrl: igdbRelease.coverUrl,
       },
       create: {
@@ -144,6 +147,8 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
         developer: igdbRelease.developer,
         releaseYear,
         genres: igdbRelease.genres,
+        themes: igdbRelease.themes,
+        playerPerspectives: igdbRelease.playerPerspectives,
         coverUrl: igdbRelease.coverUrl,
       },
     });

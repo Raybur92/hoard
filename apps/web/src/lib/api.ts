@@ -129,6 +129,10 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 export interface GamesParams {
   status?: GameStatus;
   platform?: string;
+  // B-IGDB-3 — IGDB-tag triple as composable secondary filters.
+  genre?: string;
+  theme?: string;
+  perspective?: string;
   q?: string;
   sort?: 'lastPlayed' | 'title' | 'playtime';
   page?: number;

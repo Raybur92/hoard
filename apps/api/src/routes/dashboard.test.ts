@@ -71,7 +71,10 @@ const aggRow = (
   lastPlayedAt,
   status,
   achievementsByPlatform,
-  game: { genres },
+  // B-IGDB-3 — dashboard route now reads `themes` + `playerPerspectives`
+  // alongside `genres` to compute the 3-tab breakdown counts. Tests default
+  // to empty arrays; specific tests can override via the factory's overrides.
+  game: { genres, themes: [], playerPerspectives: [] },
 });
 
 const backlogIdRow = (id: string, mainStory: number | null) => ({
@@ -393,7 +396,11 @@ describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)
       lastPlayedAt: true,
       status: true,
       achievementsByPlatform: true,
-      game: { select: { genres: true } },
+      // B-IGDB-3 added themes + playerPerspectives alongside genres so the
+      // dashboard 3-tab breakdown can render all three series from a single
+      // pass over aggUserGames. One row per UserGame, three light String[]
+      // columns; no schema overhead.
+      game: { select: { genres: true, themes: true, playerPerspectives: true } },
     });
   });
 });

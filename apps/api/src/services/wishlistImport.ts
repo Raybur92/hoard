@@ -94,6 +94,10 @@ export async function applySteamWishlistImport(
             developer: release.developer,
             releaseYear,
             genres: release.genres,
+            // B-IGDB-3 — `release` is an IgdbUpcomingRelease, which now
+            // carries themes + playerPerspectives from the IGDB service.
+            themes: release.themes,
+            playerPerspectives: release.playerPerspectives,
             coverUrl: release.coverUrl,
             // Persist steamAppId on the Game row if it isn't set yet —
             // future Steam syncs will hit the steamAppId-keyed exact match
@@ -106,6 +110,8 @@ export async function applySteamWishlistImport(
             developer: release.developer,
             releaseYear,
             genres: release.genres,
+            themes: release.themes,
+            playerPerspectives: release.playerPerspectives,
             coverUrl: release.coverUrl,
             steamAppId: item.appid,
           },

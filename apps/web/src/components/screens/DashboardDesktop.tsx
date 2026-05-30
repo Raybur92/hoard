@@ -86,6 +86,10 @@ export function DashboardDesktop() {
   // loads, so the toggle feels instant + the bento doesn't flash back
   // to the loading skeleton on every chip click.
   const [period, setPeriod] = useState<DashboardPeriod>('all');
+  // B-IGDB-3 — active dimension on the breakdown card (genre · theme ·
+  // perspective). Local state; per OQ-DASH-7 may persist to URL in a
+  // follow-up if cohort signal demands.
+  const [breakdownTab, setBreakdownTab] = useState<'genre' | 'theme' | 'perspective'>('genre');
   const { data, loading, error, refetch } = useDashboard(period);
   const lastGoodRef = useRef<DashboardResponse | null>(null);
   if (data) lastGoodRef.current = data;
@@ -461,27 +465,76 @@ export function DashboardDesktop() {
             })()}
           </BentoCard>
 
-          {/* Row 3 — genre breakdown (span-6) + hours by platform (span-6).
-              Hours-by-platform sits in the slot the spec reserves for the
-              year-in-review wrap-up (OQ-DASH-9 future workstream) — keeping
-              unique per-platform data on Dashboard until OQ-DASH-9 ships. */}
-          {stats.genres.length > 0 && (
+          {/* Row 3 — IGDB-tag triple breakdown (span-6) + hours by platform
+              (span-6). Hours-by-platform sits in the slot the spec reserves
+              for the year-in-review wrap-up (OQ-DASH-9 future workstream).
+
+              B-IGDB-3 — breakdown is now a 3-tab strip across genre · theme
+              · perspective. Hoard keeps the three IGDB axes as separate
+              dimensions per PAGES_PLAN §4.4.1; the tab strip surfaces all
+              three from the same card without competing for grid space. */}
+          {(stats.genres.length + stats.themes.length + stats.playerPerspectives.length) > 0 && (
             <BentoCard span={6} testId="card-breakdown">
-              <Marker>// top genres</Marker>
-              <div style={{ marginTop: 14 }}>
-                {(() => {
-                  const maxCount = stats.genres[0]?.count ?? 1;
-                  return stats.genres.map(({ name, count }, i) => (
-                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: "var(--text-xs)" }}>
-                      <span style={{ width: 130, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)' }}>{name}</span>
-                      <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
-                        <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
+              {(() => {
+                const series = breakdownTab === 'theme'
+                  ? stats.themes
+                  : breakdownTab === 'perspective'
+                    ? stats.playerPerspectives
+                    : stats.genres;
+                const tabs: { id: typeof breakdownTab; label: string; available: boolean }[] = [
+                  { id: 'genre', label: 'genre', available: stats.genres.length > 0 },
+                  { id: 'theme', label: 'theme', available: stats.themes.length > 0 },
+                  { id: 'perspective', label: 'perspective', available: stats.playerPerspectives.length > 0 },
+                ];
+                const maxCount = series[0]?.count ?? 1;
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                      <Marker>// top {breakdownTab === 'perspective' ? 'perspectives' : `${breakdownTab}s`}</Marker>
+                      <div role="tablist" aria-label="Breakdown dimension" style={{ display: 'inline-flex', gap: 4 }}>
+                        {tabs.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={breakdownTab === t.id}
+                            disabled={!t.available}
+                            onClick={() => { if (t.available && breakdownTab !== t.id) setBreakdownTab(t.id); }}
+                            className={breakdownTab === t.id ? 'chip solid amber' : 'chip'}
+                            style={{
+                              height: 22,
+                              padding: '0 8px',
+                              fontSize: 'var(--text-3xs)',
+                              letterSpacing: '0.04em',
+                              opacity: t.available ? 1 : 0.35,
+                              cursor: t.available && breakdownTab !== t.id ? 'pointer' : 'default',
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
                       </div>
-                      <span className="t-tnum t-faint" style={{ fontSize: "var(--text-2xs)", width: 28, textAlign: 'right' }}>{count}</span>
                     </div>
-                  ));
-                })()}
-              </div>
+                    <div style={{ marginTop: 14 }}>
+                      {series.length === 0 ? (
+                        <div className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)' }}>
+                          no {breakdownTab === 'perspective' ? 'perspective' : breakdownTab} data yet — pre-B-IGDB-3 syncs didn't capture this. New syncs + the one-time backfill populate it.
+                        </div>
+                      ) : (
+                        series.map(({ name, count }, i) => (
+                          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 'var(--text-xs)' }}>
+                            <span style={{ width: 130, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)' }}>{name}</span>
+                            <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
+                              <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
+                            </div>
+                            <span className="t-tnum t-faint" style={{ fontSize: 'var(--text-2xs)', width: 28, textAlign: 'right' }}>{count}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </BentoCard>
           )}
 

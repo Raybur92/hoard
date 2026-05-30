@@ -114,6 +114,13 @@ export interface Game {
   developer: string | null;
   releaseYear: number | null;
   genres: string[];
+  // B-IGDB-3 — IGDB-tag triple. `genres` is form (RPG / Action / etc.),
+  // `themes` is tone+setting (Fantasy / Sci-Fi / Horror / etc.), and
+  // `playerPerspectives` is camera convention (First-person / Third-person
+  // / Side-view / Top-down / etc.). All three are kept as separate
+  // filterable dimensions per PAGES_PLAN §4.4.1.
+  themes: string[];
+  playerPerspectives: string[];
   coverUrl: string | null;
   // Captured from the codepotatoes.de payload during HLTB lookups (PR D).
   // Used to build the HLTB deep-link on GameDetail and as a future GOG sync key.
@@ -290,6 +297,11 @@ export interface DashboardStats {
   weeklyAdded: number;
   playtimeByPlatform: PlatformStat[];
   genres: { name: string; count: number }[];
+  // B-IGDB-3 — IGDB-tag triple breakdowns. Same shape as `genres`; same
+  // Top-N capping (TOP_GENRES = 5 in dashboard.ts). The Dashboard
+  // breakdown card surfaces all three as switchable tabs.
+  themes: { name: string; count: number }[];
+  playerPerspectives: { name: string; count: number }[];
   // T6 of the trophies workstream, updated for M0. Library-wide sum of
   // trophy/achievement progress across every UserGame that has any
   // achievement data fetched, aggregated across all platform entries in
@@ -494,6 +506,12 @@ export interface IgdbSearchResult {
   developer: string | null;
   releaseYear: number | null;
   genres: string[];
+  // B-IGDB-3 — IGDB's `themes` axis (tone+setting: Fantasy / Sci-Fi /
+  // Horror / Comedy / Historical / etc.). Empty when IGDB has no theme data.
+  themes: string[];
+  // B-IGDB-3 — IGDB's `player_perspectives` axis (camera: First-person /
+  // Third-person / Side-view / Top-down / etc.). Empty when IGDB has none.
+  playerPerspectives: string[];
   coverUrl: string | null;
   // IGDB platform names (e.g. "PlayStation 5", "PC (Microsoft Windows)")
   // used by `pickBestMatch` to prefer results that match the syncing
@@ -543,6 +561,10 @@ export interface IgdbUpcomingRelease {
   releaseDateCategory: ReleaseDateCategory;
   platforms: string[];
   genres: string[];
+  // B-IGDB-3 — IGDB-tag triple's tone+setting + camera axes. Default `[]`
+  // when absent; new field, so older payloads + cache hits may not carry it.
+  themes: string[];
+  playerPerspectives: string[];
   coverUrl: string | null;
   synopsis: string | null;
   wishlisted: boolean;

@@ -46,6 +46,8 @@ export function DashboardMobile() {
   // keeps the previous period's data on screen while a new period fetches
   // (avoids the loading-skeleton flash on chip click).
   const [period, setPeriod] = useState<DashboardPeriod>('all');
+  // B-IGDB-3 — breakdown dimension (genre · theme · perspective).
+  const [breakdownTab, setBreakdownTab] = useState<'genre' | 'theme' | 'perspective'>('genre');
   const { data, loading, error, refetch } = useDashboard(period);
   const lastGoodRef = useRef<DashboardResponse | null>(null);
   if (data) lastGoodRef.current = data;
@@ -332,24 +334,69 @@ export function DashboardMobile() {
           );
         })()}
 
-        {/* genre breakdown */}
-        {stats.genres.length > 0 && (
+        {/* B-IGDB-3 — IGDB-tag triple breakdown with 3-tab strip
+            (genre · theme · perspective). Same tab pattern as desktop. */}
+        {(stats.genres.length + stats.themes.length + stats.playerPerspectives.length) > 0 && (
           <div data-testid="card-breakdown" style={{ padding: '14px 16px 0' }}>
-            <Marker>// top genres</Marker>
-            <div style={{ marginTop: 8 }}>
-              {(() => {
-                const maxCount = stats.genres[0]?.count ?? 1;
-                return stats.genres.slice(0, 6).map(({ name, count }, i) => (
-                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: "var(--text-2xs)" }}>
-                    <span style={{ width: 92, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-                    <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
-                      <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
+            {(() => {
+              const series = breakdownTab === 'theme'
+                ? stats.themes
+                : breakdownTab === 'perspective'
+                  ? stats.playerPerspectives
+                  : stats.genres;
+              const tabs: { id: typeof breakdownTab; label: string; available: boolean }[] = [
+                { id: 'genre', label: 'genre', available: stats.genres.length > 0 },
+                { id: 'theme', label: 'theme', available: stats.themes.length > 0 },
+                { id: 'perspective', label: 'persp.', available: stats.playerPerspectives.length > 0 },
+              ];
+              const maxCount = series[0]?.count ?? 1;
+              return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <Marker>// top {breakdownTab === 'perspective' ? 'perspectives' : `${breakdownTab}s`}</Marker>
+                    <div role="tablist" aria-label="Breakdown dimension" style={{ display: 'inline-flex', gap: 4 }}>
+                      {tabs.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={breakdownTab === t.id}
+                          disabled={!t.available}
+                          onClick={() => { if (t.available && breakdownTab !== t.id) setBreakdownTab(t.id); }}
+                          className={breakdownTab === t.id ? 'chip solid amber' : 'chip'}
+                          style={{
+                            height: 22,
+                            padding: '0 7px',
+                            fontSize: 'var(--text-3xs)',
+                            letterSpacing: '0.04em',
+                            opacity: t.available ? 1 : 0.35,
+                          }}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
                     </div>
-                    <span className="t-tnum t-faint" style={{ fontSize: "var(--text-3xs)", width: 22, textAlign: 'right' }}>{count}</span>
                   </div>
-                ));
-              })()}
-            </div>
+                  <div style={{ marginTop: 8 }}>
+                    {series.length === 0 ? (
+                      <div className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+                        no data yet — backfill via the new sync.
+                      </div>
+                    ) : (
+                      series.slice(0, 6).map(({ name, count }, i) => (
+                        <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: 'var(--text-2xs)' }}>
+                          <span style={{ width: 92, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                          <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
+                            <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
+                          </div>
+                          <span className="t-tnum t-faint" style={{ fontSize: 'var(--text-3xs)', width: 22, textAlign: 'right' }}>{count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 

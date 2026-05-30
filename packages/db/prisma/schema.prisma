@@ -248,6 +248,15 @@ model Game {
   developer            String?
   releaseYear          Int?
   genres               String[]
+  // B-IGDB-3 — IGDB's `themes` axis (tone + setting). ~25 values across the
+  // catalog: Fantasy / Sci-Fi / Horror / Comedy / Historical / Mystery / etc.
+  // Distinct from genres (form) and player_perspectives (camera). Hoard keeps
+  // all three as separate filterable dimensions per PAGES_PLAN §4.4.1.
+  themes               String[] @default([])
+  // B-IGDB-3 — IGDB's `player_perspectives` axis (camera convention). ~8
+  // values: First-person / Third-person / Side-view / Top-down / Text /
+  // Bird-view / Auditory / VR.
+  playerPerspectives   String[] @default([])
   coverUrl             String?
   metadata             Json?
   createdAt            DateTime @default(now())

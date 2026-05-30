@@ -36,6 +36,8 @@ export interface UserGameRow {
     developer: string | null;
     releaseYear: number | null;
     genres: string[];
+    themes: string[];
+    playerPerspectives: string[];
     coverUrl: string | null;
     hltbId: number | null;
     gogAppId: number | null;
@@ -166,6 +168,8 @@ export function mapUserGame(ug: UserGameRow): UserGameDetail {
       developer: ug.game.developer,
       releaseYear: ug.game.releaseYear,
       genres: ug.game.genres,
+      themes: ug.game.themes,
+      playerPerspectives: ug.game.playerPerspectives,
       coverUrl: ug.game.coverUrl,
       hltbId: ug.game.hltbId,
       gogAppId: ug.game.gogAppId,

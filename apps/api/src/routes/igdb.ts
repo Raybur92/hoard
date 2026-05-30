@@ -81,6 +81,14 @@ router.get('/igdb/upcoming', requireUser, requireActive, async (req: Request, re
         releaseDateCategory: w.releaseDateCategory as ReleaseDateCategory,
         platforms: w.platforms,
         genres: w.genres,
+        // B-IGDB-3 — WishlistRelease doesn't snapshot themes / perspectives
+        // (only genres). Wishlist scope serves the wishlist rows directly,
+        // so themes + perspectives default to []. If Releases cards ever
+        // want to display these axes, extend the WishlistRelease model with
+        // a parallel snapshot column. For now Releases cards render only
+        // platforms + genres, so [] is fine.
+        themes: [],
+        playerPerspectives: [],
         coverUrl: w.coverUrl,
         synopsis: w.synopsis,
         wishlisted: true,

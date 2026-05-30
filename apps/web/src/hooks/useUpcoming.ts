@@ -34,6 +34,10 @@ async function fetchUpcoming(scope: UpcomingScope): Promise<IgdbUpcomingRelease[
       releaseDateCategory: w.releaseDateCategory,
       platforms: w.platforms,
       genres: w.genres,
+      // B-IGDB-3 — WishlistRelease fallback doesn't snapshot themes /
+      // perspectives. Cards don't display these axes; [] is fine.
+      themes: [],
+      playerPerspectives: [],
       coverUrl: w.coverUrl,
       synopsis: w.synopsis,
       wishlisted: true,

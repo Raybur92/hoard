@@ -40,6 +40,8 @@ function makeResult(overrides: Partial<IgdbSearchResult> = {}): IgdbSearchResult
     developer: 'Game Freak',
     releaseYear: 1996,
     genres: ['RPG'],
+    themes: [],
+    playerPerspectives: [],
     coverUrl: null,
     platforms: ['Game Boy'],
     totalRatingCount: 1000,

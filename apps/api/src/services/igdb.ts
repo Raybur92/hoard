@@ -71,6 +71,10 @@ interface IgdbRawGame {
   first_release_date?: number;
   cover?: { url: string };
   genres?: { name: string }[];
+  // B-IGDB-3 — IGDB-tag triple (tone+setting + camera). Both arrays are
+  // optional on the raw payload; fetchers map to `[]` when absent.
+  themes?: { name: string }[];
+  player_perspectives?: { name: string }[];
   platforms?: { id: number; name: string }[];
   involved_companies?: { company: { name: string }; developer: boolean }[];
   summary?: string;
@@ -144,6 +148,8 @@ function mapToSearchResult(raw: IgdbRawGame): IgdbSearchResult {
     developer: getDeveloper(raw.involved_companies),
     releaseYear: getReleaseYear(raw.first_release_date),
     genres: raw.genres?.map((g) => g.name) ?? [],
+    themes: raw.themes?.map((t) => t.name) ?? [],
+    playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
     coverUrl: normalizeCover(raw.cover?.url),
     platforms: raw.platforms?.map((p) => p.name) ?? [],
     totalRatingCount: raw.total_rating_count ?? null,
@@ -160,7 +166,7 @@ export async function searchGames(query: string): Promise<IgdbSearchResult[]> {
   const results = await igdbPost(
     'games',
     `search "${query}";
-fields id, name, first_release_date, cover.url, genres.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
+fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
 limit 10;`,
   );
 
@@ -238,7 +244,7 @@ limit 20;`,
   try {
     parents = await igdbPost(
       'games',
-      `fields id, name, first_release_date, cover.url, genres.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
+      `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
 where id = (${gameIds.join(',')});
 limit ${gameIds.length};`,
     );
@@ -260,7 +266,7 @@ export async function getGame(igdbId: number): Promise<IgdbSearchResult | null> 
 
   const results = await igdbPost(
     'games',
-    `fields id, name, first_release_date, cover.url, genres.name, involved_companies.company.name, involved_companies.developer;
+    `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, involved_companies.company.name, involved_companies.developer;
 where id = ${igdbId};
 limit 1;`,
   );
@@ -320,7 +326,7 @@ export async function getUpcomingReleases(opts: UpcomingOptions): Promise<IgdbUp
     : '';
   const hypeClause = hypeThreshold > 0 ? `& hypes > ${hypeThreshold}` : '';
 
-  const query = `fields id, name, first_release_date, cover.url, genres.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
+  const query = `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
 where (category = (2, 8) | category = null)
   ${hypeClause}
   & version_parent = null
@@ -348,6 +354,8 @@ limit ${limit};`;
       releaseDateCategory: categoriseRelease(raw.first_release_date),
       platforms: raw.platforms?.map((p) => p.name) ?? [],
       genres: raw.genres?.map((g) => g.name) ?? [],
+      themes: raw.themes?.map((t) => t.name) ?? [],
+      playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
       coverUrl: normalizeCover(raw.cover?.url),
       synopsis: raw.summary ?? null,
       wishlisted: false,
@@ -386,7 +394,7 @@ export async function getRecentlyReleased(opts: RecentReleasesOptions): Promise<
   const cached = upcomingCache.get(cacheKey);
   if (cached) return cached;
 
-  const query = `fields id, name, first_release_date, cover.url, genres.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
+  const query = `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
 where (category = (0, 2, 8) | category = null)
   & hypes >= ${minHype}
   & version_parent = null
@@ -405,6 +413,8 @@ limit ${limit};`;
     releaseDateCategory: categoriseRelease(raw.first_release_date),
     platforms: raw.platforms?.map((p) => p.name) ?? [],
     genres: raw.genres?.map((g) => g.name) ?? [],
+      themes: raw.themes?.map((t) => t.name) ?? [],
+      playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
     coverUrl: normalizeCover(raw.cover?.url),
     synopsis: raw.summary ?? null,
     wishlisted: false,  // caller fills this in (always false for the hyped list)
@@ -451,7 +461,7 @@ async function getGameByExternalUid(
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'text/plain',
     },
-    body: `fields game.id, game.name, game.first_release_date, game.cover.url, game.genres.name, game.involved_companies.company.name, game.involved_companies.developer, game.platforms.name, game.total_rating_count;
+    body: `fields game.id, game.name, game.first_release_date, game.cover.url, game.genres.name, game.themes.name, game.player_perspectives.name, game.involved_companies.company.name, game.involved_companies.developer, game.platforms.name, game.total_rating_count;
 where uid = "${uid}" & url ~ *"${urlPattern}"*;
 limit 1;`,
   });
@@ -608,7 +618,7 @@ export async function getReleaseDetails(igdbId: number): Promise<IgdbUpcomingRel
 
   const results = await igdbPost(
     'games',
-    `fields id, name, first_release_date, cover.url, genres.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category;
+    `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category;
 where id = ${igdbId};
 limit 1;`,
   );
@@ -625,6 +635,8 @@ limit 1;`,
     releaseDateCategory: categoriseRelease(raw.first_release_date),
     platforms: raw.platforms?.map((p) => p.name) ?? [],
     genres: raw.genres?.map((g) => g.name) ?? [],
+      themes: raw.themes?.map((t) => t.name) ?? [],
+      playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
     coverUrl: normalizeCover(raw.cover?.url),
     synopsis: raw.summary ?? null,
     wishlisted: false,  // caller fills this in

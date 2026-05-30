@@ -95,6 +95,8 @@ const sampleData = (overrides: Partial<DashboardResponse> = {}): DashboardRespon
     weeklyAdded: 2,
     playtimeByPlatform: [{ code: 'ST', label: 'Steam', minutes: 60_000, pct: 100 }],
     genres: [{ name: 'action', count: 50 }, { name: 'rpg', count: 30 }],
+    themes: [{ name: 'fantasy', count: 40 }, { name: 'sci-fi', count: 22 }],
+    playerPerspectives: [{ name: 'third-person', count: 56 }, { name: 'first-person', count: 18 }],
     achievementsRollup: { earned: 200, total: 800, percent: 25 },
     period: 'all',
     periodStats: {
@@ -584,5 +586,105 @@ describe('DashboardDesktop — DASH-PR2 period toggle', () => {
 
     // Clean up the pending promise so React doesn't warn.
     await act(async () => { resolveMonth(sampleData()); });
+  });
+});
+
+describe('DashboardDesktop — B-IGDB-3 breakdown 3-tab strip', () => {
+  beforeAll(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('min-width: 1024px'),
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  });
+
+  it('renders the breakdown card with a 3-tab strip (genre · theme · perspective)', async () => {
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(sampleData());
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const card = await findByTestId('card-breakdown');
+    const tabs = card.querySelectorAll('[role="tab"]');
+    expect(tabs).toHaveLength(3);
+    expect(Array.from(tabs).map((t) => t.textContent?.trim())).toEqual(['genre', 'theme', 'perspective']);
+  });
+
+  it('defaults to genre tab and shows the genres series', async () => {
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(sampleData());
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const card = await findByTestId('card-breakdown');
+    const active = Array.from(card.querySelectorAll('[role="tab"]'))
+      .find((t) => t.getAttribute('aria-selected') === 'true');
+    expect(active?.textContent?.trim()).toBe('genre');
+    // Genre entries from sample fixture surface.
+    expect(card.textContent ?? '').toContain('action');
+    expect(card.textContent ?? '').toContain('rpg');
+    // Theme/perspective entries should NOT surface in the genre view.
+    expect(card.textContent ?? '').not.toContain('fantasy');
+    expect(card.textContent ?? '').not.toContain('third-person');
+  });
+
+  it('clicking the theme tab swaps the body to the themes series', async () => {
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(sampleData());
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const card = await findByTestId('card-breakdown');
+    const themeTab = Array.from(card.querySelectorAll('[role="tab"]'))
+      .find((t) => t.textContent?.trim() === 'theme') as HTMLElement;
+
+    await act(async () => { fireEvent.click(themeTab); });
+
+    await waitFor(() => {
+      expect(card.textContent ?? '').toContain('fantasy');
+      expect(card.textContent ?? '').toContain('sci-fi');
+      // Genre entries vanish when the theme tab is active.
+      expect(card.textContent ?? '').not.toContain('action');
+    });
+  });
+
+  it('disables tabs whose series is empty (e.g. no perspectives in the user library yet)', async () => {
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sampleData({
+        stats: {
+          ...sampleData().stats,
+          playerPerspectives: [],
+        },
+      }),
+    );
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const card = await findByTestId('card-breakdown');
+    const perspectiveTab = Array.from(card.querySelectorAll('[role="tab"]'))
+      .find((t) => t.textContent?.trim() === 'perspective') as HTMLButtonElement;
+    expect(perspectiveTab.disabled).toBe(true);
   });
 });

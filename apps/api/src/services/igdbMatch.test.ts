@@ -8,6 +8,8 @@ function makeResult(overrides: Partial<IgdbSearchResult>): IgdbSearchResult {
     developer: null,
     releaseYear: null,
     genres: [],
+    themes: [],
+    playerPerspectives: [],
     coverUrl: null,
     platforms: [],
     totalRatingCount: 0,
