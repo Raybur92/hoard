@@ -939,11 +939,33 @@ Dashboard is the *most-threaded* page — almost every new section ships as a co
 | Year-in-review / wrap-up card (reserved slot) | OQ-DASH-9 → future workstream once underlying data primitives ship |
 
 **Standalone Dashboard work** that doesn't wait on anything:
-- **DASH-PR1 — Bento-box layout rework.** Refactor today's flat single-column layout into the 12-column bento grid. Renders existing sections as cards with their assigned spans (alerts strip · now-playing hero · countdowns · stat cards · breakdown · activity heatmap). No new data, just structural rework — every existing section keeps its current behaviour, just becomes a span-sized card. Mobile collapses to single column in span-order. **The skeleton everything else fills into.**
+- **DASH-PR1 — Bento-box layout rework. ✅ Done 2026-05-30.** Refactor today's flat single-column layout into the 12-column bento grid. Renders existing sections as cards with their assigned spans (alerts strip · now-playing hero · countdowns · stat cards · breakdown · activity heatmap). No new data, just structural rework — every existing section keeps its current behaviour, just becomes a span-sized card. Mobile collapses to single column in span-order. **The skeleton everything else fills into.** See landing notes below.
 - **DASH-PR2 — Time-axis toggle.** Adds `// this year / this month / all time` toggle above completion ratio + achievements rollup cards. Server changes: dashboard endpoint accepts a `?period=` param; aggregates re-compute. Modest scope.
 - **DASH-PR3 — Sync-error banner in alerts strip.** Surfaces `Platform.syncStatus = 'error'` as a banner. Adjacent to but independent of the bigger callouts that thread in via other workstreams.
 
 Everything else threads in. Dashboard doesn't need its own large workstream — it's the *integrator* of others. Sensible to ship **DASH-PR1 (bento-box layout)** before too many feature workstreams land so they all snap into the new grid cleanly rather than having to refactor the layout for each.
+
+#### DASH-PR1 landing notes (2026-05-30)
+
+- **Decisions confirmed before write:**
+    - The `// the hoard · in numbers` 8-tile stat grid (TOTAL OWNED / COMPLETED / PLAYING / BACKLOG / ON HOLD / DROPPED / WISHLIST / TOTAL PLAYED) was **removed entirely** — informationally redundant with sidebar shelf counts + the new dedicated cards. The bento can breathe.
+    - The multi-card `// wishlist · dropping soon` panel was **replaced by a single dominant `NextReleaseCountdown` (span-3)** + `see all →` link to `/releases`. Per spec §7.4 — Dashboard answers "what's next?" with the next single release; the multi-item view lives on `/releases`.
+- **What shipped:**
+    - New `apps/web/src/components/screens/dashboard/NextReleaseCountdown.tsx` — compact span-3 card with live 1Hz d/h/m/s tick (reuses `useNow(1000)` + `countdownParts`). Distinct from the wider `/releases` HeroCountdown (180×240 cover); same behaviour, narrower footprint.
+    - `BentoCard` wrapper component (inline in `DashboardDesktop.tsx`) — applies `gridColumn: span N` + `data-bento-span` introspection attr + the existing `.panel` styling. Span sizes communicate importance per §7.4 visual-hierarchy table.
+    - Greeting + bignum + system status hero row stays **above** the bento grid (terminal-aesthetic-y personal touch; doesn't fit the span pattern).
+    - Bento layout (desktop, 12-col):
+        - Row 1: `now-playing+rotation (span-6)` · `next-release-countdown (span-3)` · empty 3-col tail (EV-PR1 fills with next-event countdown later).
+        - Row 2: `backlog-picker (span-4)` · `completion-gauge (span-4)` · `achievements-gauge (span-4)`.
+        - Row 3: `genre-breakdown (span-6)` · `hours-by-platform (span-6)`. The "hours by platform" ASCII chart slots into the year-in-review reserved half — kept on Dashboard until OQ-DASH-9 ships, then displaced.
+        - Row 4: `activity-heatmap (span-12)`.
+        - Slim alerts strip span-12 deliberately absent — threads in via Q-series / EV-PR3 / DASH-PR3 / Deals as callouts arrive (progressive disclosure).
+    - **Active rotation sub-section on now-playing card** — when `nowPlaying.length > 1`, renders compact rows below the hero for the other Playing games (`// active rotation · playing × N`). Spec §7.4 ASCII mockup landed without extending the API (`nowPlayingRaw` already returns up to 3 sorted by `lastPlayedAt desc`).
+    - Mobile collapses to 1-col in OQ-DASH-1 #1 fixed-by-importance order: `now-playing → next-release → backlog → completion → achievements → breakdown → platforms → heatmap`. The 4-tile mobile stat grid was removed alongside the desktop 8-tile grid for consistency.
+    - GD-PR3 inline edits (`[+min]` / `[done]` / `[+note]`) explicitly out-of-scope per §7.4 matrix — they ship with the GameDetail State 3 workstream.
+- **Bundle delta:** DashboardDesktop chunk 15.18 kB (gzip 4.23 kB), DashboardMobile 11.41 kB (gzip 3.48 kB), initial JS `index-CBdT25FT.js` 257.05 kB / 81.73 kB gzipped — modest gzip increase vs. the prior baseline consistent with adding `NextReleaseCountdown` + bento wrapper logic; no concerning bloat.
+- **Tests:** 8 new in `apps/web/src/components/screens/__tests__/Dashboard.bento.test.tsx` — bento-grid card presence + correct `data-bento-span` per §7.4 (size = importance regression guard) + active rotation conditional rendering + NextReleaseCountdown surfaces the next wishlist title + the two **removed sections stay removed** as anti-regression pins (the 8-tile stat grid + the multi-card wishlist panel are easy to accidentally re-add). Mobile asserts the OQ-DASH-1 fixed-by-importance card order. Plus an in-scope React key warning fix (the system status `.map` was rendering Fragments with keys on children, which React drops — moved key to `React.Fragment`).
+- **What's expected for the next contributor of any DASH addition:** add the card via `<BentoCard span={N} testId="card-foo">`. Mobile auto-folds in `[data-testid^="card-"]` order — the test pins desktop layout + mobile order, so adding cards to the desktop grid in a different position will fail tests on both axes (caught early). Reserve the alerts strip as `span-12` at the top of the grid (no slot today, but render at `gridColumn: '1 / -1'` when callouts arrive).
 
 ---
 

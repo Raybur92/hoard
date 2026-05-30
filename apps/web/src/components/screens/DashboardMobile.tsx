@@ -8,11 +8,13 @@ import { Icon } from '../primitives/Icon';
 import { Hr } from '../primitives/Hr';
 import { Heatmap } from '../primitives/Heatmap';
 import { Btn } from '../primitives/Btn';
+import { Gauge } from '../primitives/Gauge';
+import { NextReleaseCountdown } from './dashboard/NextReleaseCountdown';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { PullableScroll } from '../primitives/PullableScroll';
-import { minutesToHours, formatRelative, daysUntil, buildAsciiBar } from '../../lib/utils';
-import type { PlatformStat, UserGameDetail, WishlistRelease } from '@hoard/types';
+import { minutesToHours, formatRelative, buildAsciiBar } from '../../lib/utils';
+import type { PlatformStat, UserGameDetail } from '@hoard/types';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -25,17 +27,6 @@ function greeting(): string {
 const PLATFORM_NAMES: Record<string, string> = {
   ST: 'STEAM', PS: 'PSN', XB: 'XBOX', GG: 'GOG', NT: 'NINT', EP: 'EPIC',
 };
-
-function toPlatCode(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes('steam')) return 'ST';
-  if (n.includes('ps') || n.includes('playstation')) return 'PS';
-  if (n.includes('xbox')) return 'XB';
-  if (n.includes('gog')) return 'GG';
-  if (n.includes('nintendo')) return 'NT';
-  if (n.includes('epic')) return 'EP';
-  return n.slice(0, 2).toUpperCase();
-}
 
 function asciiChart(platforms: PlatformStat[]): string {
   return platforms.map(p => {
@@ -92,7 +83,7 @@ export function DashboardMobile() {
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
   const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = data;
 
-  // First-run / empty state: zero games owned. Replace the full dashboard.
+  // First-run / empty state: zero games owned.
   if (stats.totalGames === 0) {
     return (
       <>
@@ -129,6 +120,8 @@ export function DashboardMobile() {
   const skipWeeks = Math.max(0, activity.weeks - MOBILE_WEEKS);
   const mobileCells = activity.cells.slice(skipWeeks * 7);
   const np = nowPlaying[0] ?? null;
+  const rotation = nowPlaying.slice(1);
+  const nextRelease = wishlistCountdown[0] ?? null;
   const npTotalMin = np
     ? Object.values(np.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0)
     : 0;
@@ -151,7 +144,7 @@ export function DashboardMobile() {
       />
       <PullableScroll onRefresh={refetch} ariaLabel="Dashboard content">
 
-
+        {/* Greeting + bignum header — same role as desktop, slimmer */}
         <div style={{ padding: '14px 16px 4px' }}>
           <Marker>// good {greeting()}, {(user?.name ?? user?.email?.split('@')[0] ?? 'hoard').toLowerCase()}</Marker>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 10 }}>
@@ -163,9 +156,13 @@ export function DashboardMobile() {
           </div>
         </div>
 
-        {/* now playing — tap the card to open the game detail */}
+        {/* Mobile cards stack in span-order per OQ-DASH-1 #1
+            (alerts → now-playing → countdowns → stats → breakdowns → heatmap).
+            The alerts strip is absent in DASH-PR1 — threads in via Q/EV/DASH-PR3/Deals. */}
+
+        {/* now playing — primary hero, tap card → game detail */}
         {np && (
-          <div style={{ padding: '12px 16px' }}>
+          <div data-testid="card-now-playing" style={{ padding: '12px 16px' }}>
             <button
               type="button"
               className="panel"
@@ -191,87 +188,48 @@ export function DashboardMobile() {
                 </div>
               </div>
             </button>
-          </div>
-        )}
 
-        {/* stat tiles */}
-        <div style={{ padding: '0 16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1, background: 'var(--rule)', border: '1px solid var(--rule)' }}>
-            {([
-              [`${Math.floor(stats.totalPlaytimeMinutes / 60).toLocaleString('en')}h`, 'PLAYTIME',    'dim'],
-              [`${stats.completionPct}%`,                                              'COMPLETED',   'green'],
-              [String(stats.backlogCount),                                             'BACKLOG',     'amber'],
-              [String(stats.playingCount),                                             'PLAYING NOW', null],
-            ] as [string, string, string | null][]).map(([v, k, tone], i) => (
-              <div key={i} style={{ background: 'var(--ink)', padding: '12px 12px 10px' }}>
-                <div className="t-mono t-tnum" style={{ fontSize: 20, fontWeight: 500, color: tone === 'green' ? 'var(--green)' : tone === 'amber' ? 'var(--amber)' : 'var(--paper)' }}>{v}</div>
-                <div className="t-up t-faint" style={{ fontSize: "var(--text-2xs)", marginTop: 4 }}>{k}</div>
+            {/* Active rotation — compact rows for the other Playing games.
+                Mirrors desktop bento §7.4 ASCII (active rotation sub-section). */}
+            {rotation.length > 0 && (
+              <div className="panel" style={{ marginTop: 8, padding: '12px 14px' }}>
+                <Marker>// active rotation · playing × {nowPlaying.length}</Marker>
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {rotation.map((g) => {
+                    const mins = Object.values(g.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0);
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => navigate(`/game/${g.id}`)}
+                        aria-label={`Open ${g.game.title}`}
+                        style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '2px 0', font: 'inherit', color: 'inherit', cursor: 'pointer' }}
+                      >
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--paper)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {g.game.title}
+                        </span>
+                        <span className="t-tnum t-dim" style={{ fontSize: 'var(--text-3xs)' }}>{minutesToHours(mins)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* T6 — library-wide trophy/achievement rollup. Hidden when no
-            achievement data exists yet. Single dotted-row in the receipt
-            aesthetic; the desktop version uses a Gauge but mobile is
-            already vertically dense. */}
-        {stats.achievementsRollup && (
-          <div style={{ padding: '14px 16px 0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 12px', border: '1px solid var(--rule)', background: 'var(--ink)' }}>
-              <span className="t-up t-faint" style={{ fontSize: "var(--text-2xs)" }}>achievements</span>
-              <span className="t-mono t-tnum" style={{ fontSize: "var(--text-xs)", color: 'var(--paper-dim)' }}>
-                {stats.achievementsRollup.earned.toLocaleString('en')} / {stats.achievementsRollup.total.toLocaleString('en')}
-                {' · '}
-                <span style={{ color: stats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper)' }}>
-                  {stats.achievementsRollup.percent}%
-                </span>
-              </span>
-            </div>
+            )}
           </div>
         )}
 
-        {/* hours by platform */}
-        {stats.playtimeByPlatform.length > 0 && (
-          <div style={{ padding: '14px 16px 0' }}>
-            <Marker>// hours by platform</Marker>
-            <pre className="ascii t-dim" style={{ marginTop: 8, fontSize: "var(--text-3xs)", lineHeight: 1.55 }}>
-              {platformChart}
-            </pre>
-          </div>
-        )}
-
-        {/* activity */}
-        <div style={{ padding: '14px 16px 0' }}>
-          <Marker>// last-played · 16 wks</Marker>
-          <div style={{ marginTop: 8 }}>
-            <Heatmap weeks={MOBILE_WEEKS} days={7} cells={mobileCells} />
-          </div>
-        </div>
-
-        {/* genre breakdown */}
-        {stats.genres.length > 0 && (
-          <div style={{ padding: '14px 16px 0' }}>
-            <Marker>// top genres</Marker>
-            <div style={{ marginTop: 8 }}>
-              {(() => {
-                const maxCount = stats.genres[0]?.count ?? 1;
-                return stats.genres.slice(0, 6).map(({ name, count }, i) => (
-                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: "var(--text-2xs)" }}>
-                    <span style={{ width: 92, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-                    <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
-                      <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
-                    </div>
-                    <span className="t-tnum t-faint" style={{ fontSize: "var(--text-3xs)", width: 22, textAlign: 'right' }}>{count}</span>
-                  </div>
-                ));
-              })()}
-            </div>
+        {/* next release countdown — compact, replaces the old multi-row
+            "dropping soon" list per DASH-PR1 plan. Reuses the same
+            NextReleaseCountdown component as desktop. */}
+        {nextRelease && (
+          <div data-testid="card-next-release" style={{ padding: '0 16px 12px' }}>
+            <NextReleaseCountdown release={nextRelease} />
           </div>
         )}
 
         {/* backlog picker — AGENT.md key decision #4 */}
         {displayPick && (
-          <div style={{ padding: '18px 16px 4px' }}>
+          <div data-testid="card-backlog-picker" style={{ padding: '8px 16px 4px' }}>
             <Hr kind="dot" />
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 14, marginBottom: 10 }}>
               <Marker>// play next · backlog pick</Marker>
@@ -300,44 +258,77 @@ export function DashboardMobile() {
           </div>
         )}
 
-        {/* wishlist dropping soon */}
-        {wishlistCountdown.length > 0 && (
-          <div style={{ padding: '18px 16px' }}>
-            <Hr kind="dot" />
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 14, marginBottom: 10 }}>
-              <Marker>// dropping soon · {wishlistCountdown.length}</Marker>
-              <span className="t-amber" style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon name="star" size={10} fill={true} /> all
-              </span>
+        {/* completion gauge — bento span-4 on desktop, full-width here */}
+        <div data-testid="card-completion" style={{ padding: '14px 16px 0' }}>
+          <div className="panel" style={{ padding: '12px 14px' }}>
+            <Marker>// completion ratio</Marker>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8, marginBottom: 8 }}>
+              <span className="t-mono t-tnum" style={{ fontSize: "var(--text-lg)", color: 'var(--green)', lineHeight: 1 }}>{stats.completionPct}%</span>
+              <span className="t-tnum t-dim" style={{ fontSize: "var(--text-2xs)" }}>{stats.completedCount} / {stats.totalGames}</span>
             </div>
-            {wishlistCountdown.map((w: WishlistRelease, i) => {
-              const days = daysUntil(w.releaseDate);
-              const urgent = days < 30;
-              const platCodes = w.platforms.map(toPlatCode);
-              const dateStr = w.releaseDate
-                ? new Date(w.releaseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()
-                : `TBA ${w.releaseDateCategory}`;
-              return (
-                <div key={w.id} style={{ display: 'grid', gridTemplateColumns: '36px 1fr auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: i < wishlistCountdown.length - 1 ? '1px dotted var(--rule-bright)' : 'none' }}>
-                  <Cover w={36} h={48} label={(w.title.split(' ')[0] ?? w.title).toUpperCase()} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "var(--text-xs)", lineHeight: 1.1 }}>{w.title}</div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
-                      <span className="t-tnum" style={{ fontSize: "var(--text-3xs)", color: urgent ? 'var(--amber)' : 'var(--paper-dim)' }}>{dateStr.split(',')[0]}</span>
-                      <span className="t-faint" style={{ fontSize: "var(--text-3xs)" }}>· {platCodes.join('·')}</span>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="t-tnum" style={{ fontSize: "var(--text-base)", color: urgent ? 'var(--amber)' : 'var(--paper)' }}>
-                      {w.releaseDate ? `T-${days}` : 'TBA'}
-                    </div>
-                    <div className="t-faint" style={{ fontSize: "var(--text-2xs)" }}>days</div>
-                  </div>
-                </div>
-              );
-            })}
+            <Gauge total={20} filled={Math.round((stats.completedCount / Math.max(stats.totalGames, 1)) * 20)} />
+          </div>
+        </div>
+
+        {/* T6 achievements rollup card — hidden when no data */}
+        {stats.achievementsRollup && (
+          <div data-testid="card-achievements" style={{ padding: '12px 16px 0' }}>
+            <div className="panel" style={{ padding: '12px 14px' }}>
+              <Marker>// achievements</Marker>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8, marginBottom: 8 }}>
+                <span
+                  className="t-mono t-tnum"
+                  style={{ fontSize: "var(--text-lg)", lineHeight: 1, color: stats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper)' }}
+                >
+                  {stats.achievementsRollup.percent}%
+                </span>
+                <span className="t-tnum t-dim" style={{ fontSize: "var(--text-2xs)" }}>
+                  {stats.achievementsRollup.earned.toLocaleString('en')} / {stats.achievementsRollup.total.toLocaleString('en')}
+                </span>
+              </div>
+              <Gauge total={20} filled={Math.round((stats.achievementsRollup.percent / 100) * 20)} />
+            </div>
           </div>
         )}
+
+        {/* genre breakdown */}
+        {stats.genres.length > 0 && (
+          <div data-testid="card-breakdown" style={{ padding: '14px 16px 0' }}>
+            <Marker>// top genres</Marker>
+            <div style={{ marginTop: 8 }}>
+              {(() => {
+                const maxCount = stats.genres[0]?.count ?? 1;
+                return stats.genres.slice(0, 6).map(({ name, count }, i) => (
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: "var(--text-2xs)" }}>
+                    <span style={{ width: 92, color: i === 0 ? 'var(--paper)' : 'var(--paper-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                    <div style={{ flex: 1, height: 3, background: 'var(--ink-2)', position: 'relative' }}>
+                      <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--paper-dim)' }} />
+                    </div>
+                    <span className="t-tnum t-faint" style={{ fontSize: "var(--text-3xs)", width: 22, textAlign: 'right' }}>{count}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* hours by platform */}
+        {stats.playtimeByPlatform.length > 0 && (
+          <div data-testid="card-platforms" style={{ padding: '14px 16px 0' }}>
+            <Marker>// hours by platform</Marker>
+            <pre className="ascii t-dim" style={{ marginTop: 8, fontSize: "var(--text-3xs)", lineHeight: 1.55 }}>
+              {platformChart}
+            </pre>
+          </div>
+        )}
+
+        {/* activity heatmap */}
+        <div data-testid="card-heatmap" style={{ padding: '14px 16px 18px' }}>
+          <Marker>// last-played · 16 wks</Marker>
+          <div style={{ marginTop: 8 }}>
+            <Heatmap weeks={MOBILE_WEEKS} days={7} cells={mobileCells} />
+          </div>
+        </div>
 
       </PullableScroll>
     </>
