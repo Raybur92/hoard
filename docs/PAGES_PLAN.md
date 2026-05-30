@@ -744,7 +744,7 @@ The post-2026-05-29 expansion gives the Dashboard substantially more material to
 - Recently-completed archivist relics (B-Hoard-1)
 - Rating distribution (B-Stash-3)
 - IGDB-tag-triple breakdowns (B-IGDB-3 — genre + theme + perspective)
-- HLTB user-vs-community pace aggregates (GD-PR3)
+<!-- pace aggregate rejected 2026-05-30 — see §7.4 identity-values rejection -->
 
 User jobs:
 1. **"What's going on since I last looked?"** — actionable callouts at top (events missed, deals expiring, pending-review)
@@ -790,124 +790,131 @@ Less external benchmark pressure than other pages — Stash has no Dashboard ana
 | No per-Collection summary | B-Stash-4 | "Pokemon completionist: 18/24 · 3 in Backlog" — quick completion progress per personal Collection |
 | No rating distribution chart | B-Stash-3 | Once the column exists, a small histogram of "your ratings" |
 | Genre breakdown only — no theme / perspective breakdowns | B-IGDB-3 | Today's genre panel becomes a 3-tab strip (genre · theme · perspective) once B-IGDB-3 lands |
-| No HLTB user-vs-community pace aggregate | GD-PR3 | "your pace across the library: +14% slower than community average" — single sentence summary |
 | No "this week" / "this month" / "this year" framing | (no benchmark; potential adjacency to deferred Stats/Wrapped — AGENT.md #3) | Activity heatmap is the only time-axis surfacing today; lacks any "X games completed this year" / "Y hours logged this month" framing |
 | `[resume]` / quick-action affordances absent on now-playing | (Hoard UX gap) | Today's card is tappable → GameDetail. Could expose `[+ minutes]`, `[mark completed]`, `[+ note]` inline once the State 3 GameDetail edit affordances ship (GD-PR3) |
 
-### 7.4 Target state — zoned layout
+### 7.4 Target state — bento-box grid layout
 
-The Dashboard becomes a *four-zone* layout. The zones aren't separate routes — they're vertical sections on the single `/` page. Each zone has a distinct mood:
+The Dashboard adopts a **bento-box** layout: 12-column CSS grid with variable card spans. Card *size* communicates importance; horizontal space carries information; the terminal-aesthetic translates well (each card is its own readout panel with header glyphs, like windows in a tmux session). Mobile collapses to single column by span-order.
 
-- **Zone A — Action now** (top, most prominent): things that ask for the user's attention right now
-- **Zone B — Right now** (your active state): what you're playing, backlog picker
-- **Zone C — Anticipation** (forward-looking): countdowns to next release + next event
-- **Zone D — Introspection** (reflective): stats, distributions, recent completions
+Why not a 4-zone vertical stack (the earlier proposal, rejected 2026-05-30): vertical-only wastes desktop's horizontal real estate, flattens visual hierarchy to "first row vs second row," forces reader-flow when a dashboard needs scan-flow, and makes every section feel equally weighted.
 
 ```
-// HOARD · dashboard
+// HOARD · DASHBOARD
 
-╔═══════════════════════════════════════════════════════════════════╗
-║ ZONE A — action now (top; only renders sections that have content)║
-╠═══════════════════════════════════════════════════════════════════╣
-║ ⚠ 4 entries need your review                   [review queue →]   ║  ← Q-series callout
-║ ⚡ The Game Awards 2025 aired — 18 games shown   [see all →]      ║  ← Events "you missed"
-║ 🏷 5 wishlist games on sale right now             [browse deals →] ║  ← Deals callout
-╚═══════════════════════════════════════════════════════════════════╝
+┌─ alerts ──────────────────────────────────────────────────────────────────┐
+│ ⚠ 4 entries need review · ⚡ TGA 2025 aired · 18 games · 🏷 5 deals  ⋯    │  ← slim, dismissible chips
+└───────────────────────────────────────────────────────────────────────────┘    only renders when content
+[span-12 · slim alert strip]
 
-╔═══════════════════════════════════════════════════════════════════╗
-║ ZONE B — right now (your active state)                            ║
-╠═══════════════════════════════════════════════════════════════════╣
-║  // now playing                          // backlog picker         ║
-║  [Elden Ring DLC]                         [Hollow Knight]          ║
-║  ▢▢▢▢▢▢▢▢▢▢▢▢▢▢▢▢ 47h                    ★★★★☆ · 25h HLTB         ║
-║  last played 4h ago                       [shuffle]                ║
-║  [+ minutes][mark completed][+ note]      ← (GD-PR3 ships these)  ║
-╚═══════════════════════════════════════════════════════════════════╝
+┌─ now playing ─────────────────────────┐ ┌─ next release ─┐ ┌─ next event ─┐
+│ ELDEN RING SHADOW OF THE ERDTREE       │ │ SILKSONG       │ │ SGF 2026     │
+│ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 47h                   │ │ ┌─┐┌─┐┌─┐┌─┐   │ │ ┌─┐┌─┐┌─┐┌─┐ │
+│ last played 4h ago                     │ │ │11││23││45││12││ │ │11││23││45││12││
+│ [+min] [done] [+note]                  │ │ d  h  m  s     │ │ d  h  m  s   │
+├─ active rotation (Playing × 3) ────────┤ │ [see all →]    │ │ [see all →]  │
+│ Hollow Knight · 13h · OnHold           │ └────────────────┘ └──────────────┘
+│ Cyberpunk 2077 · 24h · OnHold          │
+└────────────────────────────────────────┘
+[span-6 · primary hero]                   [span-3 · countdown]  [span-3 · countdown]
 
-╔═══════════════════════════════════════════════════════════════════╗
-║ ZONE C — anticipation                                              ║
-╠═══════════════════════════════════════════════════════════════════╣
-║  // next release                          // next event            ║
-║  [Hollow Knight: Silksong]                [Summer Game Fest 2026]  ║
-║  ┌──┐┌──┐┌──┐┌──┐                         ┌──┐┌──┐┌──┐┌──┐         ║  ← reuses HeroCountdown
-║  │11││23││45││12│  d/h/m/s                │11││23││45││12│         ║
-║  └──┘└──┘└──┘└──┘                         └──┘└──┘└──┘└──┘         ║
-║  [see all releases →]                     [see all events →]       ║
-╚═══════════════════════════════════════════════════════════════════╝
+┌─ backlog picker ───────────┐ ┌─ completion ───────────┐ ┌─ achievements ─────┐
+│ HOLLOW KNIGHT              │ │ 287/488 · 58%          │ │ 3421/6778          │
+│ ★★★★☆ · 25h HLTB           │ │ ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮       │ │ ▮▮▮▮▮▮▮▮▮▮ 50%     │
+│ [shuffle]                  │ │ this year ▾            │ │ this year ▾        │
+└────────────────────────────┘ └────────────────────────┘ └────────────────────┘
+[span-4]                       [span-4]                   [span-4]
+                               ← time-axis toggle shared between completion + achievements →
 
-╔═══════════════════════════════════════════════════════════════════╗
-║ ZONE D — introspection                                             ║
-╠═══════════════════════════════════════════════════════════════════╣
-║  // recently completed (archivist relics rail — B-Hoard-1)         ║
-║  [Game A relic][Game B relic][Game C relic][Game D relic] →        ║
-║                                                                    ║
-║  // completion ratio                                               ║
-║  ⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬜⬜⬜⬜⬜⬜  287/488 = 58%                       ║
-║                                                                    ║
-║  // achievements rollup (T6 existing)                              ║
-║  earned 3,421 / 6,778 · 50.5%                                      ║
-║                                                                    ║
-║  // your pace                                                     ║
-║  +14% slower than community average                                ║  ← GD-PR3 aggregate
-║                                                                    ║
-║  // breakdown                                                      ║
-║  [ genre | theme | perspective ]                                   ║  ← 3-tab strip (B-IGDB-3)
-║  RPG ▮▮▮▮▮▮▮▮▮▮▮ 87                                                ║
-║  Action ▮▮▮▮▮▮▮▮ 64                                                ║
-║  Strategy ▮▮▮▮ 32                                                  ║
-║                                                                    ║
-║  // collections (B-Stash-4 ships)                                  ║
-║  Pokemon completionist  18 / 24 ▮▮▮▮▮▮▮▮▮▮▮ 75%                    ║
-║  Cyberpunk vault        8 / 8 (complete)                           ║
-║                                                                    ║
-║  // rating distribution (B-Stash-3 ships)                          ║
-║  1┐   2┐   3┐   4 5 6 7┐ 8┐ 9┐ 10                                 ║
-║  ▁   ▁   ▂   ▃ ▄ ▅ █ █ █ █                                       ║
-║                                                                    ║
-║  // activity heatmap (existing — 24-week column-major grid)        ║
-║  [▢▢▢▣▣▢▢▢▣▣▣▣▣▣▢▢▢▣▣▣▣▣▣▢]                                       ║
-╚═══════════════════════════════════════════════════════════════════╝
+┌─ recently completed · relics rail ────────────────────────────────────────┐
+│ ▢▢▢▢▢▢▢▢ ⟶                                       [browse all completed →] │
+│ Game A · Game B · Game C · Game D ...                                     │
+└───────────────────────────────────────────────────────────────────────────┘
+[span-12 · horizontally-scrolling rail, archivist relics from B-Hoard-1]
+
+┌─ breakdown ───────────────────────┐ ┌─ collections ──────────────────────┐
+│ [ genre | theme | perspective ]   │ │ Pokemon completionist 18/24 ▮▮▮ 75%│
+│ RPG ▮▮▮▮▮▮▮▮▮▮▮ 87                │ │ Cyberpunk vault         8/8  ▮▮▮▮ 100%│
+│ Action ▮▮▮▮▮▮▮▮ 64                │ │ Dad's PS2 favorites    11/16 ▮▮▮ 69%│
+│ Strategy ▮▮▮▮ 32                  │ │ [+ new collection]                 │
+└───────────────────────────────────┘ └────────────────────────────────────┘
+[span-6 · B-IGDB-3]                   [span-6 · B-Stash-4]
+
+┌─ rating distribution ─────────────┐ ┌─ (reserved future slot) ───────────┐
+│ 1 2 3 4 5 6 7 8 9 10              │ │ year-in-review / wrap-up (OQ-DASH-9)│
+│ ▁ ▁ ▂ ▃ ▄ ▅ █ █ █ █               │ │                                     │
+└───────────────────────────────────┘ └────────────────────────────────────┘
+[span-6 · B-Stash-3]                   [span-6 · reserved]
+
+┌─ activity heatmap ────────────────────────────────────────────────────────┐
+│ M [▢▢▢▣▣▢▢▢▣▣▣▣▣▣▢▢▢▣▣▣▣▣▣▢]                                              │
+│ T ...                                                                     │
+└───────────────────────────────────────────────────────────────────────────┘
+[span-12 · full-width temporal strip]
 ```
 
-**Per-zone element matrix:**
+**Visual hierarchy via card size:**
 
-| Element | Default state (today) | Ships when |
+| Card size | Communicates | Examples |
 |---|---|---|
-| **Zone A** — Pending review callout | absent | Q-series |
-| **Zone A** — Events "you missed" callout | absent | EV-PR3 |
-| **Zone A** — Deals "X wishlist games on sale" callout | absent | Deals workstream (§8) |
-| **Zone B** — Now playing card | ✓ today (tappable, no actions) | — |
-| **Zone B** — Now playing inline actions (`[+ minutes]` etc.) | absent | GD-PR3 (edit affordances) |
-| **Zone B** — Backlog picker / shuffle | ✓ today | — |
-| **Zone C** — Next release countdown | ✓ today (single line link) | promote to dominant HeroCountdown — REL-PR* polish or threaded into GD-PR* |
-| **Zone C** — Next event countdown | absent | EV-PR1 (HeroCountdown reuse) |
-| **Zone D** — Recently-completed relics rail | absent | B-Hoard-1 (visual treatment ships first) + GD-PR4 |
-| **Zone D** — Completion ratio gauge | ✓ today | — |
-| **Zone D** — Achievements rollup (T6) | ✓ today | — |
-| **Zone D** — User-vs-community HLTB pace aggregate | absent | GD-PR3 (per-game pace) → Dashboard aggregates |
-| **Zone D** — Genre breakdown panel | ✓ today (genre only) | becomes 3-tab strip (genre/theme/perspective) when B-IGDB-3 ships |
-| **Zone D** — Collections summary | absent | B-Stash-4 |
-| **Zone D** — Rating distribution chart | absent | B-Stash-3 |
-| **Zone D** — Activity heatmap | ✓ today | — |
+| `span-12` slim strip | Highest-priority transient signal | Alerts strip (top) |
+| `span-6` hero card | Primary user state | Now-playing + active rotation |
+| `span-3` countdown card | Time-sensitive anticipation | Next release · Next event |
+| `span-4` stat card | Discrete personal measurable | Backlog picker · Completion ratio · Achievements |
+| `span-12` rail | Horizontally-scrollable collection | Recently-completed relics |
+| `span-6` panel | Comparative / breakdown | Breakdown · Collections · Rating distribution · (reserved year-in-review slot) |
+| `span-12` temporal | Calendar-density data | Activity heatmap |
 
-Progressive-disclosure same pattern as Library §4: zones are vertical sections; sections that don't have data simply don't render. A first-run user sees only the parts that have content (empty Dashboard → first-run CTA panel), not empty placeholders for un-shipped features.
+**Scan-flow this enables:**
+- Eye lands top-left (largest card = now-playing) → answers "what am I playing?"
+- Glances top-right (countdown pair) → answers "what's coming?"
+- Drops to stat row → "how am I doing?"
+- Scrolls only if reflective intent (relics / breakdowns / heatmap)
+
+**Mobile collapse:** the 12-column grid collapses to 1-column with cards stacking in span-order: alerts strip → now playing → next release → next event → backlog picker → completion → achievements → relics rail → breakdown → collections → rating → heatmap. Natural vertical reading on mobile; the bento layout is desktop-specific.
+
+**Per-card element matrix:**
+
+| Card | Span | Default state (today) | Ships when |
+|---|---|---|---|
+| Alerts strip — Pending review callout | 12 (slim) | absent | Q-series |
+| Alerts strip — Events "you missed" callout | 12 (slim) | absent | EV-PR3 |
+| Alerts strip — Deals "X wishlist games on sale" callout | 12 (slim) | absent | Deals workstream (§8) |
+| Alerts strip — Sync-error banner | 12 (slim) | absent | DASH-PR3 (small standalone PR) |
+| Now playing + active rotation | 6 | ✓ today (tappable, no inline actions) | — |
+| Now playing inline actions (`[+min]` etc.) | (inside) | absent | GD-PR3 (edit affordances) |
+| Next release countdown | 3 | ✓ today (single line link) | promote to dominant HeroCountdown in DASH-PR1 layout rework |
+| Next event countdown | 3 | absent | EV-PR1 (HeroCountdown reuse) |
+| Backlog picker / shuffle | 4 | ✓ today | — |
+| Completion ratio gauge | 4 | ✓ today | — |
+| Achievements rollup (T6) | 4 | ✓ today | — |
+| Recently-completed relics rail | 12 | absent | B-Hoard-1 (visual treatment ships first) + GD-PR4 |
+| Breakdown panel (genre/theme/perspective tab strip) | 6 | ✓ today (genre only) | tabs land when B-IGDB-3 ships |
+| Collections summary | 6 | absent | B-Stash-4 |
+| Rating distribution chart | 6 | absent | B-Stash-3 |
+| Year-in-review / wrap-up slot | 6 | reserved | OQ-DASH-9 future workstream |
+| Activity heatmap | 12 | ✓ today | — |
+
+Progressive-disclosure: cards that don't have data simply don't render; the grid reflows around them. A first-run user sees only the cards that have content (empty Dashboard → first-run CTA panel), not empty placeholders for un-shipped features.
+
+**Identity-values rejection captured 2026-05-30:** the *user-vs-community HLTB pace aggregate* originally proposed as a Dashboard card was **rejected** on identity grounds — Hoard is personal-tool, not community-comparative. Aggregating per-game pace into a single library-level "you're +14% slower than the community" signal starts to feel like a leaderboard framing Hoard explicitly avoids (sibling rejections: reactive scoring emojis, community-aggregate stats — see §2 B-Stash values divergence). Per-game pace stays on GameDetail S3/S4 (single-game contextual signal — "your time on *this* game vs the community-main time on *this* game") because that's contextual, not comparative-across-collection.
 
 ### 7.5 Open questions
 
-- **OQ-DASH-1 — Zone ordering on mobile.** Desktop renders the 4 zones vertically as drawn. Mobile is already long-scrolling; this gets longer. Two choices:
-    1. **Same vertical ordering** — Zone A always at top because it's actionable; user scrolls through B → C → D
-    2. **Personalized ordering** — recently-active users see B (right-now) at top; inactive users see C (anticipation); etc.
+- **OQ-DASH-1 — Card-stack ordering on mobile.** The bento grid collapses to single column on mobile; cards stack in span-order. Two choices:
+    1. **Fixed by importance** — alerts strip → now-playing → countdowns → stats → relics → breakdowns → heatmap. Same order every visit.
+    2. **Personalized ordering** — recently-active users see now-playing at top; inactive users see countdowns; etc.
     Recommendation: **#1.** Predictable position-by-importance beats clever personalization. Mobile scroll is fine; we already do it for Library.
-- **OQ-DASH-2 — Zone A callout count cap.** If a user has 4 pending-review + 3 events missed + 8 deals + (future) sync-error notice + (future) new-feature announcement, Zone A gets noisy. Cap at N visible callouts (e.g., 3) + a `[+ N more in alerts]` overflow chip? Or always show all? Recommendation: **cap at 5 visible, then collapse the rest into `[+ N more]`.** Order callouts by actionability (pending-review first because it asks for user judgment; events second because they're time-limited but passive; deals third).
+- **OQ-DASH-2 — Alerts strip callout count cap.** If a user has 4 pending-review + 3 events missed + 8 deals + (future) sync-error notice + (future) new-feature announcement, the alerts strip gets noisy. Cap at N visible callouts (e.g., 3) + a `[+ N more in alerts]` overflow chip? Or always show all? Recommendation: **cap at 5 visible, then collapse the rest into `[+ N more]`.** Order callouts by actionability (pending-review first because it asks for user judgment; events second because they're time-limited but passive; deals third).
 - **OQ-DASH-3 — "Last visit" definition for the events-missed widget.** `session.opened` event timestamp (already captured per TL1.2 telemetry)? Or `lastSeenDashboardAt` column on User? Recommendation: **reuse `session.opened` — last 24h-throttled session timestamp.** Don't add a new column.
 - **OQ-DASH-4 — Now-playing card: 1 game vs N.** If a user has 3 Playing games, do we show one (last-played) or all three? Recommendation: **show last-played as the primary card; render compact rows for the other Playing games below.** "Active rotation: 3 games" subheading.
 - **OQ-DASH-5 — Archivist relics rail order.** Chronological by `completedAt` desc (most recent first) seems obvious. Alternative: sort by rating, sort by playtime invested. Recommendation: **chronological desc, with the option to click `[browse all completed →]` to land at `/library/Completed` for richer sorting.**
 - **OQ-DASH-6 — Backlog picker once Collections exist.** Should the picker pull random from full backlog (today) or from a user-selected Collection (when B-Stash-4 ships)? Or both (picker has a Collection filter)? Recommendation: **add a Collection filter to the picker post-B-Stash-4** — "shuffle within: All Backlog ▼ / Pokemon completionist / Cyberpunk vault / …". Keeps decision #4 intact (default = all backlog), unlocks per-collection shuffling for users who curate.
 - **OQ-DASH-7 — Breakdown panel: tabs vs all-three-stacked.** Genre + theme + perspective as a 3-tab strip (tap to switch) vs. all three breakdowns rendered as 3 stacked panels? Tab strip is denser; stacked is more discoverable. Recommendation: **tab strip with genre as default**, but if usage signal shows users want comparison-at-a-glance, revisit. Each tab persists last-selected via URL query param (`?breakdown=theme`) so it survives reload.
-- **OQ-DASH-8 — Stats time-axis framing.** "X games completed this year" / "Y hours logged this month" — should the Dashboard surface these explicitly, or stay with the all-time-cumulative framing of today's ratios? Recommendation: **add a small `// this year` / `// this month` / `// all time` toggle above the completion ratio gauge + achievements rollup + pace aggregate** — same toggle drives all three. Activity heatmap already shows 24-week temporal slice; the rest is currently cumulative-only.
+- **OQ-DASH-8 — Stats time-axis framing.** "X games completed this year" / "Y hours logged this month" — should the Dashboard surface these explicitly, or stay with the all-time-cumulative framing of today's ratios? Recommendation: **add a small `// this year` / `// this month` / `// all time` toggle above the completion-ratio + achievements cards** — same toggle drives both. Activity heatmap already shows 24-week temporal slice; the rest is currently cumulative-only.
 - **OQ-DASH-9 — Reconsider AGENT.md decision #3 (Stats/Wrapped deferred).** OQ-LIB-6 already flagged this — once Collections + Rating + Reference data ship, the wrap-up has substantially richer raw material. Dashboard is the natural home for a year-in-review surface (annual roll-up panel, "your 2026 in games"). Worth a future product-strategy session post-B-Stash-3/4/5. **Not blocking any current Dashboard work.**
 - **OQ-DASH-10 — Quick-action affordances on now-playing.** Today's card is tappable → GameDetail (read-only on the card itself). Once GD-PR3 ships State 3 edit affordances, the Dashboard card could surface `[+ minutes]` / `[mark completed]` / `[+ note]` inline so the user doesn't have to drill into GameDetail just to log a quick session. Recommendation: **yes, but only for manual platforms** — per the F1-PR5 lock, manual playtime edits are only available for non-synced platform codes. Card affordances respect that gating.
-- **OQ-DASH-11 — Dashboard widget for Hoard-system events** (sync failures, new platform connected, beta-feature releases). Today the only system-level surface is the Settings → Platforms log tab. Should Dashboard mirror critical system events in Zone A? Recommendation: **only for sync-error states** — if a connected platform has `syncStatus = 'error'`, surface a banner in Zone A. Other system signals stay in Settings.
+- **OQ-DASH-11 — Dashboard widget for Hoard-system events** (sync failures, new platform connected, beta-feature releases). Today the only system-level surface is the Settings → Platforms log tab. Should Dashboard mirror critical system events in the alerts strip? Recommendation: **only for sync-error states** — if a connected platform has `syncStatus = 'error'`, surface a banner in the alerts strip. Other system signals stay in Settings.
 
 ### 7.6 Sequencing notes
 
@@ -915,25 +922,25 @@ Dashboard is the *most-threaded* page — almost every new section ships as a co
 
 | Dashboard addition | Ships with |
 |---|---|
-| Zone A — Pending review callout | Q-series (writes the data; Dashboard reads it) |
-| Zone A — Events "you missed" callout | EV-PR3 (Events workstream owns this widget; resolves OQ-EV-3) |
-| Zone A — Deals callout | Deals workstream §8 |
-| Zone B — Now-playing inline edit affordances | GD-PR3 |
-| Zone C — Next event countdown | EV-PR1 (HeroCountdown reuse — already designed for §6) |
-| Zone C — Next release countdown promoted to dominant | Standalone polish PR — minimal scope |
-| Zone D — Archivist relics rail | OQ-GD-13 design resolution → GD-PR4 → Dashboard wires it in |
-| Zone D — User-vs-community HLTB pace aggregate | GD-PR3 (per-game pace) → small Dashboard aggregator query |
-| Zone D — Genre breakdown → genre/theme/perspective tab strip | B-IGDB-3 |
-| Zone D — Collections summary | B-Stash-4 |
-| Zone D — Rating distribution | B-Stash-3 |
-| Zone A — Sync-error banner (OQ-DASH-11) | Standalone DASH-PR — small |
+| Alerts strip — Pending review callout | Q-series (writes the data; Dashboard reads it) |
+| Alerts strip — Events "you missed" callout | EV-PR3 (Events workstream owns this widget; resolves OQ-EV-3) |
+| Alerts strip — Deals callout | Deals workstream §8 |
+| Alerts strip — Sync-error banner (OQ-DASH-11) | Standalone DASH-PR3 — small |
+| Now-playing card — inline edit affordances | GD-PR3 |
+| Next event countdown card | EV-PR1 (HeroCountdown reuse — already designed for §6) |
+| Next release countdown — promoted to dominant card | Ships in DASH-PR1 layout rework — minimal scope |
+| Recently-completed relics rail | OQ-GD-13 design resolution → GD-PR4 → Dashboard wires it in |
+| Breakdown panel → genre/theme/perspective tab strip | B-IGDB-3 |
+| Collections summary card | B-Stash-4 |
+| Rating distribution card | B-Stash-3 |
+| Year-in-review / wrap-up card (reserved slot) | OQ-DASH-9 → future workstream once underlying data primitives ship |
 
 **Standalone Dashboard work** that doesn't wait on anything:
-- **DASH-PR1 — Zone layout rework.** Refactor today's flat layout into the 4-zone vertical structure. Renders existing sections in their new zones. No new data, just structural rework — every existing section keeps its current behaviour, just lives in a different visual grouping. Mobile equivalent. **The skeleton everything else fills into.**
-- **DASH-PR2 — Time-axis toggle.** Adds `// this year / this month / all time` toggle above completion ratio + achievements rollup + (future) pace aggregate. Server changes: dashboard endpoint accepts a `?period=` param; aggregates re-compute. Modest scope.
-- **DASH-PR3 — Sync-error banner in Zone A.** Surfaces `Platform.syncStatus = 'error'` as a banner. Adjacent to but independent of the bigger callouts that thread in via other workstreams.
+- **DASH-PR1 — Bento-box layout rework.** Refactor today's flat single-column layout into the 12-column bento grid. Renders existing sections as cards with their assigned spans (alerts strip · now-playing hero · countdowns · stat cards · breakdown · activity heatmap). No new data, just structural rework — every existing section keeps its current behaviour, just becomes a span-sized card. Mobile collapses to single column in span-order. **The skeleton everything else fills into.**
+- **DASH-PR2 — Time-axis toggle.** Adds `// this year / this month / all time` toggle above completion ratio + achievements rollup cards. Server changes: dashboard endpoint accepts a `?period=` param; aggregates re-compute. Modest scope.
+- **DASH-PR3 — Sync-error banner in alerts strip.** Surfaces `Platform.syncStatus = 'error'` as a banner. Adjacent to but independent of the bigger callouts that thread in via other workstreams.
 
-Everything else threads in. Dashboard doesn't need its own large workstream — it's the *integrator* of others. Sensible to ship **DASH-PR1 (zone layout)** before too many feature workstreams land so they all snap into the new structure cleanly rather than having to refactor the layout for each.
+Everything else threads in. Dashboard doesn't need its own large workstream — it's the *integrator* of others. Sensible to ship **DASH-PR1 (bento-box layout)** before too many feature workstreams land so they all snap into the new grid cleanly rather than having to refactor the layout for each.
 
 ---
 
