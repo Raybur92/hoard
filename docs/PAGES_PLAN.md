@@ -990,12 +990,20 @@ The whole page IS the gap. There's no Hoard surface for this today.
 
 `/deals` is a list-heavy page with a clear hierarchy: dominant wishlist deals at top, broader feed below, library-completion + physical-deals + sale-event grouping in between. All prices in the user's locale currency (driven by `User.marketCode`).
 
+**Storefront taxonomy** — two distinct categories, governed by different rules:
+
+1. **Official first-party storefronts — always in scope, never filtered.** These aren't resellers — they're where the publisher sold the game. Hoard treats them as the canonical source:
+    - Steam · GOG · Epic Games Store · itch.io · Humble Store · Battle.net
+    - PSN Store · Xbox Store · Nintendo eShop
+    - Coverage caveat per OQ-DEALS-3: ITAD's data for PSN / Xbox / Nintendo is sparser than PC.
+2. **Third-party resellers — curated allow-list only.** This is the trusted-reseller filter (OQ-DEALS-9). Anything not on the list is excluded entirely (grey-market sources like G2A / Eneba never appear).
+
 **Rules across every section:**
-- Show deals from the curated trusted-storefront allow-list ONLY (per OQ-DEALS-9 lock — see §8.5)
+- Show official first-party storefront deals (always) + reseller deals from the curated allow-list (only)
 - Skip deals for games the user already owns, *unless* the game is wishlisted (per-platform wishlist via CM12 counts — owned on PSN + wishlisted on Switch → show the Switch deal)
 - Surface a `// historical low` chip when current price equals historical-low
 - Surface a `// trending down` chip when a wishlist game has had ≥2 price drops over a sliding window (threshold locked in OQ-DEALS-13)
-- All storefront deep-links go through the affiliate-router with the user invisible to the routing (no UX difference vs raw URL)
+- All deep-links go through the affiliate-router *where an affiliate program exists* — most resellers (Humble / GMG / Instant Gaming / Kinguin / CDKeys / Fanatical / GamesPlanet) have programs; most official first-party storefronts (Steam / PSN / Nintendo / Xbox) do *not* — those links go direct (see OQ-DEALS-5)
 
 ```
 // DEALS · refreshed 4h ago · market: AT 🇦🇹           [change market] [refresh now]
@@ -1054,7 +1062,7 @@ The whole page IS the gap. There's no Hoard surface for this today.
 | Broader-feed list | hidden when no relevant deals | DEALS-PR1 |
 | **Market picker in toolbar (`[change market]`)** | always present | DEALS-PR1 (or Settings — see OQ-DEALS-10) |
 | **Locale-currency display** | always — driven by `User.marketCode` | DEALS-PR1 |
-| Storefront filter chips (trusted allow-list) | always present | DEALS-PR1 |
+| Storefront filter chips (officials always; resellers per allow-list) | always present | DEALS-PR1 |
 | Discount range filter | optional toggle | DEALS-PR4 |
 | Source-type filter (digital storefront / reseller / physical) | always present | DEALS-PR1 (digital); physical chip with DEALS-PR3 |
 | Per-card deal-expiry countdown | when ITAD provides expiry timestamp | DEALS-PR1 |
@@ -1063,7 +1071,7 @@ The whole page IS the gap. There's no Hoard surface for this today.
 
 Progressive-disclosure same as Dashboard / Library: sections without content don't render. A fresh user with empty wishlist sees only the broader-feed section.
 
-**Trusted-storefront allow-list (locked 2026-05-30):** **Humble · Instant Gaming · GMG · Kinguin.** Additional candidates flagged for Andrea's call: **Fanatical** (clean / official affiliate), **GamesPlanet** (clean / official affiliate), **CDKeys** (grey-market but commonly used). Andrea's locked picks above are Andrea's personal-purchase set; the allow-list IS Hoard's curation — not "every storefront ITAD returns." Anything not on the list gets filtered out of the surface. See OQ-DEALS-9 for expansion path.
+**Trusted-RESELLER allow-list (locked 2026-05-30):** **Humble · Instant Gaming · GMG · Kinguin · CDKeys.** Additional candidates flagged for future expansion: **Fanatical** (clean / official affiliate), **GamesPlanet** (clean / official affiliate). The allow-list filters *resellers only* — official first-party storefronts (Steam / GOG / Epic / PSN / Xbox / Nintendo / etc.) are always shown and never subject to this filter. This list IS Hoard's curation of resellers Andrea personally trusts to buy from — not "every reseller ITAD returns." Anything not on this list (G2A / Eneba / etc.) gets filtered out entirely. See OQ-DEALS-9 for expansion path.
 
 ### 8.5 Open questions
 
@@ -1080,8 +1088,9 @@ Progressive-disclosure same as Dashboard / Library: sections without content don
     Recommendation: **#1 — accept the coverage gap.** Document it in an empty-state copy on the page ("console pricing data is sparser than PC; check the platform store directly if you don't see what you expected").
 - **OQ-DEALS-4 — Mobile shape.** Deals is list-heavy. Mobile compression: stack the hero + list vertically; storefront filter as a single sheet-picker rather than chip-row; per-row card density reduced (drop storefront chip, keep title + discount + countdown). Worth a separate mockup pass during DEALS-PR4.
 - **OQ-DEALS-5 — Affiliate-link revenue routing. ✅ REVERSED 2026-05-30 (now IN SCOPE).** Original rejection was framed as "Hoard is not a monetisation surface." That framing was wrong on a closer look — Hoard *runs at a cost* (Railway + IGDB + ITAD + Vercel hosting; future ITAD paid tier if scale demands it). Affiliate revenue from storefronts where the user was already going to buy is *cost-recovery*, not monetisation-driven product behaviour. **Critically:** affiliate routing does NOT change anything the user sees or does — the `[buy →]` button already exists for the user's benefit; the affiliate ID is appended to the URL invisibly. No new buy-pushing UX, no upgraded prominence, no fake-urgency. The product behaviour is identical with or without the affiliate ID; the revenue just covers operating expense.
-    **Implementation pattern:** per-storefront affiliate ID config (env vars: `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, etc.); a thin URL-rewriter wraps every `[buy →]` link with the affiliate ID using the storefront's documented format. Affiliate program signups handled out-of-band by Andrea.
-    **Identity boundary preserved:** Hoard does NOT add buy-promoting UX, does NOT change ranking/sort to favor higher-commission storefronts, does NOT hide deals from non-affiliated storefronts. The trusted allow-list (OQ-DEALS-9) is curated for *what Andrea actually buys from*, not "where Hoard makes the most money."
+    **Implementation pattern:** per-reseller affiliate ID config (env vars: `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, `GMG_AFFILIATE_ID`, `KINGUIN_AFFILIATE_ID`, `CDKEYS_AFFILIATE_ID`, etc.); a thin URL-rewriter wraps every reseller `[buy →]` link with the affiliate ID using the reseller's documented format. Affiliate program signups handled out-of-band by Andrea.
+    **Scope clarification:** affiliate routing applies *primarily to resellers*. Most official first-party storefronts (Steam / PSN / Nintendo / Xbox Store / Epic) do NOT operate public affiliate programs — those `[buy →]` links go direct, no rewriter. The exceptions are GOG (has an affiliate program), Humble Store (has one), and itch.io (has one). The router is a per-storefront-keyed mapping; storefronts without an entry get the unrewritten URL.
+    **Identity boundary preserved:** Hoard does NOT add buy-promoting UX, does NOT change ranking/sort to favor higher-commission storefronts, does NOT hide deals from non-affiliated storefronts. The trusted reseller allow-list (OQ-DEALS-9) is curated for *what Andrea actually buys from*, not "where Hoard makes the most money."
 - **OQ-DEALS-6 — Cross-region price comparison.** "Steam US $34.99 vs Steam EU €34.99 vs Steam ARS ₽X" — ToS-grey territory (some storefronts explicitly forbid region-arbitrage promotion). Recommendation: **skip.** Out of scope; if a user wants region pricing they have ITAD's own site for that.
 - **OQ-DEALS-7 — Deal-drop notifications.** "Hades dropped to €14.99 — you wishlisted it!" — requires a notifications channel Hoard doesn't have. Same gating as Events OQ-EV-10. Recommendation: **defer entirely** until a notifications-channel workstream lands. The Deals page is browse-when-you-visit, not push-when-it-happens.
 - **OQ-DEALS-8 — Library completion deals — depth.** Series reference data (B-Stash-5) is the primitive. The completion-deals surface needs a query: "find on-sale games whose franchise/series is also owned by the user, but this specific entry isn't." Two depth options:
@@ -1089,11 +1098,10 @@ Progressive-disclosure same as Dashboard / Library: sections without content don
     2. **Series + developer** — also surface "you've played 3 FromSoftware games; Armored Core VI is 30% off"
     Recommendation: **#1 in DEALS-PR2; #2 only if usage signal demands it.** Series ownership is a stronger "I want the next one" signal than developer affinity.
 
-- **OQ-DEALS-9 — Trusted-storefront allow-list expansion.** **Locked 2026-05-30 at: Humble · Instant Gaming · GMG · Kinguin.** Andrea's personal-purchase set. Additional candidates flagged for future expansion when convenient:
+- **OQ-DEALS-9 — Trusted-RESELLER allow-list expansion.** **Locked 2026-05-30 at: Humble · Instant Gaming · GMG · Kinguin · CDKeys.** Andrea's personal-purchase set. The allow-list applies to *resellers only* — official first-party storefronts (Steam / GOG / Epic / PSN / Xbox / Nintendo / Battle.net / itch.io / Humble Store) are always shown without filtering. Additional reseller candidates flagged for future expansion when convenient:
     - **Fanatical** — clean (official affiliate program, no grey-market concerns)
     - **GamesPlanet** — clean (UK-based, official affiliate program)
-    - **CDKeys** — grey-market but extremely commonly used; Andrea's call whether to add
-    The allow-list is *config-driven* not user-driven — a single source-of-truth list in the codebase (`apps/api/src/services/deals/allowList.ts` or similar). When Andrea wants to add a storefront, edit the list, deploy. Future enhancement could be admin-editable via the `/admin` panel.
+    The allow-list is *config-driven* not user-driven — a single source-of-truth list in the codebase (`apps/api/src/services/deals/allowList.ts` or similar). When Andrea wants to add a reseller, edit the list, deploy. Future enhancement could be admin-editable via the `/admin` panel.
 - **OQ-DEALS-10 — Market picker UX placement.** New `User.marketCode` column drives both Amazon storefront selection (Amazon.de for AT/DE, Amazon.it for IT, Amazon.com for US, etc.) AND locale currency display across the page. Where does the user *set* this preference?
     1. **Settings → Account section** — single source of truth, set-and-forget. Add a `market: [ AT 🇦🇹 ▾ ]` field alongside email/name. Cross-page affects (Deals, GameDetail S1 prices, anywhere currency is shown).
     2. **Settings + a `[change market]` chip in the Deals toolbar** — same data, two affordances; the chip in Deals jumps straight to the Settings field for quick swap.
@@ -1125,8 +1133,8 @@ DEALS ships as its own workstream — call it DEALS-series. Larger than the orig
     - Nightly cron + admin manual refresh button
     - `User.marketCode` schema column + Accept-Language-derived default
     - Settings → Account: market picker field
-    - Per-storefront affiliate-router (env vars: `HUMBLE_AFFILIATE_ID` etc.)
-    - Trusted-storefront allow-list config (locked: Humble, Instant Gaming, GMG, Kinguin per OQ-DEALS-9)
+    - Per-reseller affiliate-router (env vars: `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, `GMG_AFFILIATE_ID`, `KINGUIN_AFFILIATE_ID`, `CDKEYS_AFFILIATE_ID`). Official first-party storefronts mostly lack affiliate programs — those links go direct.
+    - Trusted-reseller allow-list config (locked: Humble · Instant Gaming · GMG · Kinguin · CDKeys per OQ-DEALS-9). Official storefronts (Steam / GOG / Epic / PSN / Xbox / Nintendo / etc.) always shown, not subject to the filter.
     - `/deals` page: top-wishlist-deal hero + wishlist deals list + broader-feed list
     - All prices in user's locale currency
     - Already-owned exclusion with wishlist exception (per CM12 follow-through)
@@ -1155,7 +1163,7 @@ DEALS ships as its own workstream — call it DEALS-series. Larger than the orig
 
 **Pre-deploy ops checklist:**
 - `ITAD_API_KEY` env var on Railway (same pattern as GOG_CLIENT_ID)
-- Per-storefront affiliate IDs on Railway (e.g. `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, `GMG_AFFILIATE_ID`, `KINGUIN_AFFILIATE_ID`)
+- Per-reseller affiliate IDs on Railway: `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, `GMG_AFFILIATE_ID`, `KINGUIN_AFFILIATE_ID`, `CDKEYS_AFFILIATE_ID` (matching the locked allow-list). Optional: GOG / Humble Store affiliate IDs if Andrea sets those up — Steam / PSN / Xbox / Nintendo don't have public programs and are left blank.
 - Amazon Associate account + API credentials (DEALS-PR3 only)
 
 **Cross-page dependencies fed by DEALS-PR1:**
