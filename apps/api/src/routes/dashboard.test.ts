@@ -61,9 +61,16 @@ const aggRow = (
   genres: string[] = ['Platformer'],
   playtime: Record<string, number> = { ST: 600, PS: 300 },
   lastPlayedAt: Date | null = null,
+  status: string = 'Backlog',
+  // The route only reads `earned` and `total`. Tests pass realistic shapes
+  // including `percent`/`updatedAt` for parity with what the writers emit;
+  // signature stays loose so those don't trip the type system.
+  achievementsByPlatform: Record<string, Record<string, unknown>> = {},
 ) => ({
   playtimeByPlatform: playtime,
   lastPlayedAt,
+  status,
+  achievementsByPlatform,
   game: { genres },
 });
 
@@ -81,12 +88,19 @@ const backlogIdRow = (id: string, mainStory: number | null) => ({
  *   3. userGame.count   (weeklyAdded)
  *   4. userGame.findMany — nowPlaying (Playing, take 3, with full game+hltb)
  *   5. userGame.findMany — backlogIdsRaw (Backlog, lightweight: id + hltb.mainStory)
- *   6. userGame.findMany — aggUserGames (lightweight: playtime + genres for every userGame)
+ *   6. userGame.findMany — aggUserGames (playtime + genres + lastPlayedAt +
+ *      status + achievementsByPlatform for every userGame; the latter two
+ *      added in DASH-PR2 for period-scoped engagement aggregates + T6 rollup)
  *   7. wishlistRelease.findMany
  *   8. platform.findMany
- *   9. userGame.findMany — achievementsRows (M0: lightweight, achievementsByPlatform only)
  * Then a follow-up:
- *   10. userGame.findMany — backlogTopRaw (full data for the 30 IDs with shortest HLTB)
+ *   9. userGame.findMany — backlogTopRaw (full data for the 30 IDs with shortest HLTB)
+ *
+ * DASH-PR2 — `achievementsRows` is no longer a separate query. The
+ * achievements rollup is derived from `aggUserGames` (which now selects
+ * `achievementsByPlatform` alongside playtime/genres/status). Migrating
+ * existing tests: any `achievementsRows` they passed should set the
+ * `achievementsByPlatform` field on the matching `aggRows` entry instead.
  */
 function setupDashboard({
   countGroups = [] as Array<{ status: string; _count: { status: number } }>,
@@ -97,7 +111,6 @@ function setupDashboard({
   backlogTop = [] as ReturnType<typeof makeUserGame>[],
   wishlist = [] as unknown[],
   platforms = [] as unknown[],
-  achievementsRows = [] as Array<{ achievementsByPlatform: Record<string, unknown> }>,
 }: Partial<{
   countGroups: Array<{ status: string; _count: { status: number } }>;
   weeklyAdded: number;
@@ -107,21 +120,19 @@ function setupDashboard({
   backlogTop: ReturnType<typeof makeUserGame>[];
   wishlist: unknown[];
   platforms: unknown[];
-  achievementsRows: Array<{ achievementsByPlatform: Record<string, unknown> }>;
 }>) {
   (prisma.userGame.groupBy as jest.Mock).mockResolvedValue(countGroups);
   // Two count() calls in Promise.all order: wishlistCount (widened), weeklyAdded.
   (prisma.userGame.count as jest.Mock)
     .mockResolvedValueOnce(0)
     .mockResolvedValueOnce(weeklyAdded);
-  // findMany order: nowPlaying, backlogIds, aggRows, achievementsRows, [backlogTop if any backlogIds]
+  // findMany order: nowPlaying, backlogIds, aggRows, [backlogTop if any backlogIds]
   const findManyMock = prisma.userGame.findMany as jest.Mock;
   findManyMock.mockReset();
   findManyMock
     .mockResolvedValueOnce(nowPlaying)
     .mockResolvedValueOnce(backlogIds)
     .mockResolvedValueOnce(aggRows)
-    .mockResolvedValueOnce(achievementsRows)
     .mockResolvedValueOnce(backlogTop);
   (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue(wishlist);
   (prisma.platform.findMany as jest.Mock).mockResolvedValue(platforms);
@@ -270,8 +281,7 @@ describe('GET /api/dashboard — wishlistCount widening (F1-PR2 / CM12 + CM13)',
     findManyMock
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]); // achievementsRows
+      .mockResolvedValueOnce([]);
     (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.platform.findMany as jest.Mock).mockResolvedValue([]);
 
@@ -298,9 +308,9 @@ describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)
   it('returns null when no game in the library has achievement data yet', async () => {
     setupDashboard({
       countGroups: [{ status: 'Backlog', _count: { status: 5 } }],
-      achievementsRows: [
-        { achievementsByPlatform: {} },
-        { achievementsByPlatform: {} },
+      aggRows: [
+        aggRow(['Action'], { ST: 0 }, null, 'Backlog', {}),
+        aggRow(['Action'], { ST: 0 }, null, 'Backlog', {}),
       ],
     });
 
@@ -312,9 +322,9 @@ describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)
   it('aggregates summed counts across single-platform rows + percent rounded to one decimal', async () => {
     setupDashboard({
       countGroups: [{ status: 'Playing', _count: { status: 10 } }],
-      achievementsRows: [
-        { achievementsByPlatform: { PS: { earned: 800, total: 2000, percent: 40, updatedAt: 't' } } },
-        { achievementsByPlatform: { ST: { earned: 442, total: 2580, percent: 17, updatedAt: 't' } } },
+      aggRows: [
+        aggRow(['Action'], { PS: 0 }, null, 'Playing', { PS: { earned: 800, total: 2000, percent: 40, updatedAt: 't' } }),
+        aggRow(['Action'], { ST: 0 }, null, 'Playing', { ST: { earned: 442, total: 2580, percent: 17, updatedAt: 't' } }),
       ],
     });
 
@@ -330,13 +340,13 @@ describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)
   it('aggregates summed counts across cross-platform rows (M-D7 — both .ST and .PS contribute)', async () => {
     setupDashboard({
       countGroups: [{ status: 'Playing', _count: { status: 1 } }],
-      achievementsRows: [
-        // Cyberpunk-style: same game with both Steam achievements and PSN trophies.
-        // Both should contribute to the library-wide rollup.
-        { achievementsByPlatform: {
+      // Cyberpunk-style: same game with both Steam achievements and PSN trophies.
+      // Both should contribute to the library-wide rollup.
+      aggRows: [
+        aggRow(['Action'], { ST: 0, PS: 0 }, null, 'Playing', {
           ST: { earned: 28, total: 44, percent: 64, updatedAt: 't' },
           PS: { earned: 30, total: 45, percent: 67, updatedAt: 't' },
-        } },
+        }),
       ],
     });
 
@@ -351,8 +361,8 @@ describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)
   it('handles a 0/N case (user has games with achievement support but earned none)', async () => {
     setupDashboard({
       countGroups: [{ status: 'Backlog', _count: { status: 1 } }],
-      achievementsRows: [
-        { achievementsByPlatform: { ST: { earned: 0, total: 100, percent: 0, updatedAt: 't' } } },
+      aggRows: [
+        aggRow(['Action'], { ST: 0 }, null, 'Backlog', { ST: { earned: 0, total: 100, percent: 0, updatedAt: 't' } }),
       ],
     });
 
@@ -360,20 +370,185 @@ describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)
     expect(res.body.stats.achievementsRollup).toEqual({ earned: 0, total: 100, percent: 0 });
   });
 
-  it('runs the achievementsRows query as a findMany with the achievementsByPlatform select', async () => {
+  it('selects achievementsByPlatform alongside playtime + genres + lastPlayedAt + status on the aggUserGames query (DASH-PR2)', async () => {
     setupDashboard({
       countGroups: [{ status: 'Backlog', _count: { status: 1 } }],
-      achievementsRows: [
-        { achievementsByPlatform: { ST: { earned: 50, total: 200, percent: 25, updatedAt: 't' } } },
+      aggRows: [
+        aggRow(['Action'], { ST: 0 }, null, 'Backlog', { ST: { earned: 50, total: 200, percent: 25, updatedAt: 't' } }),
       ],
     });
 
     await request(app).get('/api/dashboard');
 
-    // The 4th findMany call is the achievements rollup (per setupDashboard order).
+    // The 3rd findMany call is the aggUserGames query (per setupDashboard order:
+    // nowPlaying, backlogIds, aggUserGames, backlogTop). DASH-PR2 dropped the
+    // separate achievementsRows query; achievementsByPlatform now rides along
+    // on aggUserGames since the engagement-scoped period stats need both
+    // status + achievementsByPlatform on the same row.
     const findManyCalls = (prisma.userGame.findMany as jest.Mock).mock.calls;
-    const achievementsCall = findManyCalls[3]?.[0];
-    expect(achievementsCall.where.userId).toBe('test-user-id');
-    expect(achievementsCall.select).toEqual({ achievementsByPlatform: true });
+    const aggCall = findManyCalls[2]?.[0];
+    expect(aggCall.where.userId).toBe('test-user-id');
+    expect(aggCall.select).toEqual({
+      playtimeByPlatform: true,
+      lastPlayedAt: true,
+      status: true,
+      achievementsByPlatform: true,
+      game: { select: { genres: true } },
+    });
+  });
+});
+
+describe('GET /api/dashboard — DASH-PR2 period scoping', () => {
+  it('defaults to period="all" when no ?period= query parameter is provided', async () => {
+    setupDashboard({
+      countGroups: [
+        { status: 'Playing', _count: { status: 2 } },
+        { status: 'Completed', _count: { status: 8 } },
+      ],
+      aggRows: [
+        aggRow(['Action'], { ST: 100 }, null, 'Playing', {}),
+        aggRow(['RPG'], { ST: 0 }, null, 'Completed', {}),
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.body.stats.period).toBe('all');
+    // Period-all mirrors the all-time numerator + denominator from shelfCounts.
+    expect(res.body.stats.periodStats.completedCount).toBe(8);
+    expect(res.body.stats.periodStats.totalGames).toBe(10);
+    expect(res.body.stats.periodStats.completionPct).toBe(80);
+  });
+
+  it('rejects unknown ?period= values silently by collapsing to "all" (no 400)', async () => {
+    setupDashboard({ countGroups: [{ status: 'Backlog', _count: { status: 1 } }] });
+    const res = await request(app).get('/api/dashboard?period=weekly');
+    expect(res.status).toBe(200);
+    expect(res.body.stats.period).toBe('all');
+  });
+
+  it('?period=year: completedCount + totalGames count only UserGames with lastPlayedAt this calendar year', async () => {
+    const now = new Date();
+    const thisYearStart = new Date(Date.UTC(now.getUTCFullYear(), 6, 15)); // mid-year — definitely after start of year
+    const lastYearEnd = new Date(Date.UTC(now.getUTCFullYear() - 1, 11, 31));
+
+    setupDashboard({
+      countGroups: [
+        { status: 'Playing', _count: { status: 1 } },
+        { status: 'Completed', _count: { status: 3 } },
+      ],
+      aggRows: [
+        // Three played this year — 2 completed, 1 playing
+        aggRow(['Action'], { ST: 100 }, thisYearStart, 'Completed', {}),
+        aggRow(['Action'], { ST: 100 }, thisYearStart, 'Completed', {}),
+        aggRow(['Action'], { ST: 50 }, thisYearStart, 'Playing', {}),
+        // One played last year — completed, must NOT count
+        aggRow(['RPG'], { ST: 100 }, lastYearEnd, 'Completed', {}),
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard?period=year');
+    expect(res.status).toBe(200);
+    expect(res.body.stats.period).toBe('year');
+    expect(res.body.stats.periodStats.completedCount).toBe(2);
+    expect(res.body.stats.periodStats.totalGames).toBe(3);
+    expect(res.body.stats.periodStats.completionPct).toBeCloseTo(66.7, 0);
+  });
+
+  it('?period=month: lastPlayedAt before this calendar month is excluded from the period denominator', async () => {
+    const now = new Date();
+    const thisMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const thisMonthMid = new Date(thisMonthStart.getTime() + 5 * 86_400_000);
+    const lastMonthEnd = new Date(thisMonthStart.getTime() - 86_400_000);
+
+    setupDashboard({
+      countGroups: [{ status: 'Completed', _count: { status: 2 } }],
+      aggRows: [
+        aggRow(['Action'], { ST: 100 }, thisMonthMid, 'Completed', {}),
+        aggRow(['Action'], { ST: 100 }, thisMonthMid, 'Backlog', {}),
+        // Excluded — last month
+        aggRow(['Action'], { ST: 100 }, lastMonthEnd, 'Completed', {}),
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard?period=month');
+    expect(res.body.stats.period).toBe('month');
+    expect(res.body.stats.periodStats.totalGames).toBe(2);
+    expect(res.body.stats.periodStats.completedCount).toBe(1);
+  });
+
+  it('rows with lastPlayedAt=null are never counted under year/month periods', async () => {
+    setupDashboard({
+      countGroups: [{ status: 'Wishlist', _count: { status: 5 } }],
+      aggRows: [
+        aggRow(['Action'], {}, null, 'Wishlist', {}),
+        aggRow(['Action'], {}, null, 'Wishlist', {}),
+        aggRow(['Action'], {}, null, 'Wishlist', {}),
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard?period=year');
+    expect(res.body.stats.periodStats.totalGames).toBe(0);
+    expect(res.body.stats.periodStats.completedCount).toBe(0);
+    expect(res.body.stats.periodStats.completionPct).toBe(0);
+    expect(res.body.stats.periodStats.achievementsRollup).toBeNull();
+  });
+
+  it('achievementsRollup under period scope sums only games last-played in the period (all-time achievement count on those games)', async () => {
+    const now = new Date();
+    const thisYearMid = new Date(Date.UTC(now.getUTCFullYear(), 6, 15));
+    const lastYearMid = new Date(Date.UTC(now.getUTCFullYear() - 1, 6, 15));
+
+    setupDashboard({
+      countGroups: [{ status: 'Playing', _count: { status: 2 } }],
+      aggRows: [
+        // In-period — achievements DO count
+        aggRow(['Action'], { ST: 100 }, thisYearMid, 'Playing', {
+          ST: { earned: 30, total: 50, percent: 60, updatedAt: 't' },
+        }),
+        // Out-of-period — achievements EXCLUDED
+        aggRow(['Action'], { PS: 100 }, lastYearMid, 'Completed', {
+          PS: { earned: 100, total: 100, percent: 100, updatedAt: 't' },
+        }),
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard?period=year');
+    // All-time rollup includes both rows
+    expect(res.body.stats.achievementsRollup).toEqual({ earned: 130, total: 150, percent: 86.7 });
+    // Period rollup includes only the in-period row
+    expect(res.body.stats.periodStats.achievementsRollup).toEqual({
+      earned: 30,
+      total: 50,
+      percent: 60,
+    });
+  });
+
+  it('top-level all-time stats (completedCount/totalGames/completionPct/achievementsRollup) are NOT affected by period (greeting header reads them)', async () => {
+    const now = new Date();
+    const lastYear = new Date(Date.UTC(now.getUTCFullYear() - 1, 6, 15));
+
+    setupDashboard({
+      countGroups: [
+        { status: 'Backlog', _count: { status: 7 } },
+        { status: 'Completed', _count: { status: 3 } },
+      ],
+      aggRows: [
+        // Everything is last year; under period=year these all fall outside
+        aggRow(['Action'], { ST: 100 }, lastYear, 'Completed', {
+          ST: { earned: 50, total: 100, percent: 50, updatedAt: 't' },
+        }),
+      ],
+    });
+
+    const res = await request(app).get('/api/dashboard?period=year');
+    // Greeting header reads these cumulative values
+    expect(res.body.stats.completedCount).toBe(3);
+    expect(res.body.stats.totalGames).toBe(10);
+    expect(res.body.stats.completionPct).toBe(30);
+    expect(res.body.stats.achievementsRollup).toEqual({ earned: 50, total: 100, percent: 50 });
+    // Period-scoped subset is empty (everything is last year)
+    expect(res.body.stats.periodStats.completedCount).toBe(0);
+    expect(res.body.stats.periodStats.totalGames).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
@@ -10,11 +10,12 @@ import { Heatmap } from '../primitives/Heatmap';
 import { Btn } from '../primitives/Btn';
 import { Gauge } from '../primitives/Gauge';
 import { NextReleaseCountdown } from './dashboard/NextReleaseCountdown';
+import { PeriodToggle } from './dashboard/PeriodToggle';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { PullableScroll } from '../primitives/PullableScroll';
 import { minutesToHours, formatRelative, buildAsciiBar } from '../../lib/utils';
-import type { PlatformStat, UserGameDetail } from '@hoard/types';
+import type { DashboardPeriod, DashboardResponse, PlatformStat, UserGameDetail } from '@hoard/types';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -40,7 +41,13 @@ function asciiChart(platforms: PlatformStat[]): string {
 export function DashboardMobile() {
   useDocumentTitle("Dashboard");
   const navigate = useNavigate();
-  const { data, loading, error, refetch } = useDashboard();
+  // DASH-PR2 — period state for the combined progress card; lastGoodRef
+  // keeps the previous period's data on screen while a new period fetches
+  // (avoids the loading-skeleton flash on chip click).
+  const [period, setPeriod] = useState<DashboardPeriod>('all');
+  const { data, loading, error, refetch } = useDashboard(period);
+  const lastGoodRef = useRef<DashboardResponse | null>(null);
+  if (data) lastGoodRef.current = data;
   const user = useCurrentUser();
   const [pickIdx, setPickIdx] = useState(0);
   const platformChart = useMemo(
@@ -61,7 +68,9 @@ export function DashboardMobile() {
     );
   }
 
-  if (loading || !data) {
+  const resolvedData = data ?? lastGoodRef.current;
+
+  if ((loading && !resolvedData) || !resolvedData) {
     return (
       <>
         <MobileHeader title="hoard" />
@@ -81,7 +90,7 @@ export function DashboardMobile() {
 
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
-  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = data;
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = resolvedData;
 
   // First-run / empty state: zero games owned.
   if (stats.totalGames === 0) {
@@ -258,38 +267,61 @@ export function DashboardMobile() {
           </div>
         )}
 
-        {/* completion gauge — bento span-4 on desktop, full-width here */}
-        <div data-testid="card-completion" style={{ padding: '14px 16px 0' }}>
-          <div className="panel" style={{ padding: '12px 14px' }}>
-            <Marker>// completion ratio</Marker>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8, marginBottom: 8 }}>
-              <span className="t-mono t-tnum" style={{ fontSize: "var(--text-lg)", color: 'var(--green)', lineHeight: 1 }}>{stats.completionPct}%</span>
-              <span className="t-tnum t-dim" style={{ fontSize: "var(--text-2xs)" }}>{stats.completedCount} / {stats.totalGames}</span>
-            </div>
-            <Gauge total={20} filled={Math.round((stats.completedCount / Math.max(stats.totalGames, 1)) * 20)} />
-          </div>
-        </div>
+        {/* DASH-PR2 — combined progress card. Completion + achievements
+            share the same period scope, so one card, one toggle, two
+            metrics. Mobile stacks the two halves vertically inside the
+            card (narrow width). When achievements is null for the active
+            period, only completion renders.
 
-        {/* T6 achievements rollup card — hidden when no data */}
-        {stats.achievementsRollup && (
-          <div data-testid="card-achievements" style={{ padding: '12px 16px 0' }}>
-            <div className="panel" style={{ padding: '12px 14px' }}>
-              <Marker>// achievements</Marker>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8, marginBottom: 8 }}>
-                <span
-                  className="t-mono t-tnum"
-                  style={{ fontSize: "var(--text-lg)", lineHeight: 1, color: stats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper)' }}
-                >
-                  {stats.achievementsRollup.percent}%
+            `loadingNewPeriod` dims the stats while the new period is
+            fetching in the background — visible signal that a chip click
+            registered (Andrea's eyeball feedback). */}
+        {(() => {
+          const loadingNewPeriod = loading && !data;
+          return (
+        <div data-testid="card-progress" style={{ padding: '14px 16px 0' }}>
+          <div className="panel" style={{ padding: '12px 14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+              <Marker>// progress</Marker>
+              <PeriodToggle value={period} onChange={setPeriod} compact />
+            </div>
+
+            <div style={{ opacity: loadingNewPeriod ? 0.45 : 1, transition: 'opacity 120ms ease' }}>
+            <div data-testid="progress-completion">
+              <div className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', marginBottom: 6 }}>completed</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <span className="t-mono t-tnum" style={{ fontSize: 'var(--text-lg)', color: 'var(--green)', lineHeight: 1 }}>
+                  {stats.periodStats.completionPct}%
                 </span>
-                <span className="t-tnum t-dim" style={{ fontSize: "var(--text-2xs)" }}>
-                  {stats.achievementsRollup.earned.toLocaleString('en')} / {stats.achievementsRollup.total.toLocaleString('en')}
+                <span className="t-tnum t-dim" style={{ fontSize: 'var(--text-2xs)' }}>
+                  {stats.periodStats.completedCount} / {stats.periodStats.totalGames}
                 </span>
               </div>
-              <Gauge total={20} filled={Math.round((stats.achievementsRollup.percent / 100) * 20)} />
+              <Gauge total={20} filled={Math.round((stats.periodStats.completedCount / Math.max(stats.periodStats.totalGames, 1)) * 20)} />
+            </div>
+
+            {stats.periodStats.achievementsRollup && (
+              <div data-testid="progress-achievements" style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--rule)' }}>
+                <div className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', marginBottom: 6 }}>achievements</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                  <span
+                    className="t-mono t-tnum"
+                    style={{ fontSize: 'var(--text-lg)', lineHeight: 1, color: stats.periodStats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper)' }}
+                  >
+                    {stats.periodStats.achievementsRollup.percent}%
+                  </span>
+                  <span className="t-tnum t-dim" style={{ fontSize: 'var(--text-2xs)' }}>
+                    {stats.periodStats.achievementsRollup.earned.toLocaleString('en')} / {stats.periodStats.achievementsRollup.total.toLocaleString('en')}
+                  </span>
+                </div>
+                <Gauge total={20} filled={Math.round((stats.periodStats.achievementsRollup.percent / 100) * 20)} />
+              </div>
+            )}
             </div>
           </div>
-        )}
+        </div>
+          );
+        })()}
 
         {/* genre breakdown */}
         {stats.genres.length > 0 && (

@@ -247,6 +247,36 @@ export interface PlatformStat {
   pct: number;
 }
 
+/**
+ * DASH-PR2 — time-axis period bound for the Dashboard completion + achievements
+ * cards. `all` is the default cumulative view; `year` and `month` are
+ * engagement-scoped: stats are computed AMONG UserGames whose `lastPlayedAt`
+ * falls in the period (start of current calendar year / month, server-local
+ * UTC). `lastPlayedAt` is a tractable proxy for "what you engaged with this
+ * window" — we don't track `completedAt` or per-achievement timestamps
+ * (PAGES_PLAN §7.5 OQ-DASH-8).
+ */
+export type DashboardPeriod = 'all' | 'year' | 'month';
+
+/** DASH-PR2 — period-scoped subset of DashboardStats. Always present in the
+ *  response; mirrors all-time values when `period === 'all'`. */
+export interface DashboardPeriodStats {
+  /** Completed UserGames whose lastPlayedAt is inside the period. When
+   *  `period === 'all'`, this is the cumulative completed count. */
+  completedCount: number;
+  /** Denominator for the period: UserGames with lastPlayedAt in the period.
+   *  When `period === 'all'`, this is `totalGames` (full library). */
+  totalGames: number;
+  /** `completedCount / totalGames * 100`, one decimal. 0 when `totalGames` is 0. */
+  completionPct: number;
+  /** Sum of achievementsByPlatform.{platform}.{earned,total} across UserGames
+   *  with lastPlayedAt in the period. Achievements aren't timestamped per-unlock,
+   *  so this is "all-time achievement progress on games you engaged with in the
+   *  period," not "achievements earned in the period." `null` when no engaged
+   *  game has achievement data. */
+  achievementsRollup: { earned: number; total: number; percent: number } | null;
+}
+
 export interface DashboardStats {
   totalGames: number;
   playingCount: number;
@@ -269,6 +299,14 @@ export interface DashboardStats {
   // `earned / total * 100`, rounded to one decimal — same convention as
   // `completionPct`.
   achievementsRollup: { earned: number; total: number; percent: number } | null;
+  // DASH-PR2 — period echoed back from the request (`?period=`), so the
+  // client can render the correct toggle state on hydration / shared URLs.
+  period: DashboardPeriod;
+  // DASH-PR2 — period-scoped variants for the completion + achievements
+  // cards (PAGES_PLAN §7.4). Top-level fields above stay all-time so the
+  // greeting header and other cumulative surfaces don't flicker when the
+  // toggle changes.
+  periodStats: DashboardPeriodStats;
 }
 
 /** Activity heatmap cells, column-major (weeks × 7).

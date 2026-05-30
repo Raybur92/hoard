@@ -22,6 +22,23 @@ async function loadApi() {
 }
 
 describe('api mutation invalidation', () => {
+  it('invalidating `dashboard` also clears the DASH-PR2 period-scoped variants (`dashboard:year` / `dashboard:month`)', async () => {
+    // Regression guard: useDashboard parameterizes its cache key with the
+    // period suffix. Any existing mutation that flushes `dashboard` must
+    // continue to cover the new variants without per-mutation changes, via
+    // cache.invalidate()'s startsWith() prefix match. If a future cache
+    // refactor changes that contract, this test surfaces it loudly.
+    cache.set('dashboard', { stats: 'all' });
+    cache.set('dashboard:year', { stats: 'year' });
+    cache.set('dashboard:month', { stats: 'month' });
+
+    cache.invalidate('dashboard');
+
+    expect(cache.get('dashboard')).toBeUndefined();
+    expect(cache.get('dashboard:year')).toBeUndefined();
+    expect(cache.get('dashboard:month')).toBeUndefined();
+  });
+
   it('patchGame drops games:, gameCounts, dashboard and re-stores game:{id}', async () => {
     const api = await loadApi();
     cache.set('games:{}', { games: ['old'] });

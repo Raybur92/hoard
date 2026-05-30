@@ -1,4 +1,4 @@
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, useRef, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
@@ -11,10 +11,11 @@ import { Btn } from '../primitives/Btn';
 import { Heatmap } from '../primitives/Heatmap';
 import { Gauge } from '../primitives/Gauge';
 import { NextReleaseCountdown } from './dashboard/NextReleaseCountdown';
+import { PeriodToggle } from './dashboard/PeriodToggle';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { minutesToHours, formatRelative, shortYear, buildAsciiBar } from '../../lib/utils';
-import type { UserGameDetail, PlatformStat } from '@hoard/types';
+import type { DashboardPeriod, DashboardResponse, UserGameDetail, PlatformStat } from '@hoard/types';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -78,7 +79,15 @@ function BentoCard({
 export function DashboardDesktop() {
   useDocumentTitle("Dashboard");
   const navigate = useNavigate();
-  const { data, loading, error, refetch } = useDashboard();
+  // DASH-PR2 — period state for the combined progress card. Changing it
+  // refetches dashboard data via a different cache key. The lastGoodRef
+  // below keeps the previous period's data visible while the new one
+  // loads, so the toggle feels instant + the bento doesn't flash back
+  // to the loading skeleton on every chip click.
+  const [period, setPeriod] = useState<DashboardPeriod>('all');
+  const { data, loading, error, refetch } = useDashboard(period);
+  const lastGoodRef = useRef<DashboardResponse | null>(null);
+  if (data) lastGoodRef.current = data;
   const user = useCurrentUser();
   const [pickIdx, setPickIdx] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -93,7 +102,13 @@ export function DashboardDesktop() {
     <AddGameModal onClose={() => setShowAddModal(false)} onAdded={() => { refetch(); }} />
   );
 
-  if (loading || error || !data) {
+  // DASH-PR2 — once we have ANY dashboard payload, render with it. The
+  // loading skeleton only fires on cold start. Period switches (which
+  // change the cache key and momentarily set data=undefined) fall back
+  // to the previous payload via lastGoodRef.
+  const resolvedData = data ?? lastGoodRef.current;
+
+  if ((loading && !resolvedData) || error || !resolvedData) {
     return (
       <>
         {modalElement}
@@ -128,7 +143,7 @@ export function DashboardDesktop() {
 
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
-  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = data;
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = resolvedData;
   const np = nowPlaying[0] ?? null;
   const rotation = nowPlaying.slice(1);
   const nextRelease = wishlistCountdown[0] ?? null;
@@ -372,40 +387,73 @@ export function DashboardDesktop() {
             </BentoCard>
           )}
 
-          <BentoCard span={4} testId="card-completion">
-            <Marker>// completion ratio</Marker>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 12, marginBottom: 8 }}>
-              <span className="t-mono t-tnum" style={{ fontSize: "var(--text-xl)", color: 'var(--green)', lineHeight: 1 }}>
-                {stats.completionPct}%
-              </span>
-              <span className="t-tnum t-dim" style={{ fontSize: "var(--text-2xs)" }}>
-                {stats.completedCount} / {stats.totalGames}
-              </span>
-            </div>
-            <Gauge total={20} filled={Math.round((stats.completedCount / Math.max(stats.totalGames, 1)) * 20)} />
-          </BentoCard>
+          {/* DASH-PR2 — combined progress card. Completion + achievements
+              share the same period scope (spec §7.4: "toggle shared between
+              completion + achievements"), so the v1-era split into two cards
+              was visual redundancy. One card, one toggle, two metrics inside.
+              When achievements data is absent for the active period, the
+              right half is hidden and completion takes the full width.
 
-          {/* T6 — achievements rollup card. Hidden when no achievement data
-              exists (no PSN sync, all Steam profiles private, etc.). When
-              hidden, the grid reflows: completion stays at span-4 and the
-              next row-2 card pulls into the empty space. */}
-          {stats.achievementsRollup && (
-            <BentoCard span={4} testId="card-achievements">
-              <Marker>// achievements</Marker>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 12, marginBottom: 8 }}>
-                <span
-                  className="t-mono t-tnum"
-                  style={{ fontSize: "var(--text-xl)", lineHeight: 1, color: stats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper)' }}
-                >
-                  {stats.achievementsRollup.percent}%
-                </span>
-                <span className="t-tnum t-dim" style={{ fontSize: "var(--text-2xs)" }}>
-                  {stats.achievementsRollup.earned.toLocaleString('en')} / {stats.achievementsRollup.total.toLocaleString('en')}
-                </span>
+              `loadingNewPeriod` = the user just clicked a chip and the new
+              period's data hasn't arrived yet; we're showing stale numbers
+              from `lastGoodRef`. Dim the figures so the user sees that
+              something is happening (Andrea's eyeball feedback — without
+              this cue, the click feels like nothing changed). */}
+          <BentoCard span={8} testId="card-progress">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
+              <Marker>// progress</Marker>
+              <PeriodToggle value={period} onChange={setPeriod} compact />
+            </div>
+
+            {(() => {
+              const loadingNewPeriod = loading && !data;
+              return (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: stats.periodStats.achievementsRollup ? '1fr 1px 1fr' : '1fr',
+              gap: stats.periodStats.achievementsRollup ? 24 : 0,
+              alignItems: 'start',
+              opacity: loadingNewPeriod ? 0.45 : 1,
+              transition: 'opacity 120ms ease',
+            }}>
+              <div data-testid="progress-completion">
+                <div className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', marginBottom: 8 }}>completed</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span className="t-mono t-tnum" style={{ fontSize: 'var(--text-xl)', color: 'var(--green)', lineHeight: 1 }}>
+                    {stats.periodStats.completionPct}%
+                  </span>
+                  <span className="t-tnum t-dim" style={{ fontSize: 'var(--text-2xs)' }}>
+                    {stats.periodStats.completedCount} / {stats.periodStats.totalGames}
+                  </span>
+                </div>
+                <Gauge total={20} filled={Math.round((stats.periodStats.completedCount / Math.max(stats.periodStats.totalGames, 1)) * 20)} />
               </div>
-              <Gauge total={20} filled={Math.round((stats.achievementsRollup.percent / 100) * 20)} />
-            </BentoCard>
-          )}
+
+              {stats.periodStats.achievementsRollup && (
+                <>
+                  {/* Vertical divider mirrors the .panel hairline aesthetic. */}
+                  <div style={{ background: 'var(--rule)', alignSelf: 'stretch', minHeight: 56 }} />
+                  <div data-testid="progress-achievements">
+                    <div className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', marginBottom: 8 }}>achievements</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span
+                        className="t-mono t-tnum"
+                        style={{ fontSize: 'var(--text-xl)', lineHeight: 1, color: stats.periodStats.achievementsRollup.percent >= 80 ? 'var(--green)' : 'var(--paper)' }}
+                      >
+                        {stats.periodStats.achievementsRollup.percent}%
+                      </span>
+                      <span className="t-tnum t-dim" style={{ fontSize: 'var(--text-2xs)' }}>
+                        {stats.periodStats.achievementsRollup.earned.toLocaleString('en')} / {stats.periodStats.achievementsRollup.total.toLocaleString('en')}
+                      </span>
+                    </div>
+                    <Gauge total={20} filled={Math.round((stats.periodStats.achievementsRollup.percent / 100) * 20)} />
+                  </div>
+                </>
+              )}
+            </div>
+              );
+            })()}
+          </BentoCard>
 
           {/* Row 3 — genre breakdown (span-6) + hours by platform (span-6).
               Hours-by-platform sits in the slot the spec reserves for the

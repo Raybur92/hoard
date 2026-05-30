@@ -18,7 +18,7 @@
  * were live decisions in DASH-PR1, easy to accidentally re-add.
  */
 
-import { render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -96,6 +96,13 @@ const sampleData = (overrides: Partial<DashboardResponse> = {}): DashboardRespon
     playtimeByPlatform: [{ code: 'ST', label: 'Steam', minutes: 60_000, pct: 100 }],
     genres: [{ name: 'action', count: 50 }, { name: 'rpg', count: 30 }],
     achievementsRollup: { earned: 200, total: 800, percent: 25 },
+    period: 'all',
+    periodStats: {
+      completedCount: 20,
+      totalGames: 100,
+      completionPct: 20,
+      achievementsRollup: { earned: 200, total: 800, percent: 25 },
+    },
   },
   nowPlaying: [
     makeGame('1', 'Elden Ring', '2026-05-25T12:00:00.000Z', 2820),
@@ -191,12 +198,17 @@ describe('DashboardDesktop — bento-box layout', () => {
 
     await findByTestId('bento-grid');
 
-    // Cards present (per §7.4 matrix entries that ship today).
+    // Cards present (per §7.4 matrix entries that ship today). DASH-PR2
+    // merged completion + achievements into a single `card-progress` card
+    // because they always shared the same period scope — toggle is shown
+    // once instead of duplicated.
     expect(queryByTestId('card-now-playing')).not.toBeNull();
     expect(queryByTestId('card-next-release')).not.toBeNull();
     expect(queryByTestId('card-backlog-picker')).not.toBeNull();
-    expect(queryByTestId('card-completion')).not.toBeNull();
-    expect(queryByTestId('card-achievements')).not.toBeNull();
+    expect(queryByTestId('card-progress')).not.toBeNull();
+    // Both halves render inside the combined card.
+    expect(queryByTestId('progress-completion')).not.toBeNull();
+    expect(queryByTestId('progress-achievements')).not.toBeNull();
     expect(queryByTestId('card-breakdown')).not.toBeNull();
     expect(queryByTestId('card-platforms')).not.toBeNull();
     expect(queryByTestId('card-heatmap')).not.toBeNull();
@@ -214,8 +226,10 @@ describe('DashboardDesktop — bento-box layout', () => {
     const expectedSpans: Record<string, string> = {
       'card-now-playing': '6',
       'card-backlog-picker': '4',
-      'card-completion': '4',
-      'card-achievements': '4',
+      // DASH-PR2 — `card-progress` (merged completion+achievements) takes
+      // the previously-split span-4+span-4 footprint as a single span-8.
+      // Row 2 reads: backlog-picker (4) | progress (8).
+      'card-progress': '8',
       'card-breakdown': '6',
       'card-platforms': '6',
       'card-heatmap': '12',
@@ -350,11 +364,181 @@ describe('DashboardMobile — 1-col span-order layout', () => {
       'card-now-playing',
       'card-next-release',
       'card-backlog-picker',
-      'card-completion',
-      'card-achievements',
+      // DASH-PR2 — merged progress card replaces the split.
+      'card-progress',
       'card-breakdown',
       'card-platforms',
       'card-heatmap',
     ]);
+  });
+});
+
+describe('DashboardDesktop — DASH-PR2 period toggle', () => {
+  beforeAll(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('min-width: 1024px'),
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
+  });
+
+  it('renders one shared period toggle in the combined progress card (not duplicated per half)', async () => {
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(sampleData());
+
+    const { findByTestId, container } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const progressCard = await findByTestId('card-progress');
+
+    // Exactly one radiogroup in the progress card (not one per half).
+    // Andrea's call: if the toggle controls both, it should be shown once.
+    expect(progressCard.querySelectorAll('[role="radiogroup"]')).toHaveLength(1);
+    expect(progressCard.querySelectorAll('[role="radio"]')).toHaveLength(3);
+
+    // And exactly one across the whole dashboard (no orphan toggle elsewhere).
+    expect(container.querySelectorAll('[role="radiogroup"]')).toHaveLength(1);
+  });
+
+  it('defaults to period="all" and reads from stats.periodStats (not top-level all-time fields)', async () => {
+    // Make periodStats values DIFFERENT from top-level all-time fields so we
+    // can prove the card binds to periodStats, not the top-level mirror.
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sampleData({
+        stats: {
+          ...sampleData().stats,
+          // Top-level all-time (greeting reads these — unaffected by toggle)
+          completedCount: 20,
+          totalGames: 100,
+          completionPct: 20,
+          // Period stats (the progress card reads these). For period=all the
+          // server collapses these to all-time values; the test still asserts
+          // the card binds to `periodStats.*` via distinct fixture values.
+          periodStats: {
+            completedCount: 12,
+            totalGames: 47,
+            completionPct: 25.5,
+            achievementsRollup: { earned: 800, total: 1200, percent: 66.7 },
+          },
+        },
+      }),
+    );
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const progressCard = await findByTestId('card-progress');
+    // Completion half shows periodStats numbers (25.5%, 12/47) — NOT all-time.
+    expect(progressCard.textContent ?? '').toContain('25.5%');
+    expect(progressCard.textContent ?? '').toContain('12');
+    expect(progressCard.textContent ?? '').toContain('47');
+    expect(progressCard.textContent ?? '').not.toContain('100');
+    // Achievements half also shows period-scoped numbers.
+    expect(progressCard.textContent ?? '').toContain('66.7%');
+
+    // Default selection is 'all time' on the (sole) toggle.
+    const allTimeChip = Array.from(progressCard.querySelectorAll('[role="radio"]'))
+      .find((b) => b.textContent?.trim() === 'all time');
+    expect(allTimeChip?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('clicking the year chip refetches with ?period=year and both halves of the progress card update together', async () => {
+    const dashboardMock = api.dashboard as ReturnType<typeof vi.fn>;
+    dashboardMock.mockResolvedValueOnce(sampleData()); // initial 'all'
+    // After period change, server returns scoped values for both halves.
+    dashboardMock.mockResolvedValueOnce(
+      sampleData({
+        stats: {
+          ...sampleData().stats,
+          period: 'year',
+          periodStats: {
+            completedCount: 4,
+            totalGames: 11,
+            completionPct: 36.4,
+            achievementsRollup: { earned: 90, total: 220, percent: 40.9 },
+          },
+        },
+      }),
+    );
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const progressCard = await findByTestId('card-progress');
+    const thisYearChip = Array.from(progressCard.querySelectorAll('[role="radio"]'))
+      .find((b) => b.textContent?.trim() === 'this year') as HTMLElement;
+
+    await act(async () => { fireEvent.click(thisYearChip); });
+
+    // Hook + api should now request the year-scoped variant.
+    await waitFor(() => {
+      expect(dashboardMock).toHaveBeenCalledWith('year');
+    });
+
+    // Both halves of the progress card reflect the new period values.
+    await waitFor(() => {
+      const completionHalf = progressCard.querySelector('[data-testid="progress-completion"]') as HTMLElement;
+      const achievementsHalf = progressCard.querySelector('[data-testid="progress-achievements"]') as HTMLElement;
+      expect(completionHalf.textContent ?? '').toContain('36.4%');
+      expect(completionHalf.textContent ?? '').toContain('4');
+      expect(completionHalf.textContent ?? '').toContain('11');
+      expect(achievementsHalf.textContent ?? '').toContain('40.9%');
+      expect(achievementsHalf.textContent ?? '').toContain('90');
+      expect(achievementsHalf.textContent ?? '').toContain('220');
+      // Toggle reflects the new period.
+      const active = Array.from(progressCard.querySelectorAll('[role="radio"]'))
+        .find((b) => b.getAttribute('aria-checked') === 'true');
+      expect(active?.textContent?.trim()).toBe('this year');
+    });
+  });
+
+  it('keeps the previous period\'s data visible while a new period is loading (no loading-skeleton flash on chip click)', async () => {
+    const dashboardMock = api.dashboard as ReturnType<typeof vi.fn>;
+    dashboardMock.mockResolvedValueOnce(sampleData()); // 'all'
+    // The 'month' fetch hangs so we can observe the transition state.
+    let resolveMonth: (v: unknown) => void = () => {};
+    dashboardMock.mockReturnValueOnce(new Promise((r) => { resolveMonth = r; }));
+
+    const { findByTestId, queryByText } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const progressCard = await findByTestId('card-progress');
+    // The 'all' period's 20% completion appears (sampleData() defaults).
+    expect(progressCard.textContent ?? '').toContain('20%');
+
+    const thisMonthChip = Array.from(progressCard.querySelectorAll('[role="radio"]'))
+      .find((b) => b.textContent?.trim() === 'this month') as HTMLElement;
+    await act(async () => { fireEvent.click(thisMonthChip); });
+
+    // Critical assertion — the bento should NOT fall back to the loading
+    // skeleton while the new period is in flight. The previous period's
+    // numbers stay visible. The page still shows familiar Dashboard chrome.
+    expect(queryByText(/failed to load dashboard/i)).toBeNull();
+    expect(await findByTestId('card-progress')).not.toBeNull();
+    // The old 20% number is still on screen (stale-while-revalidate).
+    expect((await findByTestId('card-progress')).textContent ?? '').toContain('20%');
+
+    // Clean up the pending promise so React doesn't warn.
+    await act(async () => { resolveMonth(sampleData()); });
   });
 });

@@ -6,6 +6,8 @@ import { requireActive } from '../middleware/active';
 import { mapUserGame } from '../lib/mappers';
 import type {
   ActivityHeatmap,
+  DashboardPeriod,
+  DashboardPeriodStats,
   DashboardResponse,
   DashboardStats,
   PlatformStat,
@@ -58,9 +60,27 @@ function buildActivity(rows: Array<{ lastPlayedAt: Date | null }>, weeks = ACTIV
   return { weeks, cells };
 }
 
+/** DASH-PR2 — `?period=` parsing. Default to `'all'` (cumulative), reject
+ *  unknown values silently rather than 400ing — the toggle UI only emits
+ *  the three known values, and a typo'd URL shouldn't break the page. */
+function parsePeriod(raw: unknown): DashboardPeriod {
+  return raw === 'year' || raw === 'month' ? raw : 'all';
+}
+
+/** DASH-PR2 — period start in server-local time (UTC). `month` is start-of-
+ *  current-calendar-month; `year` is start-of-current-calendar-year; `all`
+ *  returns null (no bound). Tested via a `now` parameter for determinism. */
+function periodStart(period: DashboardPeriod, now: Date = new Date()): Date | null {
+  if (period === 'all') return null;
+  if (period === 'month') return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  return new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+}
+
 router.get('/dashboard', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const userId = req.userId;
   const oneWeekAgo = new Date(Date.now() - 7 * 86_400_000);
+  const period = parsePeriod(req.query.period);
+  const since = periodStart(period);
 
   const [
     countGroups,
@@ -71,7 +91,6 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     aggUserGames,
     wishlistReleases,
     platforms,
-    achievementsRows,
   ] = await Promise.all([
     prisma.userGame.groupBy({
       by: ['status'],
@@ -111,13 +130,17 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
       },
     }),
     // Lightweight: just the columns the aggregations need (playtime, genres,
-    // lastPlayedAt for the activity heatmap). Loads every UserGame but ~80%
-    // smaller per row than including full Game.
+    // lastPlayedAt for the activity heatmap + period-bounded stats per
+    // DASH-PR2, plus status + achievementsByPlatform for the engagement-scoped
+    // completion + achievements cards). Loads every UserGame but ~80% smaller
+    // per row than including full Game.
     prisma.userGame.findMany({
       where: { userId },
       select: {
         playtimeByPlatform: true,
         lastPlayedAt: true,
+        status: true,
+        achievementsByPlatform: true,
         game: { select: { genres: true } },
       },
     }),
@@ -127,13 +150,6 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
       take: 5,
     }),
     prisma.platform.findMany({ where: { userId } }),
-    // T6 — library-wide achievement rollup. M0: data is now per-platform
-    // JSON, so we can't use Prisma _sum. Fetch just the JSON column and
-    // iterate in app code. Cheap (~1 row per UserGame, JSON is small).
-    prisma.userGame.findMany({
-      where: { userId },
-      select: { achievementsByPlatform: true },
-    }),
   ]);
 
   // Shelf counts (and totalGames derived from sum)
@@ -183,20 +199,42 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
       ? Math.round((shelfCounts['Completed'] / totalGames) * 1000) / 10
       : 0;
 
-  // T6 rollup (M0). Iterate each UserGame's achievementsByPlatform map and
-  // sum earned/total across all platform entries. Rationale per M-D7:
-  // Steam achievements and PSN trophies are distinct sets, but for a
-  // library-wide percent indicator counting both makes sense — every
-  // popped trophy / achievement is engagement evidence. Result is
-  // `null` (UI hide) when no row in the library has any achievement
-  // data; otherwise total>0 by construction.
+  // T6 rollup (M0) + DASH-PR2 period scoping. Iterate aggUserGames once,
+  // tallying both the all-time achievement rollup AND the period-bounded
+  // variants needed for `periodStats` below. M-D7: Steam achievements and
+  // PSN trophies are distinct sets, but for a library-wide percent indicator
+  // counting both makes sense — every popped trophy / achievement is
+  // engagement evidence. `achievementsRollup` is `null` (UI hides the card)
+  // when no row in the library has any achievement data; otherwise
+  // total>0 by construction.
   let achEarned = 0;
   let achTotal = 0;
-  for (const row of achievementsRows) {
-    const map = (row.achievementsByPlatform ?? {}) as Record<string, { earned?: number; total?: number }>;
+  // DASH-PR2 — engagement-scoped tallies. A row contributes iff its
+  // lastPlayedAt falls in the period (period start computed above as `since`,
+  // null for `'all'`). For `period === 'all'` these mirror the cumulative
+  // tallies and we collapse them to the all-time values below.
+  let periodEngagedGames = 0;
+  let periodCompleted = 0;
+  let periodAchEarned = 0;
+  let periodAchTotal = 0;
+  for (const ug of aggUserGames) {
+    const map = (ug.achievementsByPlatform ?? {}) as Record<string, { earned?: number; total?: number }>;
+    let rowEarned = 0;
+    let rowTotal = 0;
     for (const e of Object.values(map)) {
-      if (typeof e?.earned === 'number') achEarned += e.earned;
-      if (typeof e?.total === 'number') achTotal += e.total;
+      if (typeof e?.earned === 'number') rowEarned += e.earned;
+      if (typeof e?.total === 'number') rowTotal += e.total;
+    }
+    achEarned += rowEarned;
+    achTotal += rowTotal;
+
+    const inPeriod = since === null
+      || (ug.lastPlayedAt !== null && ug.lastPlayedAt >= since);
+    if (inPeriod) {
+      periodEngagedGames += 1;
+      if (ug.status === 'Completed') periodCompleted += 1;
+      periodAchEarned += rowEarned;
+      periodAchTotal += rowTotal;
     }
   }
   const achievementsRollup =
@@ -207,6 +245,36 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
           percent: Math.round((achEarned / achTotal) * 1000) / 10,
         }
       : null;
+
+  // DASH-PR2 — `period === 'all'` collapses to cumulative all-time. Server
+  // returns this collapsed form so the frontend doesn't need branching;
+  // toggle just re-fetches with a different period.
+  const periodStats: DashboardPeriodStats = period === 'all'
+    ? {
+        completedCount: shelfCounts['Completed'],
+        totalGames,
+        completionPct:
+          totalGames > 0
+            ? Math.round((shelfCounts['Completed'] / totalGames) * 1000) / 10
+            : 0,
+        achievementsRollup,
+      }
+    : {
+        completedCount: periodCompleted,
+        totalGames: periodEngagedGames,
+        completionPct:
+          periodEngagedGames > 0
+            ? Math.round((periodCompleted / periodEngagedGames) * 1000) / 10
+            : 0,
+        achievementsRollup:
+          periodAchTotal > 0
+            ? {
+                earned: periodAchEarned,
+                total: periodAchTotal,
+                percent: Math.round((periodAchEarned / periodAchTotal) * 1000) / 10,
+              }
+            : null,
+      };
 
   const stats: DashboardStats = {
     totalGames,
@@ -226,6 +294,10 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     playtimeByPlatform,
     genres,
     achievementsRollup,
+    // DASH-PR2 — top-level fields stay all-time; periodStats carries the
+    // scoped variants for the completion + achievements cards.
+    period,
+    periodStats,
   };
 
   // Backlog pick: order all backlog by HLTB mainStory asc (HLTB-known first),

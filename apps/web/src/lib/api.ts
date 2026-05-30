@@ -1,4 +1,5 @@
 import type {
+  DashboardPeriod,
   DashboardResponse,
   GameListResponse,
   UserGameDetail,
@@ -155,8 +156,10 @@ function invalidateLibrary(): void {
 }
 
 export const api = {
-  dashboard: () =>
-    get<DashboardResponse>('/api/dashboard'),
+  // DASH-PR2 — `?period=` omitted on the default 'all' so old cache keys
+  // and dev-tools URLs stay clean. Server defaults to 'all' regardless.
+  dashboard: (period: DashboardPeriod = 'all') =>
+    get<DashboardResponse>(`/api/dashboard${period === 'all' ? '' : `?period=${period}`}`),
 
   games: (params?: GamesParams) =>
     get<GameListResponse>(`/api/games${buildQuery({ ...params })}`),
