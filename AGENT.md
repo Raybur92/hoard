@@ -403,6 +403,42 @@ Both bugs share a root cause: the probe never actually called a Moon endpoint. T
 
 The cost of the two M3 hotfixes was ~1h each of investigate-fix-deploy. The cost of doing the extra probe step would have been ~5 minutes. This budget should be assumed up-front for every M-class platform integration.
 
+**45. Affiliate-link routing is cost-recovery, not monetisation — with explicit identity boundary preserved (PAGES_PLAN — 2026-05-30, mirrors OQ-DEALS-5 reversal in `docs/PAGES_PLAN.md`)**
+
+Original framing was "Hoard is not a monetisation surface." Reversed on closer look — Hoard *runs at a cost* (Railway + IGDB + ITAD + Vercel hosting; future ITAD paid tier if scale demands). Affiliate revenue from storefronts where the user was already going to buy is *cost-recovery*, not monetisation-driven product behaviour.
+
+**Critically: affiliate routing does NOT change anything the user sees or does.** The `[buy →]` button already exists for the user's benefit; the affiliate ID is appended to the URL invisibly. No new buy-pushing UX, no upgraded prominence, no fake-urgency. The product behaviour is identical with or without the affiliate ID; the revenue just covers operating expense.
+
+**Identity boundary the rule preserves:**
+- Hoard does NOT add buy-promoting UX, does NOT change ranking/sort to favor higher-commission storefronts, does NOT hide deals from non-affiliated storefronts.
+- The trusted-reseller allow-list (decision #46) is curated for *what Andrea actually buys from*, NOT *where Hoard earns most*.
+- If two storefronts have identical pricing, sort is by storefront-name alphabetical or storefront-tier — never by commission rate.
+
+**Implementation pattern:** per-reseller affiliate ID config (env vars: `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, `GMG_AFFILIATE_ID`, `KINGUIN_AFFILIATE_ID`, `CDKEYS_AFFILIATE_ID`); a thin URL-rewriter wraps every reseller `[buy →]` link with the affiliate ID using the reseller's documented format. Affiliate program signups handled out-of-band by Andrea.
+
+**Scope clarification:** routing applies *primarily to resellers*. Most official first-party storefronts (Steam / PSN / Nintendo / Xbox / Epic) do NOT operate public affiliate programs — those links go direct, no rewriter. Exceptions: GOG / Humble Store / itch.io have programs and get routed if Andrea sets up accounts.
+
+**Constrains future features:** any future commerce-adjacent surface (Deals page, GameDetail price-offers card, Releases page preorder links, hypothetical bundle/subscription comparisons) inherits these constraints. New commerce surfaces must pass an identity-check: does this change *the user's behaviour or experience* in any way other than affiliate routing? If yes, push back; if no, ship.
+
+**46. Storefront taxonomy — two-tier rule for which sources appear in commerce surfaces (PAGES_PLAN — 2026-05-30, mirrors §8.4 storefront taxonomy + OQ-DEALS-9 lock)**
+
+Hoard's commerce surfaces (Deals page, GameDetail price-offers card, Releases preorder links, etc.) follow a two-tier visibility rule:
+
+**Tier 1 — official first-party storefronts — always in scope, never filtered:**
+Steam · GOG · Epic Games Store · itch.io · Humble Store · Battle.net · PSN Store · Xbox Store · Nintendo eShop.
+
+These aren't resellers — they're where the publisher sold the game. Hoard treats them as the canonical source. Coverage caveat: ITAD's data for PSN / Xbox / Nintendo is sparser than PC (per OQ-DEALS-3); accepted as-is, documented in empty-state copy.
+
+**Tier 2 — third-party resellers — curated allow-list only:**
+Currently: **Humble · Instant Gaming · GMG · Kinguin · CDKeys**. Future-expansion candidates flagged: Fanatical · GamesPlanet. The allow-list is config-driven (single source-of-truth list in the codebase); when Andrea wants to add a reseller, edit the list, deploy.
+
+**Excluded entirely:**
+Grey-market sources (G2A · Eneba · similar key-resellers with poor publisher reputation) never appear. Not on the allow-list, not configurable from a user's per-account preference. The curation IS Hoard's editorial stance.
+
+**The allow-list is Andrea's personal-purchase set, NOT a popularity ranking** — see decision #45 for the identity rationale. Anything not on the list gets filtered out of the surface entirely.
+
+**Constrains future features:** any new commerce-adjacent surface inherits the same two-tier rule. New storefronts considered for the allow-list must be evaluated on the "is this somewhere Andrea actually buys from" axis, not "does this generate more affiliate revenue."
+
 ---
 
 ## v2 Backlog (Explicitly Deferred)
