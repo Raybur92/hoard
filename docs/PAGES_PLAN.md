@@ -252,13 +252,146 @@ Order between GD-PRs and the standalone workstreams is open — Andrea drives pr
 
 ## 4. Library
 
-*To be filled in next session.*
+### 4.1 Purpose
 
-Likely focus areas based on existing observations:
-- Pending-review queue surface (Q-series — `UserGame.needsReview` flag + Library callout for low-confidence matches)
-- Score-aware filters / shelves (depends on B-Stash-3 rating)
-- Personal-Collections shelf (depends on B-Stash-4)
-- Reference-data filters: "all games by developer X" (depends on B-Stash-5)
+Library is the *manipulate-your-collection* surface — browse, filter, drill into edit affordances, organise. Distinct from GameDetail (which is per-game) and Releases (which is anticipation-only): Library is *across* your games, organised by multiple lenses simultaneously.
+
+User jobs:
+1. **"What am I playing right now?"** — landing page surfaces in-progress games immediately
+2. **"What did I play last year?"** — historical browsing, completed shelf
+3. **"What's in my Pokemon collection?"** — personal-collection navigation (B-Stash-4 dependency)
+4. **"What FromSoftware games do I own?"** — reference-data navigation (B-Stash-5 dependency)
+5. **"What did I rate 9+?"** — score-aware browsing (B-Stash-3 dependency)
+6. **"What needs my attention?"** — pending-review queue from low-confidence sync matches (Q-series, deferred candidate per CLAUDE.md)
+7. **Quick action lookup** — find a game by name, drill into status/notes edit
+
+The page is the central organising surface for a hoard. Most of the v2 ambition for Library is *adding new lenses* alongside status (the only lens today).
+
+### 4.2 Current state
+
+Post-Phase-8 + post-CM12 + post-A1-A8 work:
+
+- **Two URL families:** `/library` (landing — 6 shelves) + `/library/:status` (filtered single-shelf view)
+- **6 status shelves** on landing: Playing / On Hold / Completed / Backlog / Dropped / Wishlist
+- **Wishlist surfacing widened** post-CM12 — UserGames with `status='Wishlist'` OR non-empty `wishlistedPlatforms` appear in the Wishlist shelf (per-platform wishlists surface alongside full-game wishlists)
+- **Single-shelf filtered view** with platform filter chips + sort cycle (lastPlayed / title / playtime) + URL state `?sort=&view=`
+- **Find input** with `/` keyboard shortcut (search across the library by title)
+- **Cover-density preference** (cozy 96×128 / standard 84×112 / dense 72×96) from `usePreferences()`
+- **Pull-to-refresh** on mobile (Phase 8 PR 5)
+- **Empty-state with CTA panel** when a status has no games
+- **Per-shelf "view all" link** → drills to `/library/:status`
+- **Single shelves view** simplified in Phase-8 PR-A (no sort/filter chips on the landing aggregate; controls only on `/library/:status`)
+
+### 4.3 Gaps vs benchmark
+
+Library has the heaviest dependency stack — most additions wait on B-Stash workstreams to ship the underlying data primitives.
+
+| Gap | Sources | Notes |
+|---|---|---|
+| **No pending-review surfacing** | Q-series (deferred-candidate per CLAUDE.md) | After M-series sync expansion (5 new sync paths in 3 days), low-confidence title matches multiplied. `UserGame.needsReview` flag + Library callout for sync-derived rows that title-search matched at low confidence |
+| **No rating-aware filters or shelves** | B-Stash-3 | Sort by rating, filter "rated 8+", potentially a "Best rated" cross-status shelf. Depends on `UserGame.rating: Int?` column existing first |
+| **No personal Collections** | B-Stash-4 | Browse + add to Collection from Library. New entity `UserCollection` + join table; UI: Collections as horizontal shelves on landing alongside status shelves |
+| **No reference-data navigation** | B-Stash-5 | "Browse by developer / publisher / series" — quick-filter surface using the user's most-represented developers/publishers/series. Routes: `/library?developer=…` or sub-route. Depends on Developer / Publisher / Franchise reference entities + Game FK relationships |
+| **Completed shelf cards look identical to other shelves** | B-Hoard-1 | The archivist-relic concept on State 4 GameDetail should subtly read in the Library too — Completed shelf cards get a small "sealed" visual marker (single character or glyph in the corner) so the eye picks them out as *consecrated artifacts* even at scan-density. Trickle-down from the relic identity |
+| **No "your year in games" wrap-up surface** | (Hoard discovery) | Adjacent to the deferred Stats/Wrapped screen (key decision #3 in AGENT.md — "Deferred to v2. The Dashboard covers the key numbers."). Worth re-considering once rating + Collections data exists — would make a richer wrap-up viable |
+
+### 4.4 Target state
+
+Status remains the *primary* lens, but Library landing evolves from "6 status shelves" to "multi-dimensional organisational surface" with three orthogonal organising principles:
+
+**Library landing (`/library`) — new structure:**
+
+```
+// LIBRARY
+
+[find input ___________________ ]    /  shortcut hint
+
+// ⚠ 4 entries need your review     ← (NEW — Q-series callout, only when needsReview > 0)
+   [review queue →]
+
+// status                            ← (existing — six shelves grid)
+   ▢ Playing 12 →
+   ▢ On Hold 3 →
+   ▢ Completed 287 ★  ★  ★  …       ← Completed cards carry a small "sealed" glyph
+   ▢ Backlog 488 →
+   ▢ Dropped 14 →
+   ▢ Wishlist 47 →
+
+// collections                       ← (NEW — B-Stash-4 dependency)
+   ▢ Cyberpunk vault 8 →
+   ▢ Pokemon completionist 24 →
+   ▢ Dad's PS2 favorites 16 →
+   [+ new collection]
+
+// browse by                         ← (NEW — B-Stash-5 dependency; collapsible)
+   developer:  Game Freak 24 · Nintendo 47 · FromSoftware 8 · Atlus 12 ·  …
+   publisher:  Nintendo 89 · Sony 56 · Capcom 23 · …
+   series:     Pokemon 18 · Mega Man 11 · Final Fantasy 9 · …
+```
+
+**Single-shelf filtered view (`/library/:status`)** — keeps its current shape (filter chips + sort cycle + grid). Sort options gain a `rating ↓` option (when B-Stash-3 lands).
+
+**New filtered views** added incrementally as their dependencies ship:
+- `/library/by-developer/:slug` — all games by developer X (B-Stash-5)
+- `/library/by-publisher/:slug` — all games by publisher X (B-Stash-5)
+- `/library/by-series/:slug` — all games in series X (B-Stash-5)
+- `/library/by-collection/:slug` — all games in user-Collection X (B-Stash-4)
+- `/library/by-rating/:bucket` — all games at rating bucket X (B-Stash-3) — optional, may be just a sort variant rather than a route
+- `/library/pending-review` — needsReview flagged games (Q-series)
+
+All filtered views share the existing single-shelf view's chrome (cover grid, density preference, find input).
+
+**Element matrix per landing-page section:**
+
+| Section | Default state | Ships when |
+|---|---|---|
+| Find input + `/` shortcut | ✓ today | — |
+| Pending-review callout | hidden when no needsReview rows | Q-series ships |
+| Status shelves (6) | ✓ today | — |
+| Completed shelf glyph treatment | absent today | B-Hoard-1 visual design lands |
+| Collections shelves | hidden when no collections | B-Stash-4 ships |
+| `[+ new collection]` CTA | hidden when B-Stash-4 unshipped | B-Stash-4 ships |
+| Browse-by panel | hidden when reference data absent | B-Stash-5 ships |
+
+The progressive-disclosure pattern means Library landing *gracefully degrades* — if a dependency hasn't shipped yet, that section simply doesn't render. No empty-state placeholders for un-shipped features.
+
+### 4.5 Open questions
+
+- **OQ-LIB-1 — Rating surfacing.** When B-Stash-3 lands, does rating get:
+    1. A new sort option (`rating ↓`) within single-shelf views — minimal change
+    2. A new filter chip ("rated 8+", "unrated") on single-shelf views
+    3. A new cross-status shelf "// best rated" on landing
+    4. All of the above
+    Recommendation: **#1 + #2 in the B-Stash-3 workstream; #3 only if usage signal demands it.** Cross-status shelves dilute the status-as-primary-lens framing.
+- **OQ-LIB-2 — Collections landing-page placement.** Collections as horizontal shelves between status and browse-by (the mockup above) vs. as their own collapsible panel vs. on a separate `/collections` page entirely. Recommendation: **inline on `/library` as shelves**, mirroring the status section shape. `/collections` as a dedicated page only if Collections grow large enough to warrant their own discovery surface (probably never in personal-tool scope).
+- **OQ-LIB-3 — Reference-data filter URL shape.** Sub-routes (`/library/by-developer/game-freak`) vs query params (`/library?developer=game-freak`)? Recommendation: **sub-routes for cleaner share-links + clearer browser history.** Matches the existing `/library/:status` pattern.
+- **OQ-LIB-4 — Pending-review surface form.** When `needsReview > 0`:
+    1. Callout banner at top of `/library` only (the mockup above) — passive, single surface
+    2. Plus a sidebar nav badge (Library count with an alert dot) — pushes the notification across the app
+    3. Plus a dedicated `/library/pending-review` route surfaced as a callout-link from the banner
+    Recommendation: **#1 + #3** (banner on landing + dedicated route to drill into). Skip #2 — sidebar alert dots are notification-channel territory and Hoard hasn't committed to that pattern yet.
+- **OQ-LIB-5 — Completed-shelf archivist visual.** What's the actual glyph? Likely depends on OQ-GD-13's design exploration outcome — if the State 4 archivist relic is a deterministic ASCII sigil, Library cards could show a small version of the same sigil; if it's a "SEALED ON DATE" stamp, Library cards show a sealed-corner glyph. **Defer to OQ-GD-13's resolution.**
+- **OQ-LIB-6 — "Your year in games" wrap-up reconsideration.** AGENT.md Decision #3 deferred this to v2. Once Collections + Rating + Reference data ship, the wrap-up has substantially richer raw material (rated games + collections-membership graphs + developer-coverage stats). Worth a future product-strategy session to re-evaluate. **Not blocking any current work.**
+- **OQ-LIB-7 — Browse-by panel: collapsed or expanded by default?** If a user has 50+ developers in their library, the panel is information-dense. Recommendation: **collapsed by default with a top-3 preview row visible** (`developer: Game Freak 24 · Nintendo 47 · FromSoftware 8 · [show all 23 →]`). Same pattern for publisher + series.
+- **OQ-LIB-8 — Wishlist shelf semantics post-CM12.** Today the Wishlist shelf surfaces both `status='Wishlist'` rows AND rows with non-empty `wishlistedPlatforms`. After GameDetail v2's S2-vs-S3 split based on release date (OQ-GD-12 lock), the Wishlist shelf might want to mirror that split: "Wishlist · upcoming" (S2-flavoured, anticipation) and "Wishlist · released" (S3-flavoured, decision-to-buy). Recommendation: **defer until cohort signal demands it.** The unified shelf works fine today; splitting adds complexity that benefits only the rare power-user with both kinds simultaneously.
+
+### 4.6 Sequencing notes
+
+Library work is mostly *follow-ons* to other workstreams — it gets the surface; the data primitive ships elsewhere. The dependency graph:
+
+| Library addition | Blocked on |
+|---|---|
+| Pending-review surface | Q-series workstream (UserGame.needsReview flag + sync-pipeline writes) |
+| Rating-aware filters/sort | B-Stash-3 workstream (UserGame.rating column + GameDetail UI) |
+| Collections shelves on landing + `/library/by-collection/:slug` | B-Stash-4 workstream (UserCollection entity + management UI) |
+| Browse-by panel + `/library/by-developer/:slug` etc. | B-Stash-5 workstream (Developer/Publisher/Franchise reference entities + Game FK) |
+| Completed-shelf archivist glyph | OQ-GD-13 resolution (archivist visual design) |
+
+**Standalone Library work that doesn't wait on anything:**
+- **LIB-PR1** — Wishlist shelf semantic improvement post-CM12: when surfacing the Wishlist shelf, render the per-platform-wishlist context (CM12 follow-through). Same chip-row pattern as REL-PR1 on Releases cards. Cheap, small.
+- **LIB-PR2** — Empty-state polish across the 6 status shelves. Today each empty shelf shows a CTA; some are stale ("connect a platform" when 6 are already connected). Audit + clean up.
+
+Everything else threads in when its underlying workstream lands. Library doesn't need its own large multi-PR workstream — it's the *receiving end* of others.
 
 ---
 
