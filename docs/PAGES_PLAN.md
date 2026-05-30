@@ -946,37 +946,125 @@ Everything else threads in. Dashboard doesn't need its own large workstream — 
 
 ## 8. Deals (new top-level surface)
 
-*Stub — to be filled in next session.*
+### 8.1 Purpose
 
-### 8.1 Purpose (working hypothesis)
+Deals is the *right-now buying opportunities* surface — aggregator of storefront discounts + trusted third-party-reseller offers, scoped to the user's wishlist + owned-platforms + library-adjacent context. Hoard already knows what platforms a user owns games on and what they wishlist; Deals applies that knowledge to filter the noise of "sales the user can act on" vs. "sales the user can't care about."
 
-Hoard already knows what platforms each user owns games on and what they wishlist. The Deals page leverages that to surface **right-now buying opportunities** the user might not otherwise see: official-platform sales, third-party-reseller discounts on already-wishlisted titles, and aggregator-style "best price across all storefronts" for any game in the library or wishlist.
+User jobs:
+1. **"Is anything on my wishlist on sale right now?"** — primary actionable surface. Filtered to wishlisted titles, sorted by discount % or absolute savings.
+2. **"What's broadly on sale that I might want?"** — secondary discovery. High-discount titles on the user's owned platforms, excluding already-owned.
+3. **"What about completing a series I started?"** — library-completion deals: sequel/series-mate games on sale where the user owns earlier entries (depends on B-Stash-5 reference entities).
+4. **Cross-link from Dashboard alerts strip** — "5 wishlist games on sale" callout lands here; this is the destination page for the Dashboard signal.
+5. **Cross-link from GameDetail S1** — the price-offers card on State 1 (released-not-owned) shares the same ITAD pipeline; clicking through a price → ITAD-source storefront, same plumbing as Deals page deep-links.
 
-Two natural user jobs:
-1. **"Is anything on my wishlist on sale right now?"** — primary surface filtered to wishlisted titles, sorted by discount % or absolute savings.
-2. **"What's broadly on sale that I might want?"** — secondary surface, broader feed of high-discount titles that match the user's owned-platforms set.
+The page is net-new. Same family as Events in the §1 inventory (both top-level new surfaces); shares the ITAD client with GameDetail S1's price-offers card (B-Storefront-2). One client, two surfaces.
 
-### 8.2 Spec direction (TBD)
+### 8.2 Current state
 
-Data source: **IsThereAnyDeal (ITAD) API** is the locked candidate per OQ-GD-16 (also powers B-Storefront-2 price-offers on GameDetail S1). Same client, two surfaces.
+*Does not exist.* No `/deals` route, no ITAD integration, no price-aggregation client. The closest adjacencies today:
+- Wishlist UserGames exist (post CM12 + wishlist-as-library work)
+- Per-platform IDs on `Game` from M-series (`steamAppId`, `psnConceptId`, `xboxTitleId`, `gogAppId`, `epicCatalogItemId`, `nintendoTitleId`, `itchGameId`) — supply the storefront-side identifiers ITAD will need to query prices per title
 
-Likely sections on `/deals`:
-- **wishlist deals (★ dominant)** — every wishlist game currently discounted, sorted by % off
-- **library completion** — sequel/series-mate games on sale where the user already owns earlier entries (depends on B-Stash-5 reference entities for series data)
-- **platform-scoped feed** — high-discount titles on the user's owned platforms, excluding already-owned
+### 8.3 Gaps vs benchmark
 
-Out of scope (to flag, not build):
-- Cross-region price comparison (Steam US vs Steam EU etc. — ToS-grey)
-- Affiliate-link revenue routing — Hoard is personal-tool, not a monetisation surface
-- Price-drop alerts as push notifications (could come later as a notifications-channel workstream; out of scope for the page itself)
+The whole page IS the gap. There's no Hoard surface for this today.
 
-### 8.3 Open questions (TBD)
+| Gap | Sources | Notes |
+|---|---|---|
+| No `/deals` page at all | B-Storefront-2 | Entire surface — wishlist filter, broader feed, ITAD sync pipeline, storefront deep-links |
+| No ITAD client | B-Storefront-2 + OQ-GD-16 | Same client powers GameDetail S1 price-offers card; one integration, two consumers |
+| No Dashboard "X wishlist deals" callout | (§7 alerts strip) | Cross-page dependency — Dashboard surfaces the callout only after Deals workstream ships the data primitive |
+| No library-completion-deal surfacing | B-Stash-5 + B-Storefront-2 | "Bayonetta 3 on sale (you own Bayonetta 1 + 2)" — depends on series reference data |
 
-To be filled in the Deals drill session. Pre-seeded:
-- OQ-DEALS-1: ITAD API key acquisition + env-var setup
-- OQ-DEALS-2: Refresh cadence — every page-load is wasteful; nightly cron vs. on-demand-with-stale-cache?
-- OQ-DEALS-3: Console storefront coverage gap (ITAD is weak on PSN/Xbox/Nintendo pricing) — accept as-is or supplement?
-- OQ-DEALS-4: Mobile shape — Deals is a list-heavy page; mobile compression strategy
+### 8.4 Target state
+
+`/deals` is a list-heavy page with a clear hierarchy: dominant wishlist deals at top, broader feed below, library-completion in between (when B-Stash-5 ships). Lighter use of the bento-box pattern than Dashboard — this page is naturally list-flavored, not stat-card-flavored.
+
+```
+// DEALS · refreshed 4h ago                                    [refresh now]
+
+┌─ top wishlist deal ───────────────────────────────────────────────────────┐
+│ DIABLO IV                                              -50%  €34.99       │  ← dominant hero card
+│ on Battle.net · ends in 2d 14h                         was €69.99         │     (highest % off on
+│ ▮ wishlist · PC                                        [buy →]            │     your wishlist right now)
+└───────────────────────────────────────────────────────────────────────────┘
+[span-12]
+
+// wishlist deals (5)                                          sort: % off ▾
+
+┌──────────────────────────────────────────────────────────┐
+│ ▢ Diablo IV          Battle.net  -50% €34.99 · ends 2d   │ ← per-row card:
+│ ▢ Cyberpunk 2077     Steam       -45% €32.99 · ends 4d   │   cover · title · store ·
+│ ▢ Hades              GOG         -40% €14.99 · no expiry │   discount % · sale price ·
+│ ▢ Hollow Knight      Humble      -25% €11.24 · ends 1d   │   countdown · [buy →]
+│ ▢ Ori & the Blind…   Fanatical   -20% €15.99             │
+└──────────────────────────────────────────────────────────┘
+[span-12 list]
+
+// library completion (3)                          ← B-Stash-5 dependency
+   Bayonetta 3        — Switch eShop  -33% — you own 1 + 2
+   Mass Effect LE     — Steam          -50% — you own 1 + 2
+   Pokémon Sword/Sh.  — Switch eShop  -25% — you own Ruby + Sapphire
+
+// also on sale on your platforms (28)              sort: % off ▾ · platform: [ all ▾ ]
+   [scrollable list — broader discovery; high-discount titles on user's owned platforms,
+    excluding library entries the user already owns]
+```
+
+**Element matrix:**
+
+| Element | Default state | Ships when |
+|---|---|---|
+| Top-wishlist-deal hero | hidden when no wishlist deals exist | DEALS-PR1 |
+| Wishlist deals list (sorted by % off) | hidden when no wishlist deals | DEALS-PR1 |
+| Library-completion section | hidden until B-Stash-5 + series reference data | DEALS-PR2 |
+| Broader-feed list | hidden when no relevant deals | DEALS-PR1 |
+| Storefront filter chips | always present | DEALS-PR1 |
+| Discount range filter | optional toggle | DEALS-PR3 |
+| Source-type filter (official storefront / reseller) | always present | DEALS-PR1 |
+| Per-card deal-expiry countdown | when ITAD provides expiry timestamp | DEALS-PR1 |
+| Per-card `[buy →]` deep-link | always present | DEALS-PR1 |
+| Per-card cross-link → GameDetail | always present | DEALS-PR1 |
+
+Progressive-disclosure same as Dashboard / Library: sections without content don't render. A fresh user with empty wishlist sees only the broader-feed section.
+
+### 8.5 Open questions
+
+- **OQ-DEALS-1 — ITAD API key acquisition + env-var setup.** ITAD requires an API key from their dashboard (free tier exists). Pattern same as IGDB / Steam / GOG / Epic credentials — env vars on Railway: `ITAD_API_KEY=...`. Recommendation: **ship as env-vars-only**, same pattern as GOG_CLIENT_ID. Pre-deploy gotcha: needs to be set on Railway before the page works in production.
+- **OQ-DEALS-2 — Refresh cadence.** Prices change daily but not hourly; ITAD's API has rate limits. Three options:
+    1. **Nightly cron + manual `[refresh now]` button** — covers daily price drift, admin can force a refresh when a major sale lands. *Recommended.*
+    2. On-page refresh per visit (wasteful, hits rate limits at scale)
+    3. Smart per-game refresh (when GameDetail S1 hits a game's price card, trigger an ITAD refresh just for that game) — adds complexity, only worth it if the nightly is too stale.
+    Recommendation: **#1 — nightly cron + admin manual button.** Matches the Events §6 OQ-EV-2 decision; same operational shape.
+- **OQ-DEALS-3 — Console storefront coverage gap.** ITAD's coverage of PSN / Xbox / Nintendo is weaker than PC storefronts (less complete pricing history; some titles missing entirely). Three options:
+    1. **Accept ITAD's coverage as-is** — surface what we can; the user knows console pricing varies; ship simple.
+    2. Supplement with direct storefront-API queries for console pricing — substantial engineering, ToS-risky for some platforms.
+    3. Hide console games entirely from Deals (PC-only) — too aggressive; many Hoard users have console-heavy libraries.
+    Recommendation: **#1 — accept the coverage gap.** Document it in an empty-state copy on the page ("console pricing data is sparser than PC; check the platform store directly if you don't see what you expected").
+- **OQ-DEALS-4 — Mobile shape.** Deals is list-heavy. Mobile compression: stack the hero + list vertically; storefront filter as a single sheet-picker rather than chip-row; per-row card density reduced (drop storefront chip, keep title + discount + countdown). Worth a separate mockup pass during DEALS-PR4.
+- **OQ-DEALS-5 — Affiliate-link revenue routing. ✅ REJECTED 2026-05-30.** Hoard is personal-tool, not monetisation surface (per §2 B-Stash values divergence + decision #4 in AGENT.md re: random-backlog-picker — *"Permanent, minimal Dashboard feature. Not an Easter egg."*). Deals links go directly to the storefront's product page without affiliate routing. Pinning the rejection so future-me doesn't reopen.
+- **OQ-DEALS-6 — Cross-region price comparison.** "Steam US $34.99 vs Steam EU €34.99 vs Steam ARS ₽X" — ToS-grey territory (some storefronts explicitly forbid region-arbitrage promotion). Recommendation: **skip.** Out of scope; if a user wants region pricing they have ITAD's own site for that.
+- **OQ-DEALS-7 — Deal-drop notifications.** "Hades dropped to €14.99 — you wishlisted it!" — requires a notifications channel Hoard doesn't have. Same gating as Events OQ-EV-10. Recommendation: **defer entirely** until a notifications-channel workstream lands. The Deals page is browse-when-you-visit, not push-when-it-happens.
+- **OQ-DEALS-8 — Library completion deals — depth.** Series reference data (B-Stash-5) is the primitive. The completion-deals surface needs a query: "find on-sale games whose franchise/series is also owned by the user, but this specific entry isn't." Two depth options:
+    1. **Series only** — exact franchise match (Pokemon, Final Fantasy, Mass Effect, etc.)
+    2. **Series + developer** — also surface "you've played 3 FromSoftware games; Armored Core VI is 30% off"
+    Recommendation: **#1 in DEALS-PR2; #2 only if usage signal demands it.** Series ownership is a stronger "I want the next one" signal than developer affinity.
+
+### 8.6 Sequencing notes
+
+DEALS ships as its own workstream — call it DEALS-series. Substantially smaller than the GameDetail v2 or Events workstreams since the page is list-heavy and shares the ITAD client with GameDetail S1.
+
+- **DEALS-PR1 — Foundation.** ITAD client (`apps/api/src/services/deals.ts`), nightly cron + admin manual refresh, `/deals` page with top-wishlist-deal hero + wishlist deals list + broader-feed list + storefront filter + source-type filter + per-card deep-links. Sidebar nav integration. **Smallest shippable version.**
+- **DEALS-PR2 — Library completion.** Adds the "library completion deals" section between wishlist and broader-feed. Gated on B-Stash-5 shipping series reference data. Single new query + new section render.
+- **DEALS-PR3 — Filter polish.** Discount range filter + sort options + storefront-availability chip on cards.
+- **DEALS-PR4 — Mobile polish.** Compression layout for mobile per OQ-DEALS-4.
+
+**Shared with GameDetail S1 (B-Storefront-2):**
+- The ITAD client built in DEALS-PR1 is consumed by GameDetail S1's price-offers card. Either workstream ships first; the other consumes the existing client. Recommended ordering: ship DEALS-PR1 first (the page has more dependent data shape), then GameDetail v2 GD-PR1 (S1) just reads the ITAD response shape.
+
+**Pre-deploy ops:** `ITAD_API_KEY` env var on Railway. Pattern documented same as GOG / Epic.
+
+**Cross-page dependency feeds back to Dashboard:** once DEALS-PR1 ships, the Dashboard alerts strip surfaces "X wishlist games on sale" callout (resolves part of OQ-DASH-2's scope). Same DEALS-PR1 ships both surfaces.
 
 ---
 
