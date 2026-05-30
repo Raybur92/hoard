@@ -10,6 +10,7 @@ import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { Heatmap } from '../primitives/Heatmap';
 import { Gauge } from '../primitives/Gauge';
+import { AlertsStrip } from './dashboard/AlertsStrip';
 import { NextReleaseCountdown } from './dashboard/NextReleaseCountdown';
 import { PeriodToggle } from './dashboard/PeriodToggle';
 import { useDashboard } from '../../hooks/useDashboard';
@@ -251,13 +252,18 @@ export function DashboardDesktop() {
 
         {/* Bento grid — 12-col CSS grid per PAGES_PLAN §7.4 (DASH-PR1).
             Cards declare their span via grid-column on each child. The slim
-            alerts strip (span-12) is absent in DASH-PR1 — threads in via
-            Q-series / EV-PR3 / DASH-PR3 / Deals workstream as callouts arrive.
+            alerts strip (span-12) lands in DASH-PR3 — surfaces sync-error
+            states today; Q-series / EV-PR3 / Deals workstreams thread
+            additional chips into the same AlertsStrip component later.
             Progressive-disclosure: absent cards don't render; grid reflows. */}
         <div
           data-testid="bento-grid"
           style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16, alignItems: 'stretch' }}
         >
+
+          {/* Slim alerts strip — span-12 at top. Returns null when no alerts
+              are active; grid reflows naturally so row 1 starts immediately. */}
+          <AlertsStrip platforms={platforms} />
 
           {/* Row 1 — now playing (span-6) + next release countdown (span-3) +
               <empty 3-col tail for the next-event slot that EV-PR1 will fill> */}

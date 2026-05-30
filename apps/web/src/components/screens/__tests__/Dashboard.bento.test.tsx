@@ -286,6 +286,50 @@ describe('DashboardDesktop — bento-box layout', () => {
     expect(card.textContent ?? '').toContain('see all');
   });
 
+  it('hides the alerts strip when no platform is in error state (DASH-PR3)', async () => {
+    // sampleData()'s default platform list has syncStatus='ok' — strip absent.
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(sampleData());
+
+    const { findByTestId, queryByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    await findByTestId('bento-grid');
+    expect(queryByTestId('alerts-strip')).toBeNull();
+  });
+
+  it('renders the alerts strip at the top of the bento when a platform has syncStatus=error (DASH-PR3)', async () => {
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sampleData({
+        platforms: [
+          {
+            code: 'ST', userId: 'u1', lastSyncAt: '2026-05-30T10:00:00.000Z', syncStatus: 'error',
+            syncFrequency: 'HOURLY', id: 'p-st-1', syncable: true,
+          } as unknown as DashboardResponse['platforms'][0],
+        ],
+      }),
+    );
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const strip = await findByTestId('alerts-strip');
+    expect(strip.textContent ?? '').toContain('sync error');
+    expect(strip.textContent ?? '').toContain('steam');
+
+    // Strip is at the top of the bento — its sibling order must precede all
+    // other cards. Read all children of the bento grid in document order and
+    // assert the strip is index 0.
+    const grid = await findByTestId('bento-grid');
+    const firstChild = grid.firstElementChild;
+    expect(firstChild?.getAttribute('data-testid')).toBe('alerts-strip');
+  });
+
   it('does not render the removed `// the hoard · in numbers` stat tile grid', async () => {
     (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(sampleData());
 

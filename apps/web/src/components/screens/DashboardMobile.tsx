@@ -9,6 +9,7 @@ import { Hr } from '../primitives/Hr';
 import { Heatmap } from '../primitives/Heatmap';
 import { Btn } from '../primitives/Btn';
 import { Gauge } from '../primitives/Gauge';
+import { AlertsStrip } from './dashboard/AlertsStrip';
 import { NextReleaseCountdown } from './dashboard/NextReleaseCountdown';
 import { PeriodToggle } from './dashboard/PeriodToggle';
 import { useDashboard } from '../../hooks/useDashboard';
@@ -167,7 +168,15 @@ export function DashboardMobile() {
 
         {/* Mobile cards stack in span-order per OQ-DASH-1 #1
             (alerts → now-playing → countdowns → stats → breakdowns → heatmap).
-            The alerts strip is absent in DASH-PR1 — threads in via Q/EV/DASH-PR3/Deals. */}
+
+            Slim alerts strip (DASH-PR3) — only render the padding wrapper
+            when there's content, so the dashboard doesn't carry blank space
+            at the top when no alerts are active. */}
+        {platforms.some((p) => p.syncStatus === 'error') && (
+          <div style={{ padding: '12px 16px 0' }}>
+            <AlertsStrip platforms={platforms} />
+          </div>
+        )}
 
         {/* now playing — primary hero, tap card → game detail */}
         {np && (
