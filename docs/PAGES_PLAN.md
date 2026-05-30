@@ -297,22 +297,58 @@ Library has the heaviest dependency stack — most additions wait on B-Stash wor
 
 ### 4.4 Target state
 
-Status remains the *primary* lens, but Library landing evolves from "6 status shelves" to "multi-dimensional organisational surface" with three orthogonal organising principles:
+Status remains the *primary* lens, but Library evolves from "6 status shelves" into a *two-layer surface*:
+- **Layer 1 — `/library` overview** is a navigation hub. Pure signposting; no compound filtering; no game grids; no find input. Its only job is *get the user into a primary-lens view*.
+- **Layer 2 — Filtered views** are composable query surfaces. One URL shape parameterised by primary lens + secondary filters + sort + find-within-lens.
 
-**Library landing (`/library`) — new structure:**
+The composition model is locked: **one primary lens × N secondary filters × one sort × one find query**.
+
+#### 4.4.1 Filter composition model
+
+**Primary lens** (exactly one — drives the URL path + page heading). Each primary lens type is its own route family:
+
+| Primary lens | Route shape | Ships with |
+|---|---|---|
+| Status | `/library/:status` | Existing |
+| Collection | `/library/by-collection/:slug` | B-Stash-4 |
+| Developer | `/library/by-developer/:slug` | B-Stash-5 |
+| Publisher | `/library/by-publisher/:slug` | B-Stash-5 |
+| Series | `/library/by-series/:slug` | B-Stash-5 |
+| Rating bucket | `/library/by-rating/:bucket` *(optional — may live as a sort variant on Status lens instead)* | B-Stash-3 |
+| Pending-review | `/library/pending-review` | Q-series |
+| All (no lens — flat grid) | `/library/all` *(optional; rarely needed)* | — |
+
+**Secondary filters** (composable, URL query-params, intersect with primary). The secondary filters visible *depend on which primary is active* — show only the ones that meaningfully discriminate further:
+
+| Primary lens | Visible secondary filters |
+|---|---|
+| Status | platform · developer · publisher · series · collection · rating |
+| Collection | platform · status · developer · publisher · series · rating |
+| Developer | platform · status · collection · rating |
+| Publisher | platform · status · developer · collection · rating *(developer as sub-filter is interesting; e.g. Nintendo publisher → drill to Game Freak. See OQ-LIB-9 on the asymmetry)* |
+| Series | platform · status · collection · rating |
+| Rating bucket | platform · status · developer · publisher · series · collection |
+| Pending-review | platform · status *(other lenses don't usefully discriminate; needsReview rows are data-quality cases, not curated subsets)* |
+| All | every secondary filter visible |
+
+**Sort** (one at a time, URL param `?sort=`): `lastPlayed` (default) · `title` · `playtime` · `rating ↓` *(B-Stash-3 dependency)* · `addedAt` · `completedAt` *(Completed-status only)*.
+
+**Find input** (URL param `?q=`): text search that *composes with the current lens + secondary filters* — searches within the active intersection, not across the whole library. Lives **only on filtered views**, not on the overview. The global cross-everything path is the **existing Cmd-K SearchOverlay** (no change to that surface; it already searches across all UserGames regardless of lens).
+
+#### 4.4.2 Library overview shape (`/library`)
+
+Pure navigation hub. No game grids; no compound filtering; no find input. Each link/chip navigates *into* a primary-lens view.
 
 ```
 // LIBRARY
 
-[find input ___________________ ]    /  shortcut hint
-
 // ⚠ 4 entries need your review     ← (NEW — Q-series callout, only when needsReview > 0)
    [review queue →]
 
-// status                            ← (existing — six shelves grid)
+// status                            ← (existing — six shelves with counts; cards link to /library/:status)
    ▢ Playing 12 →
    ▢ On Hold 3 →
-   ▢ Completed 287 ★  ★  ★  …       ← Completed cards carry a small "sealed" glyph
+   ▢ Completed 287 ★  ★  ★  …       ← Completed cards carry a small "sealed" glyph (B-Hoard-1)
    ▢ Backlog 488 →
    ▢ Dropped 14 →
    ▢ Wishlist 47 →
@@ -323,37 +359,62 @@ Status remains the *primary* lens, but Library landing evolves from "6 status sh
    ▢ Dad's PS2 favorites 16 →
    [+ new collection]
 
-// browse by                         ← (NEW — B-Stash-5 dependency; collapsible)
-   developer:  Game Freak 24 · Nintendo 47 · FromSoftware 8 · Atlus 12 ·  …
-   publisher:  Nintendo 89 · Sony 56 · Capcom 23 · …
-   series:     Pokemon 18 · Mega Man 11 · Final Fantasy 9 · …
+// browse by                         ← (NEW — B-Stash-5 dependency; collapsed-with-top-3-preview by default)
+   developer:  Game Freak 24 · Nintendo 47 · FromSoftware 8 · [show all 23 →]
+   publisher:  Nintendo 89 · Sony 56 · Capcom 23 · [show all 18 →]
+   series:     Pokemon 18 · Mega Man 11 · Final Fantasy 9 · [show all 12 →]
 ```
-
-**Single-shelf filtered view (`/library/:status`)** — keeps its current shape (filter chips + sort cycle + grid). Sort options gain a `rating ↓` option (when B-Stash-3 lands).
-
-**New filtered views** added incrementally as their dependencies ship:
-- `/library/by-developer/:slug` — all games by developer X (B-Stash-5)
-- `/library/by-publisher/:slug` — all games by publisher X (B-Stash-5)
-- `/library/by-series/:slug` — all games in series X (B-Stash-5)
-- `/library/by-collection/:slug` — all games in user-Collection X (B-Stash-4)
-- `/library/by-rating/:bucket` — all games at rating bucket X (B-Stash-3) — optional, may be just a sort variant rather than a route
-- `/library/pending-review` — needsReview flagged games (Q-series)
-
-All filtered views share the existing single-shelf view's chrome (cover grid, density preference, find input).
 
 **Element matrix per landing-page section:**
 
 | Section | Default state | Ships when |
 |---|---|---|
-| Find input + `/` shortcut | ✓ today | — |
+| ~~Find input + `/` shortcut~~ | **REMOVED 2026-05-30 — find is contextual to a lens, not global. Cmd-K SearchOverlay is the cross-everything path** | — |
 | Pending-review callout | hidden when no needsReview rows | Q-series ships |
 | Status shelves (6) | ✓ today | — |
-| Completed shelf glyph treatment | absent today | B-Hoard-1 visual design lands |
+| Completed shelf glyph treatment | absent today | B-Hoard-1 visual design lands (OQ-GD-13 resolution) |
 | Collections shelves | hidden when no collections | B-Stash-4 ships |
 | `[+ new collection]` CTA | hidden when B-Stash-4 unshipped | B-Stash-4 ships |
 | Browse-by panel | hidden when reference data absent | B-Stash-5 ships |
 
-The progressive-disclosure pattern means Library landing *gracefully degrades* — if a dependency hasn't shipped yet, that section simply doesn't render. No empty-state placeholders for un-shipped features.
+Progressive-disclosure: each section *only renders when its dependency has shipped*. No empty-state placeholders for un-shipped features.
+
+#### 4.4.3 Filtered view shape (`/library/:status` + future `/library/by-*` routes)
+
+One URL shape parameterised by primary lens + secondary filters + sort + find. The toolbar adapts to the active primary lens (showing only the secondary filters that discriminate further).
+
+```
+// PLAYING (12)                                              [change lens ▾]
+                                                                    ↑
+                                            opens picker: status / collection /
+                                            developer / publisher / series /
+                                            rating / pending-review / all
+
+[find: filter within Playing _______________ ]      ← lives only on filtered views
+
+filters:  ⊕ platform:   [ all | ST | PS | XB | GG | IT | EP | NT ]
+          ⊕ developer:  [ + any ]                  ← clickable chip → picker
+          ⊕ collection: [ + any ]
+          ⊕ rating:     [ ≥ 7 | any ]
+                                                   ← secondary filters shown per
+                                                     the visibility rules in §4.4.1
+
+sort: [ rating ↓ ]                                ← cycle button
+
+╔════ game grid (cover density from prefs) ════════════════╗
+│ ...                                                       │
+╚═══════════════════════════════════════════════════════════╝
+```
+
+Same toolbar shape used for every primary lens; only the visible secondary-filter chips differ. The `[change lens ▾]` chip opens a picker so users can pivot — e.g. browsing FromSoft developer → realising they want to see only the Playing ones → either pivots via the picker to the Status lens (with developer as secondary) or applies status as a secondary filter on the current Developer lens. Both routes reach the same intersection; URL just expresses which lens is "primary."
+
+**Worked-example URLs** (all reach the same game set):
+
+- `/library/Playing?platform=PS&developer=fromsoftware&sort=rating`
+- `/library/by-developer/fromsoftware?status=Playing&platform=PS&sort=rating`
+- `/library/by-rating/8+?status=Playing&platform=PS&developer=fromsoftware&sort=rating`
+
+The choice between them is purely about which lens the user wants featured in the page heading + URL share-context. The query intersection is identical.
 
 ### 4.5 Open questions
 
@@ -374,6 +435,7 @@ The progressive-disclosure pattern means Library landing *gracefully degrades* �
 - **OQ-LIB-6 — "Your year in games" wrap-up reconsideration.** AGENT.md Decision #3 deferred this to v2. Once Collections + Rating + Reference data ship, the wrap-up has substantially richer raw material (rated games + collections-membership graphs + developer-coverage stats). Worth a future product-strategy session to re-evaluate. **Not blocking any current work.**
 - **OQ-LIB-7 — Browse-by panel: collapsed or expanded by default?** If a user has 50+ developers in their library, the panel is information-dense. Recommendation: **collapsed by default with a top-3 preview row visible** (`developer: Game Freak 24 · Nintendo 47 · FromSoftware 8 · [show all 23 →]`). Same pattern for publisher + series.
 - **OQ-LIB-8 — Wishlist shelf semantics post-CM12.** Today the Wishlist shelf surfaces both `status='Wishlist'` rows AND rows with non-empty `wishlistedPlatforms`. After GameDetail v2's S2-vs-S3 split based on release date (OQ-GD-12 lock), the Wishlist shelf might want to mirror that split: "Wishlist · upcoming" (S2-flavoured, anticipation) and "Wishlist · released" (S3-flavoured, decision-to-buy). Recommendation: **defer until cohort signal demands it.** The unified shelf works fine today; splitting adds complexity that benefits only the rare power-user with both kinds simultaneously.
+- **OQ-LIB-9 — Publisher ↔ Developer asymmetry in secondary filters.** On the Publisher lens, showing Developer as a secondary filter discriminates meaningfully (Nintendo publishes through Game Freak / Retro Studios / Monolith Soft — drilling to "Game Freak under Nintendo" is real). On the Developer lens, showing Publisher as a secondary filter usually doesn't (Game Freak only publishes through Nintendo — the filter would have one option). The locked visibility rules above reflect this asymmetry: Publisher lens shows Developer; Developer lens does NOT show Publisher. **Worth a sanity-check after B-Stash-5 reference data lands** — if real-world data shows multi-publisher developers (some indies self-publish on Steam but go through a publisher on console), reopen the rule.
 
 ### 4.6 Sequencing notes
 
