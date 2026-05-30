@@ -64,6 +64,7 @@ Already-shipped or already-rejected items omitted — those are locked. The rema
 
 - **B-IGDB-1** Events as a discoverable surface — State of Play / Summer Game Fest / Nintendo Direct / The Game Awards / etc. with cover art, descriptions, dates, and a grid of all games announced or shown at each event. *"I missed State of Play last Tuesday — what was announced?"*
 - **B-IGDB-2** Cross-link from GameDetail back to events: *this game was shown at X* → opens the event page. Requires B-IGDB-1 first.
+- **B-IGDB-3** Genre tags as a filterable / browseable dimension across the library. IGDB exposes `genres` (RPG / Action / Strategy / etc.), `themes` (Fantasy / Sci-Fi / Horror / etc.), and `player_perspectives` (First-person / Third-person / etc.) on every game. Stash merges all three into a single "tags" axis (per O14); Hoard scopes B-IGDB-3 to `genres` initially with `themes` + `perspectives` as a v2 extension if usage signal demands it. **Already integrated** — genres land on the IGDB `Game` payload we already fetch, so this filter is *less dependent* than developer/publisher/series (those need new reference entities; genres just need an index + filter UI).
 
 ### B-HLTB
 
@@ -290,6 +291,7 @@ Library has the heaviest dependency stack — most additions wait on B-Stash wor
 |---|---|---|
 | **No pending-review surfacing** | Q-series (deferred-candidate per CLAUDE.md) | After M-series sync expansion (5 new sync paths in 3 days), low-confidence title matches multiplied. `UserGame.needsReview` flag + Library callout for sync-derived rows that title-search matched at low confidence |
 | **No rating-aware filters or shelves** | B-Stash-3 | Sort by rating, filter "rated 8+", potentially a "Best rated" cross-status shelf. Depends on `UserGame.rating: Int?` column existing first |
+| **No genre filter or browse-by surface** | B-IGDB-3 | Genres already on `Game` via IGDB; just need a search index + filter UI + browse-by panel row. Lighter dependency than dev/pub/series — ships *before* B-Stash-5 |
 | **No personal Collections** | B-Stash-4 | Browse + add to Collection from Library. New entity `UserCollection` + join table; UI: Collections as horizontal shelves on landing alongside status shelves |
 | **No reference-data navigation** | B-Stash-5 | "Browse by developer / publisher / series" — quick-filter surface using the user's most-represented developers/publishers/series. Routes: `/library?developer=…` or sub-route. Depends on Developer / Publisher / Franchise reference entities + Game FK relationships |
 | **Completed shelf cards look identical to other shelves** | B-Hoard-1 | The archivist-relic concept on State 4 GameDetail should subtly read in the Library too — Completed shelf cards get a small "sealed" visual marker (single character or glyph in the corner) so the eye picks them out as *consecrated artifacts* even at scan-density. Trickle-down from the relic identity |
@@ -310,6 +312,7 @@ The composition model is locked: **one primary lens × N secondary filters × on
 | Primary lens | Route shape | Ships with |
 |---|---|---|
 | Status | `/library/:status` | Existing |
+| **Genre** | **`/library/by-genre/:slug`** | **B-IGDB-3 (lighter — genres already on Game; ships standalone, not gated on B-Stash-5)** |
 | Collection | `/library/by-collection/:slug` | B-Stash-4 |
 | Developer | `/library/by-developer/:slug` | B-Stash-5 |
 | Publisher | `/library/by-publisher/:slug` | B-Stash-5 |
@@ -322,14 +325,17 @@ The composition model is locked: **one primary lens × N secondary filters × on
 
 | Primary lens | Visible secondary filters |
 |---|---|
-| Status | platform · developer · publisher · series · collection · rating |
-| Collection | platform · status · developer · publisher · series · rating |
-| Developer | platform · status · collection · rating |
-| Publisher | platform · status · developer · collection · rating *(developer as sub-filter is interesting; e.g. Nintendo publisher → drill to Game Freak. See OQ-LIB-9 on the asymmetry)* |
-| Series | platform · status · collection · rating |
-| Rating bucket | platform · status · developer · publisher · series · collection |
+| Status | platform · genre · developer · publisher · series · collection · rating |
+| **Genre** | **platform · status · developer · publisher · series · collection · rating** |
+| Collection | platform · status · genre · developer · publisher · series · rating |
+| Developer | platform · status · genre · collection · rating |
+| Publisher | platform · status · genre · developer · collection · rating *(developer as sub-filter is interesting; e.g. Nintendo publisher → drill to Game Freak. See OQ-LIB-9 on the asymmetry)* |
+| Series | platform · status · genre · collection · rating |
+| Rating bucket | platform · status · genre · developer · publisher · series · collection |
 | Pending-review | platform · status *(other lenses don't usefully discriminate; needsReview rows are data-quality cases, not curated subsets)* |
-| All | every secondary filter visible |
+| All | every secondary filter visible (status · genre · developer · publisher · series · collection · rating · platform) |
+
+**Why genre is on nearly every lens:** genres are the most orthogonal of the available axes — every other lens (status, developer, publisher, series, collection, rating) meaningfully discriminates further when sliced by genre. *"Playing × JRPG"*, *"FromSoftware × Action-RPG"*, *"Pokemon collection × RPG"*, *"Rated 8+ × Horror"* are all natural queries.
 
 **Sort** (one at a time, URL param `?sort=`): `lastPlayed` (default) · `title` · `playtime` · `rating ↓` *(B-Stash-3 dependency)* · `addedAt` · `completedAt` *(Completed-status only)*.
 
@@ -359,11 +365,14 @@ Pure navigation hub. No game grids; no compound filtering; no find input. Each l
    ▢ Dad's PS2 favorites 16 →
    [+ new collection]
 
-// browse by                         ← (NEW — B-Stash-5 dependency; collapsed-with-top-3-preview by default)
+// browse by                         ← (NEW — mixed dependencies, see element matrix; collapsed-with-top-3-preview)
+   genre:      RPG 87 · Action 64 · Strategy 32 · [show all 19 →]    ← B-IGDB-3 (lighter dep)
    developer:  Game Freak 24 · Nintendo 47 · FromSoftware 8 · [show all 23 →]
    publisher:  Nintendo 89 · Sony 56 · Capcom 23 · [show all 18 →]
    series:     Pokemon 18 · Mega Man 11 · Final Fantasy 9 · [show all 12 →]
 ```
+
+Each row in the browse-by panel renders *independently* — genres ship first (B-IGDB-3 is data-on-hand), developer/publisher/series fill in when B-Stash-5 lands. So Library landing has a meaningful browse-by section *before* the reference-data workstream ships.
 
 **Element matrix per landing-page section:**
 
@@ -375,7 +384,8 @@ Pure navigation hub. No game grids; no compound filtering; no find input. Each l
 | Completed shelf glyph treatment | absent today | B-Hoard-1 visual design lands (OQ-GD-13 resolution) |
 | Collections shelves | hidden when no collections | B-Stash-4 ships |
 | `[+ new collection]` CTA | hidden when B-Stash-4 unshipped | B-Stash-4 ships |
-| Browse-by panel | hidden when reference data absent | B-Stash-5 ships |
+| Browse-by panel — genre row | hidden when genre index empty | B-IGDB-3 ships (lighter dep — already on Game) |
+| Browse-by panel — developer / publisher / series rows | each hidden when its reference data absent | B-Stash-5 ships (per-row independently) |
 
 Progressive-disclosure: each section *only renders when its dependency has shipped*. No empty-state placeholders for un-shipped features.
 
@@ -445,8 +455,9 @@ Library work is mostly *follow-ons* to other workstreams — it gets the surface
 |---|---|
 | Pending-review surface | Q-series workstream (UserGame.needsReview flag + sync-pipeline writes) |
 | Rating-aware filters/sort | B-Stash-3 workstream (UserGame.rating column + GameDetail UI) |
+| **Genre filter + `/library/by-genre/:slug` + browse-by genre row** | **B-IGDB-3 workstream — genre index + filter UI. Lighter than B-Stash-5 (genres already on Game from IGDB)** |
 | Collections shelves on landing + `/library/by-collection/:slug` | B-Stash-4 workstream (UserCollection entity + management UI) |
-| Browse-by panel + `/library/by-developer/:slug` etc. | B-Stash-5 workstream (Developer/Publisher/Franchise reference entities + Game FK) |
+| Browse-by panel rows (developer/publisher/series) + `/library/by-developer/:slug` etc. | B-Stash-5 workstream (Developer/Publisher/Franchise reference entities + Game FK) |
 | Completed-shelf archivist glyph | OQ-GD-13 resolution (archivist visual design) |
 
 **Standalone Library work that doesn't wait on anything:**
