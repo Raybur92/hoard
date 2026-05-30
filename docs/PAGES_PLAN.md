@@ -948,14 +948,16 @@ Everything else threads in. Dashboard doesn't need its own large workstream — 
 
 ### 8.1 Purpose
 
-Deals is the *right-now buying opportunities* surface — aggregator of storefront discounts + trusted third-party-reseller offers, scoped to the user's wishlist + owned-platforms + library-adjacent context. Hoard already knows what platforms a user owns games on and what they wishlist; Deals applies that knowledge to filter the noise of "sales the user can act on" vs. "sales the user can't care about."
+Deals is the *right-now buying opportunities* surface — aggregator of storefront discounts + trusted third-party-reseller offers, scoped to the user's wishlist + owned-platforms + library-adjacent context, in the user's locale currency. Hoard already knows what platforms a user owns games on and what they wishlist; Deals applies that knowledge to filter the noise of "sales the user can act on" vs. "sales the user can't care about."
 
 User jobs:
 1. **"Is anything on my wishlist on sale right now?"** — primary actionable surface. Filtered to wishlisted titles, sorted by discount % or absolute savings.
-2. **"What's broadly on sale that I might want?"** — secondary discovery. High-discount titles on the user's owned platforms, excluding already-owned.
+2. **"What's broadly on sale that I might want?"** — secondary discovery. High-discount titles on the user's owned platforms, excluding games the user already owns (wishlist exception applies — see §8.4).
 3. **"What about completing a series I started?"** — library-completion deals: sequel/series-mate games on sale where the user owns earlier entries (depends on B-Stash-5 reference entities).
-4. **Cross-link from Dashboard alerts strip** — "5 wishlist games on sale" callout lands here; this is the destination page for the Dashboard signal.
-5. **Cross-link from GameDetail S1** — the price-offers card on State 1 (released-not-owned) shares the same ITAD pipeline; clicking through a price → ITAD-source storefront, same plumbing as Deals page deep-links.
+4. **"Any retro / console-physical deals worth tracking?"** — physical deals are in scope, especially for retro + console collectors. Sourced from Amazon (per user's market) + curated trusted resellers. Hoard's S0 collector identity means physical-collectible deals are first-class, not an afterthought.
+5. **"What's the catalog inside this sale event?"** — sale events (Steam Summer Sale, Sony Days of Play, Epic Mega Sale, etc.) are surfaced as their own grouping; users can drill into a specific event to browse everything inside.
+6. **Cross-link from Dashboard alerts strip** — "5 wishlist games on sale" callout lands here; this is the destination page for the Dashboard signal.
+7. **Cross-link from GameDetail S1** — the price-offers card on State 1 (released-not-owned) shares the same ITAD pipeline; clicking through a price → storefront, same plumbing as Deals page deep-links.
 
 The page is net-new. Same family as Events in the §1 inventory (both top-level new surfaces); shares the ITAD client with GameDetail S1's price-offers card (B-Storefront-2). One client, two surfaces.
 
@@ -973,42 +975,68 @@ The whole page IS the gap. There's no Hoard surface for this today.
 |---|---|---|
 | No `/deals` page at all | B-Storefront-2 | Entire surface — wishlist filter, broader feed, ITAD sync pipeline, storefront deep-links |
 | No ITAD client | B-Storefront-2 + OQ-GD-16 | Same client powers GameDetail S1 price-offers card; one integration, two consumers |
+| No user-market preference | (architectural — Andrea 2026-05-30) | Drives both Amazon storefront selection AND locale currency display. New `User.marketCode` column |
+| No physical-deals data source | B-Storefront-2 extension (Andrea 2026-05-30) | Amazon Product Advertising API per user's market; possibly other physical retailers. Retro + console focus |
+| No locale-currency display | (architectural — Andrea 2026-05-30) | All prices in user's currency. ITAD supports per-region pricing queries via country parameter |
+| No already-owned exclusion | (Andrea 2026-05-30) | Never show deals for games the user already owns *unless* they're wishlisted (CM12 per-platform wishlist counts — game owned on PSN but wishlisted on Switch → show Switch deal) |
+| No sale-event grouping | (Andrea 2026-05-30) | Group deals by sale event (Steam Summer Sale / Sony Days of Play / Epic Mega Sale / etc.); users can drill into an event to browse its full catalog |
+| No historical-low markers | (Andrea 2026-05-30) | Surface `// historical low · never been cheaper` chip when current price equals or matches historical low |
+| No trend alerts | (Andrea 2026-05-30) | Flag wishlist games with multiple recent price drops as "trending down" — pre-emptive nudge before they hit historical low |
 | No Dashboard "X wishlist deals" callout | (§7 alerts strip) | Cross-page dependency — Dashboard surfaces the callout only after Deals workstream ships the data primitive |
 | No library-completion-deal surfacing | B-Stash-5 + B-Storefront-2 | "Bayonetta 3 on sale (you own Bayonetta 1 + 2)" — depends on series reference data |
+| No affiliate-link routing | (Andrea 2026-05-30 reversal — see OQ-DEALS-5) | Hoard runs at the cost of Railway + IGDB + ITAD APIs; affiliate revenue covers operating expense |
 
 ### 8.4 Target state
 
-`/deals` is a list-heavy page with a clear hierarchy: dominant wishlist deals at top, broader feed below, library-completion in between (when B-Stash-5 ships). Lighter use of the bento-box pattern than Dashboard — this page is naturally list-flavored, not stat-card-flavored.
+`/deals` is a list-heavy page with a clear hierarchy: dominant wishlist deals at top, broader feed below, library-completion + physical-deals + sale-event grouping in between. All prices in the user's locale currency (driven by `User.marketCode`).
+
+**Rules across every section:**
+- Show deals from the curated trusted-storefront allow-list ONLY (per OQ-DEALS-9 lock — see §8.5)
+- Skip deals for games the user already owns, *unless* the game is wishlisted (per-platform wishlist via CM12 counts — owned on PSN + wishlisted on Switch → show the Switch deal)
+- Surface a `// historical low` chip when current price equals historical-low
+- Surface a `// trending down` chip when a wishlist game has had ≥2 price drops over a sliding window (threshold locked in OQ-DEALS-13)
+- All storefront deep-links go through the affiliate-router with the user invisible to the routing (no UX difference vs raw URL)
 
 ```
-// DEALS · refreshed 4h ago                                    [refresh now]
+// DEALS · refreshed 4h ago · market: AT 🇦🇹           [change market] [refresh now]
 
 ┌─ top wishlist deal ───────────────────────────────────────────────────────┐
 │ DIABLO IV                                              -50%  €34.99       │  ← dominant hero card
 │ on Battle.net · ends in 2d 14h                         was €69.99         │     (highest % off on
-│ ▮ wishlist · PC                                        [buy →]            │     your wishlist right now)
+│ ▮ wishlist · PC  // historical low  // trending down                      │     your wishlist right now)
+│                                                        [buy →]            │
 └───────────────────────────────────────────────────────────────────────────┘
 [span-12]
 
-// wishlist deals (5)                                          sort: % off ▾
+// wishlist deals (5)                       sort: % off ▾ · storefront: [ all ▾ ]
 
-┌──────────────────────────────────────────────────────────┐
-│ ▢ Diablo IV          Battle.net  -50% €34.99 · ends 2d   │ ← per-row card:
-│ ▢ Cyberpunk 2077     Steam       -45% €32.99 · ends 4d   │   cover · title · store ·
-│ ▢ Hades              GOG         -40% €14.99 · no expiry │   discount % · sale price ·
-│ ▢ Hollow Knight      Humble      -25% €11.24 · ends 1d   │   countdown · [buy →]
-│ ▢ Ori & the Blind…   Fanatical   -20% €15.99             │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ▢ Diablo IV         Battle.net   -50% €34.99 · ends 2d   // historical low│
+│ ▢ Cyberpunk 2077    Instant Gam. -45% €32.99 · ends 4d   // trending down │
+│ ▢ Hades             GOG          -40% €14.99 · no expiry                  │
+│ ▢ Hollow Knight     Humble       -25% €11.24 · ends 1d                    │
+│ ▢ Ori & the Blind…  GMG          -20% €15.99                              │
+└──────────────────────────────────────────────────────────────────────────┘
 [span-12 list]
 
-// library completion (3)                          ← B-Stash-5 dependency
-   Bayonetta 3        — Switch eShop  -33% — you own 1 + 2
-   Mass Effect LE     — Steam          -50% — you own 1 + 2
-   Pokémon Sword/Sh.  — Switch eShop  -25% — you own Ruby + Sapphire
+// library completion (3)                                 ← B-Stash-5 dep
+   Bayonetta 3        Switch eShop  -33% €40.19 — you own 1 + 2
+   Mass Effect LE     Steam         -50% €29.99 — you own 1 + 2
+   Pokémon Sword      Switch eShop  -25% €44.99 — you own Ruby + Sapphire
 
-// also on sale on your platforms (28)              sort: % off ▾ · platform: [ all ▾ ]
-   [scrollable list — broader discovery; high-discount titles on user's owned platforms,
-    excluding library entries the user already owns]
+// physical deals — retro + console (4)                   ← Amazon Product API
+   Zelda: Skyward HD       Amazon.de   -40%  €23.99
+   Persona 5 Royal PS4     Amazon.de   -45%  €27.49
+   Resident Evil 4 GC      ebay.de    €38 used "very good"
+   Castlevania SymphonyN   Amazon.de   -30% €17.49
+
+// sale events (2 active)                                 ← group-by event
+   Steam Summer Sale 2026 · 4,832 games · ends 8d              [browse →]
+   Sony Days of Play 2026 · 312 games   · ends 14d             [browse →]
+
+// also on sale on your platforms (28)        sort: % off ▾ · platform: [ all ▾ ]
+   [scrollable list — broader discovery; high-discount titles on user's
+    owned platforms, excluding library entries unless wishlisted]
 ```
 
 **Element matrix:**
@@ -1017,16 +1045,25 @@ The whole page IS the gap. There's no Hoard surface for this today.
 |---|---|---|
 | Top-wishlist-deal hero | hidden when no wishlist deals exist | DEALS-PR1 |
 | Wishlist deals list (sorted by % off) | hidden when no wishlist deals | DEALS-PR1 |
+| `// historical low` chip on card | rendered when `currentPrice == historicalLow` | DEALS-PR1 |
+| `// trending down` chip on card | rendered when ≥2 drops in window (threshold per OQ-DEALS-13) | DEALS-PR1 |
+| Already-owned exclusion (unless wishlisted) | enforced at query level | DEALS-PR1 |
 | Library-completion section | hidden until B-Stash-5 + series reference data | DEALS-PR2 |
+| **Physical deals section (retro + console)** | hidden when no Amazon market data yet | DEALS-PR3 (Amazon Product API integration) |
+| **Sale-events section** | hidden when no active events recognised | DEALS-PR2 (or DEALS-PR3 — depends on data source) |
 | Broader-feed list | hidden when no relevant deals | DEALS-PR1 |
-| Storefront filter chips | always present | DEALS-PR1 |
-| Discount range filter | optional toggle | DEALS-PR3 |
-| Source-type filter (official storefront / reseller) | always present | DEALS-PR1 |
+| **Market picker in toolbar (`[change market]`)** | always present | DEALS-PR1 (or Settings — see OQ-DEALS-10) |
+| **Locale-currency display** | always — driven by `User.marketCode` | DEALS-PR1 |
+| Storefront filter chips (trusted allow-list) | always present | DEALS-PR1 |
+| Discount range filter | optional toggle | DEALS-PR4 |
+| Source-type filter (digital storefront / reseller / physical) | always present | DEALS-PR1 (digital); physical chip with DEALS-PR3 |
 | Per-card deal-expiry countdown | when ITAD provides expiry timestamp | DEALS-PR1 |
-| Per-card `[buy →]` deep-link | always present | DEALS-PR1 |
+| Per-card `[buy →]` deep-link | always — routed through affiliate-router | DEALS-PR1 |
 | Per-card cross-link → GameDetail | always present | DEALS-PR1 |
 
 Progressive-disclosure same as Dashboard / Library: sections without content don't render. A fresh user with empty wishlist sees only the broader-feed section.
+
+**Trusted-storefront allow-list (locked 2026-05-30):** **Humble · Instant Gaming · GMG · Kinguin.** Additional candidates flagged for Andrea's call: **Fanatical** (clean / official affiliate), **GamesPlanet** (clean / official affiliate), **CDKeys** (grey-market but commonly used). Andrea's locked picks above are Andrea's personal-purchase set; the allow-list IS Hoard's curation — not "every storefront ITAD returns." Anything not on the list gets filtered out of the surface. See OQ-DEALS-9 for expansion path.
 
 ### 8.5 Open questions
 
@@ -1042,7 +1079,9 @@ Progressive-disclosure same as Dashboard / Library: sections without content don
     3. Hide console games entirely from Deals (PC-only) — too aggressive; many Hoard users have console-heavy libraries.
     Recommendation: **#1 — accept the coverage gap.** Document it in an empty-state copy on the page ("console pricing data is sparser than PC; check the platform store directly if you don't see what you expected").
 - **OQ-DEALS-4 — Mobile shape.** Deals is list-heavy. Mobile compression: stack the hero + list vertically; storefront filter as a single sheet-picker rather than chip-row; per-row card density reduced (drop storefront chip, keep title + discount + countdown). Worth a separate mockup pass during DEALS-PR4.
-- **OQ-DEALS-5 — Affiliate-link revenue routing. ✅ REJECTED 2026-05-30.** Hoard is personal-tool, not monetisation surface (per §2 B-Stash values divergence + decision #4 in AGENT.md re: random-backlog-picker — *"Permanent, minimal Dashboard feature. Not an Easter egg."*). Deals links go directly to the storefront's product page without affiliate routing. Pinning the rejection so future-me doesn't reopen.
+- **OQ-DEALS-5 — Affiliate-link revenue routing. ✅ REVERSED 2026-05-30 (now IN SCOPE).** Original rejection was framed as "Hoard is not a monetisation surface." That framing was wrong on a closer look — Hoard *runs at a cost* (Railway + IGDB + ITAD + Vercel hosting; future ITAD paid tier if scale demands it). Affiliate revenue from storefronts where the user was already going to buy is *cost-recovery*, not monetisation-driven product behaviour. **Critically:** affiliate routing does NOT change anything the user sees or does — the `[buy →]` button already exists for the user's benefit; the affiliate ID is appended to the URL invisibly. No new buy-pushing UX, no upgraded prominence, no fake-urgency. The product behaviour is identical with or without the affiliate ID; the revenue just covers operating expense.
+    **Implementation pattern:** per-storefront affiliate ID config (env vars: `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, etc.); a thin URL-rewriter wraps every `[buy →]` link with the affiliate ID using the storefront's documented format. Affiliate program signups handled out-of-band by Andrea.
+    **Identity boundary preserved:** Hoard does NOT add buy-promoting UX, does NOT change ranking/sort to favor higher-commission storefronts, does NOT hide deals from non-affiliated storefronts. The trusted allow-list (OQ-DEALS-9) is curated for *what Andrea actually buys from*, not "where Hoard makes the most money."
 - **OQ-DEALS-6 — Cross-region price comparison.** "Steam US $34.99 vs Steam EU €34.99 vs Steam ARS ₽X" — ToS-grey territory (some storefronts explicitly forbid region-arbitrage promotion). Recommendation: **skip.** Out of scope; if a user wants region pricing they have ITAD's own site for that.
 - **OQ-DEALS-7 — Deal-drop notifications.** "Hades dropped to €14.99 — you wishlisted it!" — requires a notifications channel Hoard doesn't have. Same gating as Events OQ-EV-10. Recommendation: **defer entirely** until a notifications-channel workstream lands. The Deals page is browse-when-you-visit, not push-when-it-happens.
 - **OQ-DEALS-8 — Library completion deals — depth.** Series reference data (B-Stash-5) is the primitive. The completion-deals surface needs a query: "find on-sale games whose franchise/series is also owned by the user, but this specific entry isn't." Two depth options:
@@ -1050,21 +1089,79 @@ Progressive-disclosure same as Dashboard / Library: sections without content don
     2. **Series + developer** — also surface "you've played 3 FromSoftware games; Armored Core VI is 30% off"
     Recommendation: **#1 in DEALS-PR2; #2 only if usage signal demands it.** Series ownership is a stronger "I want the next one" signal than developer affinity.
 
+- **OQ-DEALS-9 — Trusted-storefront allow-list expansion.** **Locked 2026-05-30 at: Humble · Instant Gaming · GMG · Kinguin.** Andrea's personal-purchase set. Additional candidates flagged for future expansion when convenient:
+    - **Fanatical** — clean (official affiliate program, no grey-market concerns)
+    - **GamesPlanet** — clean (UK-based, official affiliate program)
+    - **CDKeys** — grey-market but extremely commonly used; Andrea's call whether to add
+    The allow-list is *config-driven* not user-driven — a single source-of-truth list in the codebase (`apps/api/src/services/deals/allowList.ts` or similar). When Andrea wants to add a storefront, edit the list, deploy. Future enhancement could be admin-editable via the `/admin` panel.
+- **OQ-DEALS-10 — Market picker UX placement.** New `User.marketCode` column drives both Amazon storefront selection (Amazon.de for AT/DE, Amazon.it for IT, Amazon.com for US, etc.) AND locale currency display across the page. Where does the user *set* this preference?
+    1. **Settings → Account section** — single source of truth, set-and-forget. Add a `market: [ AT 🇦🇹 ▾ ]` field alongside email/name. Cross-page affects (Deals, GameDetail S1 prices, anywhere currency is shown).
+    2. **Settings + a `[change market]` chip in the Deals toolbar** — same data, two affordances; the chip in Deals jumps straight to the Settings field for quick swap.
+    3. **Auto-derive from `Accept-Language` header + IP geolocation on first visit, user overrides only if wrong** — zero-friction default; harder to debug when wrong.
+    Recommendation: **#2 — Settings field as source-of-truth + chip in Deals toolbar as quick-access affordance + Accept-Language as the initial default value on user creation.** Three-layer fallback: explicit user-set → Accept-Language-derived → null (omit non-localized fields). Schema: `User.marketCode: String?` (ISO 3166-1 alpha-2, e.g. "AT" / "IT" / "US" / "DE").
+- **OQ-DEALS-11 — Physical-deals data source.** ITAD is digital-only. Physical deals (retro + console) need a separate pipeline. Options:
+    1. **Amazon Product Advertising API** — official affiliate-program-gated API; requires an active Amazon Associate account (Andrea would need to register). Covers Amazon.de / Amazon.it / Amazon.com / etc. — picks the right market per `User.marketCode`. *Chicken-and-egg: API requires affiliate sign-up; cost-recovery from OQ-DEALS-5 starts here.*
+    2. **Curated retailer-RSS / curated scraping** — list of trusted physical retailers (Multiplayer.it, Mediaworld, GameStop, etc.), scrape their deal pages. ToS-grey, brittle.
+    3. **Skip physical for v1; ship later** — Andrea said in scope but if Amazon API friction is high we could defer.
+    Recommendation: **#1 in DEALS-PR3 (Amazon API), with the affiliate sign-up as a pre-deploy ops step. If sign-up takes ages, ship DEALS-PR1+PR2 without physical and add it as DEALS-PR3 when the affiliate account exists.**
+- **OQ-DEALS-12 — Sale-event grouping data source.** Steam Summer Sale / Sony Days of Play / Epic Mega Sale etc. — how does Hoard know an event exists + which games are in it?
+    1. **ITAD-derived** — ITAD has a `bundles` and `sales` API surface; coverage varies but it tags some events
+    2. **Manual curation** — Andrea creates a `SaleEvent` row when a big event launches; populates via a query over ITAD data for that storefront + date window
+    3. **Pattern-detection** — auto-detect "many deals from same storefront within same date window" as an event
+    Recommendation: **#2 + #1 hybrid** — pull event metadata from ITAD where possible, augment with a small `SaleEvent` table in Hoard for events ITAD doesn't tag. URL: sub-route `/deals/event/:slug` so events are linkable + browsable. New schema: `SaleEvent { id, slug, name, storefront, startsAt, endsAt, coverUrl?, description? }` + a derived query that finds all current deals matching the (storefront, date window).
+- **OQ-DEALS-13 — Trend-alert threshold.** When does a wishlist game qualify for the `// trending down` chip?
+    1. **≥2 price drops within 30 days** — moderate sensitivity; surfaces real downward momentum
+    2. **≥3 price drops within 60 days** — high sensitivity; more confident signal
+    3. **Any drop where current price < 90% of 30-day avg** — math-based, less interpretable
+    Recommendation: **#1 (≥2 drops in 30 days) as the default**, tunable via env var if cohort signal demands adjustment. Requires storing per-game price history (extend ITAD nightly sync to persist a `PriceSnapshot` per game per day).
+- **OQ-DEALS-14 — Historical-low marker precision.** When current price equals historical low exactly, surface `// historical low · never been cheaper`. What about "within 5% of historical low" — close but not exactly equal? Recommendation: **strict equality for the primary chip; render `// near historical low` as a softer secondary chip when within 5%.** Two distinct chips for two distinct moments.
+
 ### 8.6 Sequencing notes
 
-DEALS ships as its own workstream — call it DEALS-series. Substantially smaller than the GameDetail v2 or Events workstreams since the page is list-heavy and shares the ITAD client with GameDetail S1.
+DEALS ships as its own workstream — call it DEALS-series. Larger than the original spec after Andrea's 2026-05-30 expansion (affiliate routing + market preference + locale currency + already-owned exclusion + physical deals + sale-event grouping + historical-low + trending-down + curated allow-list). Still smaller than GameDetail v2.
 
-- **DEALS-PR1 — Foundation.** ITAD client (`apps/api/src/services/deals.ts`), nightly cron + admin manual refresh, `/deals` page with top-wishlist-deal hero + wishlist deals list + broader-feed list + storefront filter + source-type filter + per-card deep-links. Sidebar nav integration. **Smallest shippable version.**
-- **DEALS-PR2 — Library completion.** Adds the "library completion deals" section between wishlist and broader-feed. Gated on B-Stash-5 shipping series reference data. Single new query + new section render.
-- **DEALS-PR3 — Filter polish.** Discount range filter + sort options + storefront-availability chip on cards.
-- **DEALS-PR4 — Mobile polish.** Compression layout for mobile per OQ-DEALS-4.
+- **DEALS-PR1 — Foundation (digital, locale-aware).**
+    - ITAD client (`apps/api/src/services/deals.ts`)
+    - Nightly cron + admin manual refresh button
+    - `User.marketCode` schema column + Accept-Language-derived default
+    - Settings → Account: market picker field
+    - Per-storefront affiliate-router (env vars: `HUMBLE_AFFILIATE_ID` etc.)
+    - Trusted-storefront allow-list config (locked: Humble, Instant Gaming, GMG, Kinguin per OQ-DEALS-9)
+    - `/deals` page: top-wishlist-deal hero + wishlist deals list + broader-feed list
+    - All prices in user's locale currency
+    - Already-owned exclusion with wishlist exception (per CM12 follow-through)
+    - Storefront filter + source-type filter + per-card deep-links (affiliate-routed)
+    - `// historical low` + `// trending down` chips on cards
+    - Per-game `PriceSnapshot` persistence (extends nightly sync) — required for trend detection
+    - `[change market]` chip in toolbar (jumps to Settings field)
+    - Sidebar nav integration
+    - Dashboard alerts-strip callout ("X wishlist games on sale")
+- **DEALS-PR2 — Library completion + sale events.**
+    - Library-completion section (gated on B-Stash-5 series reference data)
+    - Sale-event detection + grouping + `SaleEvent` schema table
+    - Sub-route `/deals/event/:slug` for per-event catalog browsing
+- **DEALS-PR3 — Physical deals.**
+    - Amazon Product Advertising API integration (per `User.marketCode`)
+    - Physical-deals section on `/deals`
+    - Retro + console focus per Andrea's S0 collector identity framing
+    - Pre-deploy ops: Amazon Associate affiliate account registration
+- **DEALS-PR4 — Filter + mobile polish.**
+    - Discount range filter + sort options + storefront-availability chips
+    - Mobile compression layout per OQ-DEALS-4
+    - Trend-alert threshold env-var tunability (per OQ-DEALS-13)
 
 **Shared with GameDetail S1 (B-Storefront-2):**
-- The ITAD client built in DEALS-PR1 is consumed by GameDetail S1's price-offers card. Either workstream ships first; the other consumes the existing client. Recommended ordering: ship DEALS-PR1 first (the page has more dependent data shape), then GameDetail v2 GD-PR1 (S1) just reads the ITAD response shape.
+- The ITAD client built in DEALS-PR1 is consumed by GameDetail S1's price-offers card. Either workstream ships first; the other consumes the existing client. Recommended ordering: ship DEALS-PR1 first (the page has more dependent data shape — affiliate routing, market preference, allow-list filter), then GameDetail v2 GD-PR1 (S1) just reads the existing infrastructure.
 
-**Pre-deploy ops:** `ITAD_API_KEY` env var on Railway. Pattern documented same as GOG / Epic.
+**Pre-deploy ops checklist:**
+- `ITAD_API_KEY` env var on Railway (same pattern as GOG_CLIENT_ID)
+- Per-storefront affiliate IDs on Railway (e.g. `HUMBLE_AFFILIATE_ID`, `INSTANT_GAMING_AFFILIATE_ID`, `GMG_AFFILIATE_ID`, `KINGUIN_AFFILIATE_ID`)
+- Amazon Associate account + API credentials (DEALS-PR3 only)
 
-**Cross-page dependency feeds back to Dashboard:** once DEALS-PR1 ships, the Dashboard alerts strip surfaces "X wishlist games on sale" callout (resolves part of OQ-DASH-2's scope). Same DEALS-PR1 ships both surfaces.
+**Cross-page dependencies fed by DEALS-PR1:**
+- Dashboard alerts strip surfaces "X wishlist games on sale" callout (closes part of §7 OQ-DASH-2)
+- GameDetail S1 price-offers card consumes the ITAD client + affiliate router + locale-currency pipeline (B-Storefront-2)
+- Settings → Account gains the market picker field (small Settings addition; ships as part of DEALS-PR1 since Deals is the primary consumer)
 
 ---
 
