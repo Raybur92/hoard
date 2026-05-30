@@ -547,11 +547,39 @@ Everything else (region/platform date expansion, preorder links, news) stays on 
 Releases doesn't need its own multi-PR workstream — the page is mostly done. The remaining work threads into the workstreams that own the relevant data:
 
 - **Events back-link chip** ships in EV-PR3 (the GameDetail back-link wiring PR) — REL gets the chip by reusing the same `EventGame` query on a different surface.
-- **Per-platform wishlist context** is a 1-PR enhancement on Releases standalone. Call it **REL-PR1**. Modest scope: ReleaseCard render logic update + 3-4 visual regression tests + mobile mirror. Could ship any time.
+- **Per-platform wishlist context** is a 1-PR enhancement on Releases standalone. Call it **REL-PR1**. Modest scope: ReleaseCard render logic update + 3-4 visual regression tests + mobile mirror. Could ship any time. **✅ Done 2026-05-30** — see landing notes at the end of this section.
 - **Card route alignment** lands in GD-PR1 (the GameDetail v2 route migration PR) — same atomic commit since the route source-of-truth migrates with the destination.
 - **"Live now" today-release chip** is another standalone REL-PR2 if/when prioritised. Smallest possible scope, no dependencies.
 
 No standalone "REL-series" needed. The work threads into other workstreams + 1-2 small enhancement PRs.
+
+#### REL-PR1 landing notes (2026-05-30)
+
+- **Surface targeted (per §5.4 #2):** when `UserGame.wishlistedPlatforms ⊊ game.platforms`, replace the generic IGDB platform array with the user's wishlist subset prefixed `// wishlisted:` (desktop card) or `wish:` (mobile row + hero label `wishlisted on`). Empty `wishlistedPlatforms` OR full-set match falls back to today's generic rendering — no narrowing to surface.
+- **Where the chip ships:**
+    - `ReleaseCard` (all 3 variants — wishlist / all / recent) — `// wishlisted:` amber-prefixed platform-glyph row
+    - `MobileReleaseRow` — inline `wish:` prefix on the meta line
+    - `HeroCountdown` — `wishlisted on` amber label replaces the `platforms` heading when scoped
+    - `AgendaRail` — **skipped** by spec analogy with OQ-REL-2 (single-line UI, no space for a prefix without redesigning the row)
+    - `WishlistEmptyRecommendation` — **n/a** by construction (recommendations are pre-wishlist, so `wishlistedPlatforms` is empty → helper returns generic)
+- **What shipped:**
+    - `packages/types/src/index.ts` — `IgdbUpcomingRelease.wishlistedPlatforms: string[]` added (required field; empty `[]` when no UserGame join applies).
+    - `apps/api/src/services/igdb.ts` — three factories (`getUpcomingReleases`, `getRecentlyReleased`, `getReleaseDetails`) default `wishlistedPlatforms: []`. The route layer enriches.
+    - `apps/api/src/routes/igdb.ts` — `userGameMap` widened to return `{ id, wishlistedPlatforms }` per igdbId; both `scope='wishlist'` and other-scope branches now thread the field through. The Prisma select adds `wishlistedPlatforms: true` to the UserGame projection (one extra column on an already-running query — no new round trip).
+    - `apps/api/src/routes/releases.ts` — `wishlistRowToUpcoming` takes `wishlistedPlatforms` as a 3rd arg; both `starred` and `hyped` branches join against UserGame and thread the field.
+    - `apps/web/src/components/screens/releases/utils.ts` — new `pickWishlistedPlatformChips(release)` helper. Returns `{ mode: 'generic' | 'wishlist', platforms: string[] }`. Callers don't need to inspect `mode` to know which array to map over — `platforms` is always the array to render. `mode` only changes the prefix label + visual treatment.
+    - `apps/web/src/components/screens/releases/ReleaseCard.tsx`, `MobileReleaseRow.tsx`, `HeroCountdown.tsx` — call `pickWishlistedPlatformChips`, render the amber prefix when scoped.
+    - `apps/web/src/hooks/useUpcoming.ts` — IGDB-outage fallback path defaults `wishlistedPlatforms: []`. WishlistRelease doesn't carry the per-platform context (it lives on `UserGame.wishlistedPlatforms`, which requires the join). Acceptable degradation for outage fallback.
+- **Edge cases handled by `pickWishlistedPlatformChips` (locked in tests):**
+    - Empty `wishlistedPlatforms` → generic
+    - `wishlistedPlatforms === platforms` (full-set match) → generic
+    - `wishlistedPlatforms ⊊ platforms` (strict subset) → wishlist, returns the subset
+    - `wishlistedPlatforms` contains a platform NOT in `platforms` (data drift — user wishlisted on a platform IGDB doesn't list / they don't have synced) → wishlist mode, render `wishlistedPlatforms` directly. OQ-REL-3 v1 recommendation explicitly accepts this; the "wishlisted on a platform you don't own" UX is a Library / GameDetail concern.
+    - Empty `platforms` (IGDB hasn't surfaced platform data yet) + non-empty `wishlistedPlatforms` → wishlist mode (data drift bucket above)
+    - Order preserved from `wishlistedPlatforms`, not from IGDB — user's stored intent wins
+- **Tests:** 9 unit tests in new `pickWishlistedPlatformChips.test.ts` pinning every truth-table row + edge case. +3 visual regression tests in `primitives.test.tsx` (generic when empty, scoped subset, full-set fallback) + 2 in `mobile.test.tsx` (wish: prefix when scoped, hidden when empty). 5 existing test-fixture factories backfilled with `wishlistedPlatforms: []` default (`bucketing.test.ts`, `empty-state.test.tsx`, `mobile.test.tsx`, `primitives.test.tsx`, `ReleasesRecentDesktop.test.tsx`). **112/112 releases tests pass.** Full backend suite: **39 / 589** (unchanged from DASH-PR2; no regressions on igdb / releases route tests). Typecheck + lint + rename-rule + production build all clean.
+- **Bundle delta:** ReleasesDesktop 18.57 → 18.68 kB (+0.04 kB gzipped); ReleasesMobile unchanged; other releases chunks negligible. The helper + chip-row markup are ~600 bytes total.
+- **Sticky property for OQ-REL-3 v2 follow-up:** the data-drift case (`wishlistedPlatforms` contains entries NOT in IGDB's `platforms`) currently renders identically to a strict-subset — that was the v1 lock. If a future product-strategy session decides that "you wishlisted on a platform you don't own" deserves distinct visual treatment, the helper's return shape is ready to extend (add a `drift: boolean` flag or split `mode` into 3 values).
 
 ---
 

@@ -4,7 +4,7 @@ import { Plat } from '../../primitives/Plat';
 import { HypeBars } from '../../primitives/HypeBars';
 import { Icon } from '../../primitives/Icon';
 import { daysUntil } from '../../../lib/utils';
-import { toPlatCode, hypeToBars, releaseDateColumn, categoryLabel } from './utils';
+import { toPlatCode, hypeToBars, releaseDateColumn, categoryLabel, pickWishlistedPlatformChips } from './utils';
 
 export type ReleaseCardVariant = 'wishlist' | 'all' | 'recent';
 
@@ -48,7 +48,13 @@ export function ReleaseCard({ release, variant = 'all', onToggleWishlist, onOpen
   const isWishlisted = release.wishlisted;
   const cat = categoryLabel(release.category);
   const showHype = variant === 'all';
-  const platforms = release.platforms.slice(0, 3);
+  // REL-PR1 — per-platform wishlist context. When the user wishlisted on
+  // a strict subset of the IGDB platforms array, surface that subset with
+  // a `// wishlisted:` prefix. Otherwise fall back to the generic platform
+  // array (today's behaviour).
+  const platformList = pickWishlistedPlatformChips(release);
+  const platforms = platformList.platforms.slice(0, 3);
+  const platformsAreWishlistScoped = platformList.mode === 'wishlist';
 
   // Card body click → onOpen(release). Implemented with role="button" +
   // tabIndex + keyboard handler (NOT a real <button>) because the star
@@ -151,8 +157,15 @@ export function ReleaseCard({ release, variant = 'all', onToggleWishlist, onOpen
         )}
 
         {platforms.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-            {platforms.map((p) => <Plat key={p} code={toPlatCode(p)} />)}
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {platformsAreWishlistScoped && (
+              <span className="t-mono t-amber" style={{ fontSize: 'var(--text-3xs)', letterSpacing: '0.04em' }}>
+                // wishlisted:
+              </span>
+            )}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {platforms.map((p) => <Plat key={p} code={toPlatCode(p)} />)}
+            </div>
           </div>
         )}
 

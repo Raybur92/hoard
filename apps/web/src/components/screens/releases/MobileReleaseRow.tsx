@@ -2,7 +2,7 @@ import type { IgdbUpcomingRelease } from '@hoard/types';
 import { Cover } from '../../primitives/Cover';
 import { Icon } from '../../primitives/Icon';
 import { daysUntil } from '../../../lib/utils';
-import { toPlatCode, releaseDateColumn, categoryLabel } from './utils';
+import { toPlatCode, releaseDateColumn, categoryLabel, pickWishlistedPlatformChips } from './utils';
 
 export interface MobileReleaseRowProps {
   release: IgdbUpcomingRelease;
@@ -39,7 +39,12 @@ export function MobileReleaseRow({ release, onToggleWishlist, onTap }: MobileRel
   const isPast = release.releaseDate !== null && away < 0;
   const isWishlisted = release.wishlisted;
   const cat = categoryLabel(release.category);
-  const platStr = release.platforms.slice(0, 4).map(toPlatCode).join('·');
+  // REL-PR1 — when the user wishlisted on a strict subset of the release's
+  // platforms, narrow the platform line to that subset (prefixed `wish:`).
+  // Falls back to the generic platform list when no narrowing applies.
+  const platformList = pickWishlistedPlatformChips(release);
+  const platStr = platformList.platforms.slice(0, 4).map(toPlatCode).join('·');
+  const platformsAreWishlistScoped = platformList.mode === 'wishlist';
 
   // Tap is meaningful only when we have a UserGame to navigate to. Otherwise
   // the title button renders disabled — clicking does nothing rather than
@@ -131,7 +136,13 @@ export function MobileReleaseRow({ release, onToggleWishlist, onTap }: MobileRel
           }}
         >
           {release.developer && <span>{release.developer}</span>}
-          {platStr && <span>· {platStr}</span>}
+          {platStr && (
+            <span>
+              · {platformsAreWishlistScoped && (
+                <span className="t-amber" style={{ marginRight: 3 }}>wish:</span>
+              )}{platStr}
+            </span>
+          )}
         </div>
       </button>
 

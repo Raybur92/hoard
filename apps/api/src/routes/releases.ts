@@ -22,7 +22,9 @@ const HYPE_THRESHOLD = 80;
 /**
  * Map a persisted `WishlistRelease` row to the `IgdbUpcomingRelease` shape
  * the Releases page consumes. Drops the unused DB pk + userId fields per
- * RELEASES_PLAN.md D7 (unified response shape).
+ * RELEASES_PLAN.md D7 (unified response shape). REL-PR1 added the
+ * `wishlistedPlatforms` field so the client can render per-platform
+ * wishlist context (`// wishlisted: PS5 · Switch`) when applicable.
  */
 function wishlistRowToUpcoming(
   w: {
@@ -39,6 +41,7 @@ function wishlistRowToUpcoming(
     category: number;
   },
   userGameId: string | null,
+  wishlistedPlatforms: string[],
 ): IgdbUpcomingRelease {
   return {
     igdbId: w.igdbId,
@@ -54,6 +57,7 @@ function wishlistRowToUpcoming(
     category: w.category,
     hype: w.hype,
     userGameId,
+    wishlistedPlatforms,
   };
 }
 
@@ -101,21 +105,26 @@ router.get('/releases/recent', requireUser, requireActive, async (req: Request, 
   // not owned", so it qualifies for RECENT.
   const wishlistIgdbIds = wishlistRows.map((w) => w.igdbId);
   let starredRows = wishlistRows;
-  let userGameByIgdbId = new Map<number, string>();  // for the userGameId tag
+  // REL-PR1 — track BOTH id (for navigation) AND wishlistedPlatforms (for
+  // chip rendering) per UserGame.
+  let userGameInfoByIgdbId = new Map<number, { id: string; wishlistedPlatforms: string[] }>();
   if (wishlistIgdbIds.length > 0) {
     const userGames = await prisma.userGame.findMany({
       where: { userId, game: { igdbId: { in: wishlistIgdbIds } } },
-      select: { id: true, status: true, game: { select: { igdbId: true } } },
+      select: { id: true, status: true, wishlistedPlatforms: true, game: { select: { igdbId: true } } },
     });
     const ownedNonWishlistIds = new Set(
       userGames.filter((ug) => ug.status !== 'Wishlist').map((ug) => ug.game.igdbId),
     );
     starredRows = wishlistRows.filter((w) => !ownedNonWishlistIds.has(w.igdbId));
-    userGameByIgdbId = new Map(userGames.map((ug) => [ug.game.igdbId, ug.id]));
+    userGameInfoByIgdbId = new Map(
+      userGames.map((ug) => [ug.game.igdbId, { id: ug.id, wishlistedPlatforms: ug.wishlistedPlatforms ?? [] }]),
+    );
   }
-  const starred: IgdbUpcomingRelease[] = starredRows.map((w) =>
-    wishlistRowToUpcoming(w, userGameByIgdbId.get(w.igdbId) ?? null),
-  );
+  const starred: IgdbUpcomingRelease[] = starredRows.map((w) => {
+    const info = userGameInfoByIgdbId.get(w.igdbId);
+    return wishlistRowToUpcoming(w, info?.id ?? null, info?.wishlistedPlatforms ?? []);
+  });
 
   // Hyped feed — pull the IGDB recent feed, dedupe against starred. Tag each
   // row with userGameId iff the user happens to have it in library (rare for
@@ -132,10 +141,19 @@ router.get('/releases/recent', requireUser, requireActive, async (req: Request, 
     if (candidates.length > 0) {
       const hypedUserGames = await prisma.userGame.findMany({
         where: { userId, game: { igdbId: { in: candidates.map((c) => c.igdbId) } } },
-        select: { id: true, game: { select: { igdbId: true } } },
+        select: { id: true, wishlistedPlatforms: true, game: { select: { igdbId: true } } },
       });
-      const hypedUgMap = new Map(hypedUserGames.map((ug) => [ug.game.igdbId, ug.id]));
-      hyped = candidates.map((r) => ({ ...r, userGameId: hypedUgMap.get(r.igdbId) ?? null }));
+      const hypedUgMap = new Map(
+        hypedUserGames.map((ug) => [ug.game.igdbId, { id: ug.id, wishlistedPlatforms: ug.wishlistedPlatforms ?? [] }]),
+      );
+      hyped = candidates.map((r) => {
+        const info = hypedUgMap.get(r.igdbId);
+        return {
+          ...r,
+          userGameId: info?.id ?? null,
+          wishlistedPlatforms: info?.wishlistedPlatforms ?? [],
+        };
+      });
     } else {
       hyped = candidates;
     }

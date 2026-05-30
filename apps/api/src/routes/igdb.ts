@@ -38,20 +38,24 @@ import type { ReleaseDateCategory } from '@hoard/types';
 // WishlistRelease rows shaped exactly like the live IGDB feed, so the chip
 // labelled "wishlist" finally means what it says — was previously aliased to
 // `my-platforms`, which silently filtered tracked releases by hype + platform.
+interface UserGameInfo {
+  id: string;
+  wishlistedPlatforms: string[];
+}
+
 /**
- * Build a Map<igdbId, userGameId> for the given user, scoped to a set of
- * igdbIds. Used by the upcoming response to decorate each release with its
- * library-row id so the client can navigate to /game/${userGameId} for any
- * release the user has a UserGame for. Returns an empty map when the input
- * is empty.
+ * Build a Map<igdbId, UserGameInfo> for the given user, scoped to a set of
+ * igdbIds. Returns BOTH the library-row id (for /game/${userGameId}
+ * navigation) AND the per-platform wishlist context (REL-PR1 chip
+ * rendering). Returns an empty map when the input is empty.
  */
-async function userGameMap(userId: string, igdbIds: number[]): Promise<Map<number, string>> {
+async function userGameMap(userId: string, igdbIds: number[]): Promise<Map<number, UserGameInfo>> {
   if (igdbIds.length === 0) return new Map();
   const rows = await prisma.userGame.findMany({
     where: { userId, game: { igdbId: { in: igdbIds } } },
-    select: { id: true, game: { select: { igdbId: true } } },
+    select: { id: true, wishlistedPlatforms: true, game: { select: { igdbId: true } } },
   });
-  return new Map(rows.map((r) => [r.game.igdbId, r.id]));
+  return new Map(rows.map((r) => [r.game.igdbId, { id: r.id, wishlistedPlatforms: r.wishlistedPlatforms ?? [] }]));
 }
 
 router.get('/igdb/upcoming', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
@@ -67,21 +71,25 @@ router.get('/igdb/upcoming', requireUser, requireActive, async (req: Request, re
       orderBy: [{ releaseDate: { sort: 'asc', nulls: 'last' } }],
     });
     const ugMap = await userGameMap(userId, releases.map((r) => r.igdbId));
-    const result: IgdbUpcomingRelease[] = releases.map((w) => ({
-      igdbId: w.igdbId,
-      title: w.title,
-      developer: w.developer,
-      releaseDate: w.releaseDate?.toISOString() ?? null,
-      releaseDateCategory: w.releaseDateCategory as ReleaseDateCategory,
-      platforms: w.platforms,
-      genres: w.genres,
-      coverUrl: w.coverUrl,
-      synopsis: w.synopsis,
-      wishlisted: true,
-      category: w.category,
-      hype: w.hype,
-      userGameId: ugMap.get(w.igdbId) ?? null,
-    }));
+    const result: IgdbUpcomingRelease[] = releases.map((w) => {
+      const info = ugMap.get(w.igdbId);
+      return {
+        igdbId: w.igdbId,
+        title: w.title,
+        developer: w.developer,
+        releaseDate: w.releaseDate?.toISOString() ?? null,
+        releaseDateCategory: w.releaseDateCategory as ReleaseDateCategory,
+        platforms: w.platforms,
+        genres: w.genres,
+        coverUrl: w.coverUrl,
+        synopsis: w.synopsis,
+        wishlisted: true,
+        category: w.category,
+        hype: w.hype,
+        userGameId: info?.id ?? null,
+        wishlistedPlatforms: info?.wishlistedPlatforms ?? [],
+      };
+    });
     res.json(result);
     return;
   }
@@ -103,11 +111,15 @@ router.get('/igdb/upcoming', requireUser, requireActive, async (req: Request, re
 
     const wishlistedIds = new Set(wishlisted.map((w) => w.igdbId));
     const ugMap = await userGameMap(userId, games.map((g) => g.igdbId));
-    const result: IgdbUpcomingRelease[] = games.map((g) => ({
-      ...g,
-      wishlisted: wishlistedIds.has(g.igdbId),
-      userGameId: ugMap.get(g.igdbId) ?? null,
-    }));
+    const result: IgdbUpcomingRelease[] = games.map((g) => {
+      const info = ugMap.get(g.igdbId);
+      return {
+        ...g,
+        wishlisted: wishlistedIds.has(g.igdbId),
+        userGameId: info?.id ?? null,
+        wishlistedPlatforms: info?.wishlistedPlatforms ?? [],
+      };
+    });
 
     res.json(result);
   } catch (err) {

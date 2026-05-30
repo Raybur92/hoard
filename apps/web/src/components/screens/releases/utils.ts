@@ -76,3 +76,60 @@ export function categoryLabel(category: number | null | undefined): 'DLC' | 'REM
   if (category === 8) return 'REMAKE';
   return null;
 }
+
+/**
+ * REL-PR1 — decide what platform list to render on a Releases card.
+ *
+ * Per PAGES_PLAN §5.4 + OQ-REL-3: when the user has wishlisted a release
+ * on a STRICT SUBSET of the IGDB platforms array, surface that subset as
+ * "wishlisted: PS5 · Switch" instead of the generic platform array. When
+ * `wishlistedPlatforms` is empty (no per-platform wishlist binding) OR
+ * equals/exceeds the full IGDB platform set, fall back to the generic
+ * rendering.
+ *
+ * Returned shape:
+ *   - `mode: 'generic'`  → render `platforms` as-is (today's behaviour)
+ *   - `mode: 'wishlist'` → render `platforms` (the wishlistedPlatforms
+ *                          subset) with the `// wishlisted:` prefix
+ *
+ * The `platforms` array on the result is always the array to render —
+ * callers don't need to inspect `mode` to know which array to map over;
+ * `mode` only changes the prefix label and visual treatment.
+ *
+ * Edge cases:
+ *   - `wishlistedPlatforms = []`        → generic (today's behaviour)
+ *   - `wishlistedPlatforms = ['PS5']`, `platforms = ['PS5']`             → generic (full set; no narrowing to surface)
+ *   - `wishlistedPlatforms = ['PS5']`, `platforms = ['PS5','Switch']`    → wishlist (strict subset)
+ *   - `wishlistedPlatforms` contains a platform not in `platforms` (data
+ *     drift from CM12 — user wishlisted on a platform IGDB doesn't list):
+ *     wishlist mode, render `wishlistedPlatforms` directly. OQ-REL-3 v1
+ *     recommendation explicitly accepts this; the "wishlisted on platform
+ *     you don't own" UX is a Library / GameDetail concern.
+ */
+export function pickWishlistedPlatformChips(release: IgdbUpcomingRelease): {
+  mode: 'generic' | 'wishlist';
+  platforms: string[];
+} {
+  const { platforms, wishlistedPlatforms } = release;
+  if (!wishlistedPlatforms || wishlistedPlatforms.length === 0) {
+    return { mode: 'generic', platforms };
+  }
+  // Compare against the full IGDB platform set. If wishlistedPlatforms
+  // matches or exceeds it, there's nothing to narrow — fall back to
+  // generic so the visual treatment stays consistent across cards.
+  const igdbSet = new Set(platforms);
+  const wishSet = new Set(wishlistedPlatforms);
+  const isStrictSubset =
+    wishlistedPlatforms.length < platforms.length
+    && wishlistedPlatforms.every((p) => igdbSet.has(p));
+  // Also surface the "wishlist mode" when wishlistedPlatforms contains
+  // platforms NOT in the IGDB array (data drift) — the user's intent
+  // (wishlisted on these) wins, even if IGDB doesn't list them.
+  const hasDriftEntry = wishlistedPlatforms.some((p) => !igdbSet.has(p));
+  // Equal sets fall through to generic — no narrowing happening.
+  const setsEqual =
+    wishSet.size === igdbSet.size && [...wishSet].every((p) => igdbSet.has(p));
+  if (setsEqual) return { mode: 'generic', platforms };
+  if (isStrictSubset || hasDriftEntry) return { mode: 'wishlist', platforms: wishlistedPlatforms };
+  return { mode: 'generic', platforms };
+}

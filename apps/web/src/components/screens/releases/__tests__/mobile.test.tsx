@@ -37,6 +37,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     category: 0,
     hype: 50,
     userGameId: null,
+    wishlistedPlatforms: [],
     ...overrides,
   };
 }
@@ -298,5 +299,32 @@ describe('MobileReleaseRow', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /Add Star Test to wishlist/i }));
     expect(onToggle).toHaveBeenCalledWith(1);
+  });
+
+  // ── REL-PR1 — per-platform wishlist context ──────────────────────────
+  it('REL-PR1: renders the `wish:` prefix when wishlistedPlatforms ⊊ platforms', () => {
+    render(
+      <MobileReleaseRow
+        release={makeRelease({
+          platforms: ['PlayStation 5', 'Nintendo Switch', 'Xbox Series X|S'],
+          wishlistedPlatforms: ['PlayStation 5'],
+        })}
+      />,
+    );
+    expect(screen.getByText('wish:')).not.toBeNull();
+    // Platform line shows only PS, not the full PS·NT·XB list.
+    expect(screen.getByText(/^· /)).toHaveTextContent('· wish:PS');
+  });
+
+  it('REL-PR1: hides the `wish:` prefix when wishlistedPlatforms is empty', () => {
+    render(
+      <MobileReleaseRow
+        release={makeRelease({
+          platforms: ['PlayStation 5'],
+          wishlistedPlatforms: [],
+        })}
+      />,
+    );
+    expect(screen.queryByText('wish:')).toBeNull();
   });
 });

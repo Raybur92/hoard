@@ -353,10 +353,11 @@ limit ${limit};`;
       wishlisted: false,
       category: raw.category ?? 0,
       hype: raw.hypes ?? null,
-      // Per-user fields (`wishlisted`, `userGameId`) are placeholders here —
-      // the route layer enriches them by joining against the caller's
-      // WishlistRelease + UserGame rows.
+      // Per-user fields (`wishlisted`, `userGameId`, `wishlistedPlatforms`)
+      // are placeholders here — the route layer enriches them by joining
+      // against the caller's WishlistRelease + UserGame rows.
       userGameId: null,
+      wishlistedPlatforms: [],
     }));
 
   upcomingCache.set(cacheKey, mapped);
@@ -410,6 +411,7 @@ limit ${limit};`;
     category: raw.category ?? 0,
     hype: raw.hypes ?? null,
     userGameId: null,   // route layer enriches by joining against the caller's UserGames
+    wishlistedPlatforms: [],  // REL-PR1 — route layer enriches when a UserGame exists
   }));
 
   upcomingCache.set(cacheKey, mapped);
@@ -629,6 +631,7 @@ limit 1;`,
     category: raw.category ?? 0,
     hype: raw.hypes ?? null,
     userGameId: null,   // caller fills this in
+    wishlistedPlatforms: [],  // REL-PR1 — caller fills this in when a UserGame exists
   };
   releaseDetailsCache.set(key, mapped);
   return mapped;

@@ -7,7 +7,7 @@ import { Icon } from '../../primitives/Icon';
 import { Marker } from '../../primitives/Marker';
 import { countdownParts, daysUntil, upcomingDateParts } from '../../../lib/utils';
 import { useNow } from '../../../hooks/useNow';
-import { toPlatCode, hypeToBars } from './utils';
+import { toPlatCode, hypeToBars, pickWishlistedPlatformChips } from './utils';
 
 export interface HeroCountdownProps {
   release: IgdbUpcomingRelease;
@@ -98,12 +98,24 @@ export function HeroCountdown({ release, onToggleWishlist }: HeroCountdownProps)
             <div className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)' }}>day</div>
             <div className="t-tnum" style={{ marginTop: 4 }}>{dateParts.dow.toLowerCase()}</div>
           </div>
-          <div>
-            <div className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)' }}>platforms</div>
-            <div style={{ marginTop: 4, display: 'flex', gap: 4 }}>
-              {release.platforms.map((p) => <Plat key={p} code={toPlatCode(p)} lg />)}
-            </div>
-          </div>
+          {(() => {
+            // REL-PR1 — if the user wishlisted on a subset of the release's
+            // platforms, show that subset under a `wishlisted on` label
+            // instead of the generic `platforms` heading. Empty / full-set
+            // wishlistedPlatforms falls back to the original rendering.
+            const platformList = pickWishlistedPlatformChips(release);
+            const isScoped = platformList.mode === 'wishlist';
+            return (
+              <div>
+                <div className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)', color: isScoped ? 'var(--amber)' : undefined }}>
+                  {isScoped ? 'wishlisted on' : 'platforms'}
+                </div>
+                <div style={{ marginTop: 4, display: 'flex', gap: 4 }}>
+                  {platformList.platforms.map((p) => <Plat key={p} code={toPlatCode(p)} lg />)}
+                </div>
+              </div>
+            );
+          })()}
           {release.hype !== null && release.hype > 0 && (
             <div>
               <div className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)' }}>hype</div>

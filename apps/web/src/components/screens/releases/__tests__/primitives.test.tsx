@@ -26,6 +26,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     category: 0,
     hype: 50,
     userGameId: null,
+    wishlistedPlatforms: [],
     ...overrides,
   };
 }
@@ -199,6 +200,46 @@ describe('ReleaseCard', () => {
     const btn = getByLabelText(/Add Test Game to wishlist/i);
     btn.click();
     expect(onToggle).toHaveBeenCalledWith(42);
+  });
+
+  // ── REL-PR1 — per-platform wishlist context ────────────────────────────
+  it('REL-PR1: shows generic platform list (no `// wishlisted:` prefix) when wishlistedPlatforms is empty', () => {
+    const { queryByText, container } = render(
+      <ReleaseCard release={makeRelease({
+        platforms: ['PlayStation 5', 'PC (Microsoft Windows)'],
+        wishlistedPlatforms: [],
+      })} />,
+    );
+    expect(queryByText(/wishlisted:/i)).toBeNull();
+    // Both platform glyphs render (PS + ST/PC).
+    const plats = container.querySelectorAll('.plat');
+    expect(plats.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('REL-PR1: shows `// wishlisted:` prefix and the wishlist subset when wishlistedPlatforms ⊊ platforms', () => {
+    const { getByText, container } = render(
+      <ReleaseCard release={makeRelease({
+        platforms: ['PlayStation 5', 'Nintendo Switch', 'Xbox Series X|S'],
+        wishlistedPlatforms: ['PlayStation 5', 'Nintendo Switch'],
+      })} />,
+    );
+    expect(getByText(/wishlisted:/i)).not.toBeNull();
+    // Only 2 plat glyphs (PS + NT) — Xbox is in the IGDB list but NOT in the
+    // user's wishlist subset, so it must not appear.
+    const plats = Array.from(container.querySelectorAll('.plat')).map((el) => el.textContent?.trim());
+    expect(plats).toContain('PS');
+    expect(plats).toContain('NT');
+    expect(plats).not.toContain('XB');
+  });
+
+  it('REL-PR1: falls back to generic rendering when wishlistedPlatforms === full platforms set (no narrowing to surface)', () => {
+    const { queryByText } = render(
+      <ReleaseCard release={makeRelease({
+        platforms: ['PlayStation 5', 'Nintendo Switch'],
+        wishlistedPlatforms: ['PlayStation 5', 'Nintendo Switch'],
+      })} />,
+    );
+    expect(queryByText(/wishlisted:/i)).toBeNull();
   });
 });
 

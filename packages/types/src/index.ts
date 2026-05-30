@@ -557,6 +557,20 @@ export interface IgdbUpcomingRelease {
    * Null for non-wishlisted, non-owned releases (typical in All mode).
    */
   userGameId: string | null;
+  /**
+   * REL-PR1 (PAGES_PLAN §5.4 + OQ-REL-3) — the platforms the user wishlisted
+   * this release for, when they're a strict subset of the IGDB platforms
+   * array above. Sourced from `UserGame.wishlistedPlatforms` and populated
+   * by the same route enrichment path as `userGameId`. Empty when the user
+   * has no UserGame for this release or when `wishlistedPlatforms` is empty
+   * on the row.
+   *
+   * Card rendering: when the array is non-empty AND a strict subset of
+   * `platforms`, surface `// wishlisted: PS5 · Switch` instead of the
+   * generic platform array. When empty (or matching the full set), fall
+   * back to the generic rendering.
+   */
+  wishlistedPlatforms: string[];
 }
 
 /* ── Feedback (F-series, docs/FEEDBACK_PLAN.md) ── */

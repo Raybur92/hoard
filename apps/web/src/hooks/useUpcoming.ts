@@ -42,6 +42,11 @@ async function fetchUpcoming(scope: UpcomingScope): Promise<IgdbUpcomingRelease[
       // Fallback path doesn't have access to the UserGame join — links will
       // not navigate. The primary path (api.igdbUpcoming) does populate this.
       userGameId: null,
+      // Same caveat for REL-PR1: WishlistRelease doesn't carry the
+      // per-platform wishlist context (it lives on UserGame.wishlistedPlatforms,
+      // which requires the join). Empty = generic platform rendering on the
+      // card — acceptable degradation for an IGDB-outage fallback.
+      wishlistedPlatforms: [],
     }));
   }
 }
