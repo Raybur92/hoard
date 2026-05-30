@@ -168,7 +168,9 @@ The page renders the same identity surface (cover / title / genres / videos / sc
 | `[+ wishlist]` CTA (alternative on S1; dominant on S2) | ✓ | **★ dominant** | — | — |
 | Wishlist hype score (B-IGDB-1 derived) | — | ✓ | — | — |
 | **Preorder deep-links per platform (B-Storefront-1)** | — | **★** | — | — |
-| **Current price offers across storefronts (B-Storefront-2)** | **★** | — | — | — |
+| **Current price offers across storefronts (B-Storefront-2)** — full panel | **★** | — | **★** *(when `status='Wishlist'` + past release date — OQ-GD-12 library-citizen case)* | — |
+| **Physical-edition price comparison (B-Storefront-2 + physical pipeline)** | — | ★ *(collector / special editions — OQ-GD-17)* | — | — |
+| **Per-platform-wishlist deal chip** (small inline chip on the relevant platform row in PROGRESS — "// wishlisted on Steam — -50% €34.99") | — | — | ✓ *(when CM12 per-platform wishlist exists for an unowned platform)* | ✓ *(same)* |
 | **Latest news section (B-News-1)** | — | ★ | — | — |
 | PROGRESS receipt block (per-platform playtime + HLTB grid + achievements) | — | — | ✓ | ✓ |
 | Status picker | — | — | **★ dominant** | ✓ (with `[mark uncompleted / replay]`) |
@@ -234,6 +236,7 @@ Legend: ✓ = present · ★ = emphasised / visually dominant · — = absent.
     3. **No news feature on day-one of GameDetail v2** — render the section as a placeholder ("// news feed coming soon") and defer the data integration to a separate workstream. Reduces GD-PR2 scope.
     Recommendation: ship #3 with the placeholder; pick #1 vs #2 in a separate session once we see how often the news section is actually wanted on real games. The placeholder gives us the slot without forcing the data-quality question.
 - **OQ-GD-16 — ITAD vs DIY for price-offer + Deals data.** B-Storefront-2 (price offers on S1) and the Deals top-level surface (§8) both need real-time price aggregation across storefronts + third-party resellers. ITAD (`isthereanydeal.com`) is the canonical API for this — free tier exists, covers Steam / GOG / Epic / Humble / Fanatical / GMG / GamesPlanet / CDKeys / and most major sources. Console storefronts (PSN / Xbox / Nintendo) are weaker on ITAD; their pricing changes less often anyway. DIY scraping would be substantial engineering + ToS-risky. Recommendation: **ITAD**, ship the Deals page + S1 price section in the same workstream that adds the ITAD client. Pre-deploy gotcha: ITAD requires an API key from their dashboard; env-var pattern same as IGDB/Steam.
+- **OQ-GD-17 — Physical-edition price comparison on S2 (upcoming, not owned). ✅ LOCKED 2026-05-30 (in scope, physical-only).** Digital preorders are typically locked at MSRP across official storefronts (no comparison value); but physical preorders vary widely — Amazon.de standard edition vs Mediaworld collector edition vs GameStop preorder bonus etc. Given physical deals are in scope per §8 (Andrea 2026-05-30, S0 collector identity), S2 gets a *physical-only* price comparison card (DEALS-PR3 dependency — Amazon Product Advertising API). Card only renders when physical SKUs exist for the upcoming title; otherwise hidden. Digital preorder coverage stays as the existing per-platform deep-link strip (B-Storefront-1) — no digital comparison value.
 
 ### 3.6 Sequencing notes
 
@@ -957,9 +960,17 @@ User jobs:
 4. **"Any retro / console-physical deals worth tracking?"** — physical deals are in scope, especially for retro + console collectors. Sourced from Amazon (per user's market) + curated trusted resellers. Hoard's S0 collector identity means physical-collectible deals are first-class, not an afterthought.
 5. **"What's the catalog inside this sale event?"** — sale events (Steam Summer Sale, Sony Days of Play, Epic Mega Sale, etc.) are surfaced as their own grouping; users can drill into a specific event to browse everything inside.
 6. **Cross-link from Dashboard alerts strip** — "5 wishlist games on sale" callout lands here; this is the destination page for the Dashboard signal.
-7. **Cross-link from GameDetail S1** — the price-offers card on State 1 (released-not-owned) shares the same ITAD pipeline; clicking through a price → storefront, same plumbing as Deals page deep-links.
+7. **Cross-link from GameDetail S1 (+ S3 Wishlist-past-release)** — the price-offers card on those states shares the same ITAD pipeline; clicking through a price → storefront, same plumbing as Deals page deep-links.
 
-The page is net-new. Same family as Events in the §1 inventory (both top-level new surfaces); shares the ITAD client with GameDetail S1's price-offers card (B-Storefront-2). One client, two surfaces.
+The page is net-new. Same family as Events in the §1 inventory (both top-level new surfaces); shares the ITAD client with GameDetail price-offers cards (B-Storefront-2). One client, two surfaces.
+
+**Shared component architecture.** The per-game *price-offers panel* — the row of storefront entries with price / discount / chips / `[buy →]` deep-link — is a **single reusable React component**. Rendered cross-game as the row of the Deals page (`/deals`) and single-game as the dominant card on GameDetail S1 + S3-Wishlist-past-release. Same data shape, same affiliate routing, same `// historical low` / `// trending down` chips. Cheaper to build, impossible to drift between the two surfaces.
+
+**Cross-page already-owned exclusion** — the "skip deals for games the user already owns unless wishlisted" rule applies uniformly:
+- On `/deals` — at query level (game-list filter)
+- On GameDetail price-offers card — at storefront-row level: if the user owns Diablo IV on Battle.net, the Battle.net storefront row is hidden from the price-offers panel even on the GameDetail page for that game. The Steam row stays if the user has Steam wishlisted, or appears for unwishlisted-but-unowned platforms.
+
+Concretely: the panel renders only the storefronts that pass the per-platform check (owned-on-this-platform AND not-wishlisted-on-this-platform → skip; otherwise → show).
 
 ### 8.2 Current state
 
