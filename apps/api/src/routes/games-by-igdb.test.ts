@@ -55,6 +55,10 @@ jest.mock('../services/igdb', () => ({
   getGame: jest.fn(),
   getTimeToBeat: jest.fn().mockResolvedValue(null),
   getReleaseDetails: jest.fn(),
+  // GD-PR2 — parallel fetch for releaseDates / screenshotIds / videoIds.
+  // Default to null (degraded path) so existing tests don't have to set
+  // a value; tests that exercise the new fields override per-case.
+  getGameDetailExtras: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock('../services/hltb', () => ({
@@ -67,10 +71,17 @@ jest.mock('../services/deals/affiliate', () => ({
 
 import { app } from '../index';
 import { prisma } from '@hoard/db';
-import { getReleaseDetails } from '../services/igdb';
+import { getReleaseDetails, getGameDetailExtras } from '../services/igdb';
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // GD-PR2 — `getGameDetailExtras` runs in parallel with getReleaseDetails;
+  // the route's `.catch(() => null)` only triggers on a promise rejection,
+  // not on an undefined return. Without a default, the mock returns
+  // undefined → `.catch` throws TypeError → outer try/catch nulls BOTH
+  // igdb + extras, masking unrelated test assertions. Restore the
+  // default-null implementation after every reset.
+  (getGameDetailExtras as jest.Mock).mockResolvedValue(null);
 });
 
 const FUTURE_ISO = new Date(Date.now() + 365 * 86400000).toISOString();
@@ -233,6 +244,56 @@ describe('GET /api/games/by-igdb/:igdbId (GD-PR1)', () => {
     expect(res.body.state).toBe('S1');
     expect(res.body.game.synopsis).toBeNull();
     expect(res.body.game.platforms).toEqual([]);
+  });
+
+  // GD-PR2 — releaseDates / screenshotIds / videoIds plumbed through
+  describe('GD-PR2 extras (releaseDates, screenshots, videos)', () => {
+    it('populates extras fields when IGDB returns them', async () => {
+      (prisma.game.findUnique as jest.Mock).mockResolvedValue(makeGame());
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+      (getReleaseDetails as jest.Mock).mockResolvedValue(makeIgdbRelease(true));
+      (getGameDetailExtras as jest.Mock).mockResolvedValue({
+        releaseDates: [
+          { date: '2027-03-15T00:00:00.000Z', region: 'Europe', platform: 'PlayStation 5' },
+          { date: '2027-04-22T00:00:00.000Z', region: 'North America', platform: 'PlayStation 5' },
+        ],
+        screenshotIds: ['screenshot_abc', 'screenshot_def'],
+        videoIds: ['dQw4w9WgXcQ', 'oHg5SJYRHA0'],
+      });
+
+      const res = await request(app).get('/api/games/by-igdb/1942');
+      expect(res.status).toBe(200);
+      expect(res.body.game.releaseDates).toHaveLength(2);
+      expect(res.body.game.releaseDates[0]).toMatchObject({ region: 'Europe', platform: 'PlayStation 5' });
+      expect(res.body.game.screenshotIds).toEqual(['screenshot_abc', 'screenshot_def']);
+      expect(res.body.game.videoIds).toEqual(['dQw4w9WgXcQ', 'oHg5SJYRHA0']);
+    });
+
+    it('defaults extras to empty arrays when getGameDetailExtras returns null', async () => {
+      (prisma.game.findUnique as jest.Mock).mockResolvedValue(makeGame());
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+      (getReleaseDetails as jest.Mock).mockResolvedValue(makeIgdbRelease(false));
+      (getGameDetailExtras as jest.Mock).mockResolvedValue(null);
+
+      const res = await request(app).get('/api/games/by-igdb/1942');
+      expect(res.status).toBe(200);
+      expect(res.body.game.releaseDates).toEqual([]);
+      expect(res.body.game.screenshotIds).toEqual([]);
+      expect(res.body.game.videoIds).toEqual([]);
+    });
+
+    it('extras failure does not break the response (graceful degradation)', async () => {
+      (prisma.game.findUnique as jest.Mock).mockResolvedValue(makeGame());
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+      (getReleaseDetails as jest.Mock).mockResolvedValue(makeIgdbRelease(false));
+      (getGameDetailExtras as jest.Mock).mockRejectedValue(new Error('IGDB down'));
+
+      const res = await request(app).get('/api/games/by-igdb/1942');
+      expect(res.status).toBe(200);
+      expect(res.body.game.releaseDates).toEqual([]);
+      expect(res.body.game.screenshotIds).toEqual([]);
+      expect(res.body.game.videoIds).toEqual([]);
+    });
   });
 });
 

@@ -25,6 +25,7 @@ import { TopBar } from '../layout/TopBar';
 import { useGameByIgdb } from '../../hooks/useGameByIgdb';
 import { api } from '../../lib/api';
 import { S1Desktop } from './gameDetail/S1Desktop';
+import { S2Desktop } from './gameDetail/S2Desktop';
 import { GameDetailDesktop } from './GameDetailDesktop';
 
 export function GameDetailV2Desktop() {
@@ -116,27 +117,31 @@ export function GameDetailV2Desktop() {
     );
   }
 
-  // Dispatch logic (GD-PR1):
-  //   - status=Wishlist (any release date) → S1 surface with
-  //     `wishlistUserGame` prop; CTAs adapt to "+ acquire" /
-  //     "- remove from wishlist". Andrea's lock on the legacy S3
-  //     surface: the "mark complete / start playing / + note / receipt"
-  //     UI doesn't fit wishlist games (the user hasn't acquired the
-  //     game yet — those CTAs are nonsensical).
-  //   - no UserGame → S1 surface plain; "+ add to library" / "+ wishlist".
-  //   - any other status (Playing / Backlog / OnHold / Dropped / Completed)
-  //     → legacy GameDetail. GD-PR2/PR3/PR4 incrementally rewrite the
-  //     legacy view for dedicated S2/S3/S4 surfaces.
+  // Dispatch logic (updated by GD-PR2):
+  //   - status=Wishlist + future release  → S2 surface (dedicated, with
+  //     giant countdown + preorder + screenshots/videos)
+  //   - status=Wishlist + past release    → S1 surface (library citizen
+  //     framing per OQ-GD-12; price offers + acquire CTA)
+  //   - no UserGame + future release      → S2 surface plain
+  //   - no UserGame + past/null release   → S1 surface plain
+  //   - any other status (Playing / Backlog / OnHold / Dropped /
+  //     Completed)                         → legacy GameDetail
   //
-  // Per OQ-GD-12 the spec puts wishlist+future → S2 and wishlist+past
-  // → S3; GD-PR1 collapses both onto the S1 surface as the transition
-  // strategy until GD-PR2 ships the dedicated S2 (HeroCountdown) +
-  // GD-PR3 folds price offers into S3.
+  // Owned-in-progress + completed games still use the legacy surface
+  // until GD-PR3/PR4 rewrite S3 + S4. The Wishlist-S3 (past release) case
+  // gets the S1 surface — already shown in GD-PR1 to be the right call
+  // since "mark complete / start playing / + note" CTAs don't fit
+  // wishlist games.
   if (data.userGame && data.userGame.status !== 'Wishlist') {
     return <GameDetailDesktop userGameId={data.userGame.id} />;
   }
-  // Conditional prop spread keeps exactOptionalPropertyTypes happy —
-  // `wishlistUserGame` is omitted entirely when userGame is null.
+
+  if (data.state === 'S2') {
+    return data.userGame
+      ? <S2Desktop game={data.game} wishlistUserGame={data.userGame} onMutated={refetch} />
+      : <S2Desktop game={data.game} onMutated={refetch} />;
+  }
+
   return data.userGame
     ? <S1Desktop game={data.game} wishlistUserGame={data.userGame} onMutated={refetch} />
     : <S1Desktop game={data.game} onMutated={refetch} />;

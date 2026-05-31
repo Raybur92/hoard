@@ -41,11 +41,11 @@ const subs = new Map<string, Set<() => void>>();
  *   but before the wishlist subset was backfilled. Bumping forces a
  *   cold refetch on every cached endpoint.
  */
-// GD-PR1 — bumped v2 → v3 because DealRow gained `gameIgdbId` (used by
-// the /deals page navigation to /game/:igdbId). Stale v2 entries without
-// the field would surface as "// invalid game id" on the GameDetail v2
-// route on the first interaction after deploy.
-const STORAGE_PREFIX = 'hoard:cache:v3:';
+// GD-PR2 — bumped v3 → v4 because GameDetailResponse.game gained
+// releaseDates / screenshotIds / videoIds. Stale v3 entries without
+// those fields would crash the S2 sub-components with "undefined is
+// not an object (evaluating 'entries.length')".
+const STORAGE_PREFIX = 'hoard:cache:v4:';
 
 /**
  * Per-entry size cap when writing to localStorage (UTF-16 chars in the

@@ -11,6 +11,7 @@ import { Btn } from '../primitives/Btn';
 import { useGameByIgdb } from '../../hooks/useGameByIgdb';
 import { api } from '../../lib/api';
 import { S1Mobile } from './gameDetail/S1Mobile';
+import { S2Mobile } from './gameDetail/S2Mobile';
 import { GameDetailMobile } from './GameDetailMobile';
 
 export function GameDetailV2Mobile() {
@@ -91,13 +92,19 @@ export function GameDetailV2Mobile() {
     );
   }
 
-  // Same dispatch logic as GameDetailV2Desktop — see that file for the
-  // full rationale. Wishlist UserGames route to S1 (CTAs adapt);
-  // everything else (Playing / Backlog / OnHold / Dropped / Completed)
-  // routes to the legacy component; no UserGame → S1 plain.
+  // Same dispatch as GameDetailV2Desktop — see that file for the full
+  // rationale. GD-PR2 adds the S2 surface for upcoming (future-release)
+  // games whether wishlisted or not.
   if (data.userGame && data.userGame.status !== 'Wishlist') {
     return <GameDetailMobile userGameId={data.userGame.id} />;
   }
+
+  if (data.state === 'S2') {
+    return data.userGame
+      ? <S2Mobile game={data.game} wishlistUserGame={data.userGame} onMutated={refetch} />
+      : <S2Mobile game={data.game} onMutated={refetch} />;
+  }
+
   return data.userGame
     ? <S1Mobile game={data.game} wishlistUserGame={data.userGame} onMutated={refetch} />
     : <S1Mobile game={data.game} onMutated={refetch} />;

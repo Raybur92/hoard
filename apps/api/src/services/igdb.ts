@@ -1,4 +1,4 @@
-import type { IgdbSearchResult, IgdbTimeToBeat, IgdbUpcomingRelease, ReleaseDateCategory } from '@hoard/types';
+import type { IgdbSearchResult, IgdbTimeToBeat, IgdbUpcomingRelease, ReleaseDateCategory, ReleaseDateEntry } from '@hoard/types';
 
 /* ── Token cache ── */
 
@@ -685,6 +685,92 @@ limit 1;`,
     wishlistedPlatforms: [],  // REL-PR1 — caller fills this in when a UserGame exists
   };
   releaseDetailsCache.set(key, mapped);
+  return mapped;
+}
+
+/* ── GD-PR2 — extra S2 fields (release dates breakdown + videos + screenshots) ── */
+
+// IGDB region enum (from `release_dates.region`). Used by the S2 surface
+// to label per-region dates. Source: docs.igdb.com region table.
+const IGDB_REGION_LABEL: Record<number, string> = {
+  1: 'Europe',
+  2: 'North America',
+  3: 'Australia',
+  4: 'New Zealand',
+  5: 'Japan',
+  6: 'China',
+  7: 'Asia',
+  8: 'Worldwide',
+};
+
+interface IgdbRawReleaseDate {
+  date?: number;
+  region?: number;
+  platform?: { name?: string };
+}
+
+interface IgdbRawScreenshot {
+  image_id?: string;
+}
+
+interface IgdbRawVideo {
+  video_id?: string;
+}
+
+interface IgdbRawGameExtras {
+  release_dates?: IgdbRawReleaseDate[];
+  screenshots?: IgdbRawScreenshot[];
+  videos?: IgdbRawVideo[];
+}
+
+interface GameDetailExtras {
+  releaseDates: ReleaseDateEntry[];
+  screenshotIds: string[];
+  videoIds: string[];
+}
+
+const gameDetailExtrasCache = makeCache<GameDetailExtras | null>(ONE_DAY);
+
+/**
+ * GD-PR2 — fetches per-region × per-platform release-dates + screenshots
+ * (full id list, vs `getReleaseDetails`' single hero) + YouTube video ids
+ * for the S2 GameDetail surface. Separate from `getReleaseDetails` so
+ * the existing Releases-page consumers don't pay the larger query cost.
+ * Cached 24h alongside the other game-detail fetchers.
+ */
+export async function getGameDetailExtras(igdbId: number): Promise<GameDetailExtras | null> {
+  const key = String(igdbId);
+  const cached = gameDetailExtrasCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const results = await igdbPost(
+    'games',
+    `fields release_dates.date, release_dates.region, release_dates.platform.name, screenshots.image_id, videos.video_id;
+where id = ${igdbId};
+limit 1;`,
+  ) as (IgdbRawGameExtras & { id: number })[];
+  const raw = results[0];
+  if (!raw) {
+    gameDetailExtrasCache.set(key, null);
+    return null;
+  }
+
+  const releaseDates: ReleaseDateEntry[] = (raw.release_dates ?? []).map((r) => ({
+    date: r.date ? new Date(r.date * 1000).toISOString() : null,
+    region: typeof r.region === 'number' ? (IGDB_REGION_LABEL[r.region] ?? null) : null,
+    platform: r.platform?.name ?? null,
+  }));
+
+  const screenshotIds: string[] = (raw.screenshots ?? [])
+    .map((s) => s.image_id)
+    .filter((id): id is string => typeof id === 'string');
+
+  const videoIds: string[] = (raw.videos ?? [])
+    .map((v) => v.video_id)
+    .filter((id): id is string => typeof id === 'string');
+
+  const mapped: GameDetailExtras = { releaseDates, screenshotIds, videoIds };
+  gameDetailExtrasCache.set(key, mapped);
   return mapped;
 }
 

@@ -7,7 +7,7 @@ import { requireUser } from '../middleware/user';
 import { requireActive } from '../middleware/active';
 import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
 import { fetchHltbWithFallback } from '../services/hltb';
-import { getGame, getReleaseDetails, getTimeToBeat } from '../services/igdb';
+import { getGame, getReleaseDetails, getGameDetailExtras, getTimeToBeat } from '../services/igdb';
 import { mapUserGame } from '../lib/mappers';
 import { logEvent } from '../services/userEvents';
 import { detectGameDetailState } from '../lib/gameDetailState';
@@ -304,12 +304,21 @@ router.get('/games/by-igdb/:igdbId', requireUser, requireActive, async (req: Req
   });
   const userGame = userGameRow ? mapUserGame(userGameRow) : null;
 
-  // Lazy IGDB fetch — degrades gracefully on failure.
+  // Lazy IGDB fetches — both degrade gracefully on failure. Both are
+  // cached server-side for 24h so repeat visits are essentially free.
+  // Running in parallel keeps the page load fast even on cold cache.
   let igdb: Awaited<ReturnType<typeof getReleaseDetails>> = null;
+  let extras: Awaited<ReturnType<typeof getGameDetailExtras>> = null;
   try {
-    igdb = await getReleaseDetails(igdbId);
+    [igdb, extras] = await Promise.all([
+      getReleaseDetails(igdbId).catch(() => null),
+      getGameDetailExtras(igdbId).catch(() => null),
+    ]);
   } catch {
+    // Both .catch() above swallow per-call failures; this outer catch
+    // is a belt-and-suspenders defense against Promise.all internals.
     igdb = null;
+    extras = null;
   }
 
   const releaseDate = igdb?.releaseDate ? new Date(igdb.releaseDate) : null;
@@ -339,6 +348,9 @@ router.get('/games/by-igdb/:igdbId', requireUser, requireActive, async (req: Req
     nintendoTitleId: game.nintendoTitleId,
     itchGameId: game.itchGameId,
     hltbId: game.hltbId,
+    releaseDates: extras?.releaseDates ?? [],
+    screenshotIds: extras?.screenshotIds ?? [],
+    videoIds: extras?.videoIds ?? [],
   };
 
   const body: GameDetailResponse = {

@@ -290,6 +290,41 @@ export interface GameDetailGameInfo {
   nintendoTitleId: string | null;
   itchGameId: number | null;
   hltbId: number | null;
+  /**
+   * GD-PR2 — per-region × per-platform release dates from IGDB. The
+   * Releases page uses the earliest single date (above); S2 surface shows
+   * the full breakdown in an expandable panel so the user can see e.g.
+   * "EU + Japan 2027-03-15 / NA 2027-04-22 / PC 2027-03-15 / PS5 2027-05".
+   * Empty array when IGDB lookup fails or the game has no per-region
+   * data (older catalog entries are common).
+   */
+  releaseDates: ReleaseDateEntry[];
+  /**
+   * GD-PR2 — IGDB screenshot image_ids (use `images.igdb.com/igdb/image/upload/t_screenshot_huge/{id}.jpg`
+   * for the gallery, `t_thumb` for the carousel thumbs). Empty when
+   * IGDB lookup fails or the game has no screenshots.
+   */
+  screenshotIds: string[];
+  /**
+   * GD-PR2 — IGDB video ids — YouTube video_ids (e.g. "dQw4w9WgXcQ").
+   * S2 surface renders YouTube thumbs that link out to the video; in-page
+   * iframe embed is deferred to a polish PR (CSP carve-out required).
+   */
+  videoIds: string[];
+}
+
+/**
+ * GD-PR2 — one entry in the per-region × per-platform release-dates
+ * breakdown. IGDB's `release_dates` endpoint returns one row per region
+ * × platform combination, often with different dates (PC ahead of console
+ * is the canonical case). `region` resolved from IGDB's region enum
+ * to a human-readable label by the route layer; `platform` carries the
+ * IGDB platform name. `date` is null for TBA entries.
+ */
+export interface ReleaseDateEntry {
+  date: string | null;
+  region: string | null;
+  platform: string | null;
 }
 
 /**
