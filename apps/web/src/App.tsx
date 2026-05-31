@@ -90,6 +90,12 @@ export default function App() {
                 <Route path="/"                                 element={desktop ? <DashboardDesktop />      : <DashboardMobile />} />
                 <Route path="/library"                          element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
                 <Route path="/library/:status"                  element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
+                {/* B-IGDB-3b2 — primary-lens routes for IGDB-tag triple.
+                    Three explicit routes (vs `by-:lensType/:slug`) keep
+                    matching unambiguous and lens-aware error states easy. */}
+                <Route path="/library/by-genre/:slug"            element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
+                <Route path="/library/by-theme/:slug"            element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
+                <Route path="/library/by-perspective/:slug"      element={desktop ? <LibraryDesktop />        : <LibraryMobile />} />
                 {/* Releases page rework (R3 desktop, R5 mobile) — `/releases`
                     is the canonical URL; `/upcoming` redirects below for
                     compatibility with old shared links. Mobile uses the

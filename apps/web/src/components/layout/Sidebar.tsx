@@ -1,11 +1,13 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icon } from '../primitives/Icon';
 import { Plat } from '../primitives/Plat';
 import { api } from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
 import { useQuery } from '../../hooks/useQuery';
-import type { GameStatus, PlatformStatusResponse } from '@hoard/types';
+import { useLensIndex } from '../../hooks/useLensIndex';
+import { slugifyTag } from '../../lib/tagSlug';
+import type { GameStatus, PlatformStatusResponse, LensIndexEntry } from '@hoard/types';
 
 export interface SidebarProps {
   shelfCounts?: Partial<Record<string, number>>;
@@ -34,6 +36,125 @@ const PLATFORMS = [
   { label: 'GOG',   code: 'GG' },
 ] as const;
 
+interface BrowseByGroupsProps {
+  lensIndex: { genre: LensIndexEntry[]; theme: LensIndexEntry[]; perspective: LensIndexEntry[] } | null;
+  location: { pathname: string };
+  onNavigate: (path: string) => void;
+}
+
+const SIDEBAR_TOP_N = 5;
+
+interface BrowseByGroupProps {
+  label: string;
+  routeBase: string; // '/library/by-genre' etc.
+  values: LensIndexEntry[];
+  activeSlug: string | null;
+  onNavigate: (path: string) => void;
+}
+
+function BrowseByGroup({ label, routeBase, values, activeSlug, onNavigate }: BrowseByGroupProps) {
+  // Auto-open when a value in this dimension is active; otherwise
+  // collapsed by default. User can still toggle via the header.
+  const [openOverride, setOpenOverride] = useState<boolean | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const hasActive = activeSlug !== null && values.some((v) => slugifyTag(v.name) === activeSlug);
+  const open = openOverride ?? hasActive;
+  if (values.length === 0) return null;
+  const visible = showAll ? values : values.slice(0, SIDEBAR_TOP_N);
+  const remaining = values.length - SIDEBAR_TOP_N;
+  return (
+    <>
+      <button
+        type="button"
+        className="item"
+        onClick={() => setOpenOverride(!open)}
+        aria-expanded={open}
+        data-testid={`sidebar-browse-${label}`}
+        style={{ width: '100%', textAlign: 'left' }}
+      >
+        <span className="glyph" aria-hidden="true" style={{ opacity: 0.6 }}>{open ? '▾' : '▸'}</span>
+        <span>{label}</span>
+        <span className="count">{values.length}</span>
+      </button>
+      {open && (
+        <>
+          {visible.map((v) => {
+            const slug = slugifyTag(v.name);
+            const path = `${routeBase}/${slug}`;
+            const isActive = activeSlug === slug;
+            return (
+              <button
+                key={v.name}
+                type="button"
+                className={`item${isActive ? ' active' : ''}`}
+                onClick={() => onNavigate(path)}
+                aria-current={isActive ? 'page' : undefined}
+                style={{ paddingLeft: 40 }}
+                data-testid={`sidebar-browse-${label}-opt-${slug}`}
+              >
+                <span style={{
+                  flex: 1, minWidth: 0,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{v.name.toLowerCase()}</span>
+                <span className="count">{v.count}</span>
+              </button>
+            );
+          })}
+          {!showAll && remaining > 0 && (
+            <button
+              type="button"
+              className="item"
+              onClick={() => setShowAll(true)}
+              data-testid={`sidebar-browse-${label}-showall`}
+              style={{ paddingLeft: 40, color: 'var(--paper-dim)' }}
+            >
+              <span style={{ fontSize: 'var(--text-2xs)' }}>show all {values.length} →</span>
+            </button>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function BrowseByGroups({ lensIndex, location, onNavigate }: BrowseByGroupsProps) {
+  if (!lensIndex) return null;
+  const any = lensIndex.genre.length || lensIndex.theme.length || lensIndex.perspective.length;
+  if (!any) return null;
+  // Active lens detection — surfaces the current selection so the
+  // matching group auto-expands and the active value is highlighted.
+  const pathname = location.pathname;
+  const matchGenre = /^\/library\/by-genre\/(.+?)\/?$/.exec(pathname);
+  const matchTheme = /^\/library\/by-theme\/(.+?)\/?$/.exec(pathname);
+  const matchPersp = /^\/library\/by-perspective\/(.+?)\/?$/.exec(pathname);
+  return (
+    <>
+      <div className="group">// browse by</div>
+      <BrowseByGroup
+        label="genre"
+        routeBase="/library/by-genre"
+        values={lensIndex.genre}
+        activeSlug={matchGenre?.[1] ?? null}
+        onNavigate={onNavigate}
+      />
+      <BrowseByGroup
+        label="theme"
+        routeBase="/library/by-theme"
+        values={lensIndex.theme}
+        activeSlug={matchTheme?.[1] ?? null}
+        onNavigate={onNavigate}
+      />
+      <BrowseByGroup
+        label="perspective"
+        routeBase="/library/by-perspective"
+        values={lensIndex.perspective}
+        activeSlug={matchPersp?.[1] ?? null}
+        onNavigate={onNavigate}
+      />
+    </>
+  );
+}
+
 function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,6 +167,11 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
     'gameCounts',
     () => api.gameCounts(),
   );
+  // B-IGDB-3b2 follow-up — Steam-style left-rail browse-by. Always-
+  // visible lens navigation, collapsible per dimension. Replaces the
+  // duplicate BrowseByPanel-on-/library-overview placement on desktop;
+  // mobile keeps the inline panel since there's no sidebar there.
+  const { data: lensIndex } = useLensIndex();
   const platforms = platformStatus?.platforms ?? [];
   const fetchedCounts = countsData?.counts ?? {};
 
@@ -90,6 +216,17 @@ function SidebarImpl({ shelfCounts: shelfCountsProp }: SidebarProps) {
           <span className="count">{shelfCounts?.[label] ?? ''}</span>
         </button>
       ))}
+
+      {/* B-IGDB-3b2 follow-up — Steam-style browse-by left-rail. Three
+          collapsible dimension groups; each defaults to collapsed (just
+          the header + count visible). Click a header to expand top-N
+          values + "show all" toggle. Click any value → navigate to the
+          primary-lens route. Renders only when lens-index has data. */}
+      <BrowseByGroups
+        lensIndex={lensIndex}
+        location={location}
+        onNavigate={navigate}
+      />
 
       {/* Closed-beta admin entry — only rendered for users with the
           isAdmin column flipped (just Andrea in v1, per I-D2). The

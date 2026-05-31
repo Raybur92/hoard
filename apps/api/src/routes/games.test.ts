@@ -190,6 +190,55 @@ describe('GET /api/games/counts', () => {
   });
 });
 
+/* ── GET /api/games/lens-index (B-IGDB-3b2) ── */
+
+describe('GET /api/games/lens-index', () => {
+  it('aggregates genre/theme/perspective counts across user library', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      { game: { genres: ['RPG', 'Action'], themes: ['Fantasy'], playerPerspectives: ['Third-person'] } },
+      { game: { genres: ['RPG'], themes: ['Sci-Fi'], playerPerspectives: ['First-person'] } },
+      { game: { genres: ['Strategy'], themes: ['Fantasy'], playerPerspectives: [] } },
+    ]);
+
+    const res = await request(app).get('/api/games/lens-index');
+
+    expect(res.status).toBe(200);
+    expect(res.body.genre).toEqual([
+      { name: 'RPG', count: 2 },
+      { name: 'Action', count: 1 },
+      { name: 'Strategy', count: 1 },
+    ]);
+    expect(res.body.theme).toEqual([
+      { name: 'Fantasy', count: 2 },
+      { name: 'Sci-Fi', count: 1 },
+    ]);
+    expect(res.body.perspective).toEqual([
+      { name: 'First-person', count: 1 },
+      { name: 'Third-person', count: 1 },
+    ]);
+  });
+
+  it('breaks count ties by name asc (deterministic)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([
+      { game: { genres: ['Zelda', 'Action'], themes: [], playerPerspectives: [] } },
+    ]);
+    const res = await request(app).get('/api/games/lens-index');
+    expect(res.body.genre.map((e: { name: string }) => e.name)).toEqual(['Action', 'Zelda']);
+  });
+
+  it('returns empty arrays when the user has no games', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
+    const res = await request(app).get('/api/games/lens-index');
+    expect(res.body).toEqual({ genre: [], theme: [], perspective: [] });
+  });
+
+  it('sets a short Cache-Control header', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
+    const res = await request(app).get('/api/games/lens-index');
+    expect(res.headers['cache-control']).toBe('private, max-age=30');
+  });
+});
+
 /* ── GET /api/games/shelves ── */
 
 describe('GET /api/games/shelves (F6)', () => {

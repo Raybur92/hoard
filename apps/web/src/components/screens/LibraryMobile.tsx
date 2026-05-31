@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { MobileHeader } from '../layout/MobileHeader';
 import { Cover } from '../primitives/Cover';
@@ -9,10 +9,15 @@ import { Icon } from '../primitives/Icon';
 import { Btn } from '../primitives/Btn';
 import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
+import { useLensIndex } from '../../hooks/useLensIndex';
+import { useLensRoute, type LensType } from '../../hooks/useLensRoute';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours } from '../../lib/utils';
 import { pickTopTagCounts, filterByTag, type TagDimension } from '../../lib/pickTopTags';
+import { slugifyTag, findTagBySlug } from '../../lib/tagSlug';
 import { FilterPopover } from '../library/FilterPopover';
+import { ChangeLensPopover } from '../library/ChangeLensPopover';
+import { BrowseByPanel } from '../library/BrowseByPanel';
 import { PullableScroll } from '../primitives/PullableScroll';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
@@ -133,29 +138,49 @@ const SORT_LABELS: Record<SortBy, string> = { lastPlayed: 'last played', title: 
 
 export function LibraryMobile() {
   const navigate = useNavigate();
-  const { status: statusParam } = useParams<{ status?: string }>();
-  const isFiltered = !!statusParam;
-  useDocumentTitle(statusParam ? `Library · ${statusParam}` : 'Library');
+  // B-IGDB-3b2 — lens-aware routing (mirrors LibraryDesktop).
+  const lens = useLensRoute();
+  const statusParam = lens.type === 'status' ? lens.slug : undefined;
+  const isFiltered = lens.type !== null;
+  const { data: lensIndex, loading: lensIndexLoading } = useLensIndex();
+  const lensCanonical: string | null = (() => {
+    if (!lens.slug) return null;
+    if (lens.type === 'status') return lens.slug;
+    if (!lensIndex) return null;
+    const dim = lens.type === 'genre' ? lensIndex.genre
+              : lens.type === 'theme' ? lensIndex.theme
+              : lens.type === 'perspective' ? lensIndex.perspective
+              : null;
+    return dim ? findTagBySlug(dim.map((e) => e.name), lens.slug) : null;
+  })();
+  useDocumentTitle(
+    lens.type === null
+      ? 'Library'
+      : `Library · ${lens.type === 'status' ? statusParam : (lensCanonical ?? lens.slug)}`,
+  );
   const { prefs } = usePreferences();
   const { w: coverW, h: coverH } = COVER_DIMS[prefs.coverDensity] ?? COVER_DIMS['standard']!;
 
-  // Library-only search input (PR A — A1c). Mirrors LibraryDesktop: typing
-  // a query swaps the shelves view for a flat result grid scoped to the
-  // user's owned games. No `/` shortcut on mobile — just tap the input.
   const [searchInput, setSearchInput] = useState('');
   const trimmedQuery = searchInput.trim();
   const isSearching = !isFiltered && trimmedQuery.length > 0;
 
   const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
     useShelves(4, { enabled: !isFiltered && !isSearching });
+  const filteredParams = (() => {
+    if (lens.type === 'status' && statusParam)
+      return { status: statusParam as GameStatus, limit: 50000 };
+    if (lens.type === 'genre' && lensCanonical)
+      return { genre: lensCanonical, limit: 50000 };
+    if (lens.type === 'theme' && lensCanonical)
+      return { theme: lensCanonical, limit: 50000 };
+    if (lens.type === 'perspective' && lensCanonical)
+      return { perspective: lensCanonical, limit: 50000 };
+    return undefined;
+  })();
+  const filteredEnabled = filteredParams !== undefined;
   const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
-    useGames(
-      // limit 50000 (effectively unbounded for any realistic personal
-      // library) so the count display can mirror the sidebar — see
-      // LibraryDesktop's matching comment.
-      isFiltered ? { status: statusParam as GameStatus, limit: 50000 } : undefined,
-      { enabled: isFiltered },
-    );
+    useGames(filteredParams, { enabled: filteredEnabled });
   const { data: searchData, loading: searchLoading } =
     useGames(
       isSearching ? { q: trimmedQuery, limit: 100 } : undefined,
@@ -179,21 +204,22 @@ export function LibraryMobile() {
     if (value === null) next.delete(dimension); else next.set(dimension, value);
     setSearchParams(next, { replace: true });
   };
+  // B-IGDB-3b2 — find input scoped to active lens.
+  const findQuery = searchParams.get('q') ?? '';
+  const setFindQuery = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.trim().length === 0) next.delete('q'); else next.set('q', value);
+    setSearchParams(next, { replace: true });
+  };
 
-  // Reset platform filter whenever the route's status param changes
-  // (including back to the shelves view where statusParam is undefined).
-  // Same fix as LibraryDesktop — see the explanatory comment there.
-  // B-IGDB-3b1 also clears the URL tag filters on shelf change.
+  // Reset local platform-filter state on lens change. URL-resident
+  // secondaries (genre/theme/perspective/q) are NOT cleared — they're
+  // already accurate to the new URL by virtue of being URL state, and
+  // the change-lens pivot intentionally carries them across. See
+  // LibraryDesktop's matching comment.
   useEffect(() => {
     setPlatFilter('all');
-    const next = new URLSearchParams(searchParams);
-    let changed = false;
-    for (const k of ['genre', 'theme', 'perspective']) {
-      if (next.has(k)) { next.delete(k); changed = true; }
-    }
-    if (changed) setSearchParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusParam]);
+  }, [lens.slug, lens.type]);
   const sortBy: SortBy = (() => {
     const v = searchParams.get('sort');
     return v === 'title' || v === 'playtime' || v === 'lastPlayed' ? v : 'lastPlayed';
@@ -251,12 +277,30 @@ export function LibraryMobile() {
     );
   }
 
-  if (loading || (!isFiltered && !shelvesData) || (isFiltered && !filteredData)) {
+  // B-IGDB-3b2 — slug-not-resolved guard (tag lens).
+  if (lens.type && lens.type !== 'status' && !lensIndexLoading && lensCanonical === null) {
+    return (
+      <>
+        {modalElement}
+        <MobileHeader title={`${lens.type} not found`} back onBack={() => navigate('/library')} />
+        <div style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <span className="t-mono t-faint" style={{ fontSize: 'var(--text-xs)' }}>// {lens.type} not found</span>
+          <span className="t-mono" style={{ fontSize: 'var(--text-sm)' }}>
+            no {lens.type} matches "{lens.slug}"
+          </span>
+        </div>
+      </>
+    );
+  }
+
+  if (loading || lensIndexLoading || (!isFiltered && !shelvesData) || (isFiltered && filteredEnabled && !filteredData)) {
     // Skeleton mirrors the real layout (header + chip row + 6 shelves) so
     // the swap to loaded content doesn't jolt.
     if (isFiltered) {
-      const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
-      const title = (cfg?.name ?? statusParam ?? '').toLowerCase();
+      const cfg = lens.type === 'status' ? SHELF_CONFIG.find(c => c.status === statusParam) : null;
+      const title = lens.type === 'status'
+        ? (cfg?.name ?? statusParam ?? '').toLowerCase()
+        : `${lens.type ?? ''} · ${lens.slug ?? ''}`;
       return (
         <>
           {modalElement}
@@ -304,27 +348,75 @@ export function LibraryMobile() {
     );
   }
 
-  if (statusParam) {
-    const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
+  if (filteredEnabled && lens.type) {
+    const cfg = lens.type === 'status' ? SHELF_CONFIG.find(c => c.status === statusParam) : null;
+    const displayName = lens.type === 'status'
+      ? (cfg?.name ?? statusParam ?? '')
+      : (lensCanonical ?? '');
+    const title = displayName.toLowerCase();
     const filteredGames = filteredData?.games ?? [];
-    const items = applyFilters(filteredGames).map(toGameDisplay);
-    const isBacklog = statusParam === 'Backlog';
-    const title = (cfg?.name ?? statusParam).toLowerCase();
-    // Display count — mirror the sidebar's truthful per-status count
-    // (filteredData.total) when no secondary filter is active; show the
-    // filtered count when filters narrow the visible set. See
-    // LibraryDesktop's matching comment.
+    // Find query client-side over the loaded set.
+    const findTrimmed = findQuery.trim().toLowerCase();
+    const findFilteredGames = findTrimmed.length === 0
+      ? filteredGames
+      : filteredGames.filter((g) => g.game.title.toLowerCase().includes(findTrimmed));
+    const items = applyFilters(findFilteredGames).map(toGameDisplay);
+    const isBacklog = lens.type === 'status' && statusParam === 'Backlog';
+    // Display count.
     const anyFilterActive = platFilter !== 'all'
       || genreFilter !== null
       || themeFilter !== null
-      || perspectiveFilter !== null;
+      || perspectiveFilter !== null
+      || findTrimmed.length > 0;
     const displayCount = anyFilterActive ? items.length : (filteredData?.total ?? items.length);
+    // Secondary filter visibility per PAGES_PLAN §4.4.1 — hide the
+    // popover for the dimension that's PRIMARY on this lens.
+    const secondaryDims: { id: TagDimension; label: string; active: string | null }[] = (
+      [
+        { id: 'genre',       label: 'genre', active: genreFilter,       hideOnLens: 'genre' },
+        { id: 'theme',       label: 'theme', active: themeFilter,       hideOnLens: 'theme' },
+        { id: 'perspective', label: 'persp', active: perspectiveFilter, hideOnLens: 'perspective' },
+      ] as const
+    ).filter((d) => d.hideOnLens !== lens.type)
+     .map(({ id, label, active }) => ({ id, label, active }));
+    // Change-lens options (same pivot rules as LibraryDesktop —
+    // see the matching comment block there for the full rationale).
+    const changeLensOptions = ([
+      { type: 'status' as LensType,      label: 'status' },
+      { type: 'genre' as LensType,       label: 'genre' },
+      { type: 'theme' as LensType,       label: 'theme' },
+      { type: 'perspective' as LensType, label: 'perspective' },
+    ]).map((o) => {
+      if (o.type === lens.type) return { ...o, disabled: true };
+      if (o.type === 'status') return { ...o, disabled: true }; // deferred
+      if (o.type === 'genre' && genreFilter) return { ...o, disabled: false };
+      if (o.type === 'theme' && themeFilter) return { ...o, disabled: false };
+      if (o.type === 'perspective' && perspectiveFilter) return { ...o, disabled: false };
+      return { ...o, disabled: true };
+    });
+    const handleChangeLens = (target: LensType) => {
+      if (target === 'status') return;
+      let activeValue: string | null = null;
+      if (target === 'genre') activeValue = genreFilter;
+      else if (target === 'theme') activeValue = themeFilter;
+      else if (target === 'perspective') activeValue = perspectiveFilter;
+      if (!activeValue) return;
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete(target);
+      if (lens.type === 'status' && statusParam) {
+        newParams.set('status', statusParam);
+      } else if (lens.type && lens.type !== 'status' && lensCanonical) {
+        newParams.set(lens.type, lensCanonical);
+      }
+      const qs = newParams.toString();
+      navigate(`/library/by-${target}/${slugifyTag(activeValue)}${qs ? `?${qs}` : ''}`);
+    };
     return (
       <>
         {modalElement}
         <MobileHeader
           title={title}
-          sub={`// ${displayCount} titles`}
+          sub={`// ${lens.type === 'status' ? '' : `${lens.type} · `}${displayCount} titles`}
           back
           onBack={() => navigate('/library')}
           right={<Btn sm variant="primary" ariaLabel="Add game" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
@@ -344,21 +436,43 @@ export function LibraryMobile() {
           </Chip>
         </div>
 
-        {/* IGDB-tag triple secondary filters as inline single-select
-            dropdowns (replaces B-IGDB-3b1 chip strips after Andrea's
-            2026-05-31 call). One horizontal row holding three compact
-            triggers; only renders dimensions whose loaded shelf carries
-            at least one tag. Options are top-N from the FULL shelf
-            (pre-filter), with the active value threaded back in if it
-            falls outside the top-N. */}
+        {/* B-IGDB-3b2 — find input + change-lens + secondary filter
+            popovers per active primary lens. Find input on its own row
+            for breathing room on mobile; popovers + change-lens scroll
+            horizontally alongside platform chips. */}
+        <div style={{ padding: '6px 16px 0', flexShrink: 0 }}>
+          <label htmlFor="library-find-mobile" className="field" style={{ width: '100%', cursor: 'text' }}>
+            <span className="pre">$</span>
+            <span style={{ color: 'var(--paper)' }}>find</span>
+            <input
+              id="library-find-mobile"
+              type="text"
+              value={findQuery}
+              onChange={(e) => setFindQuery(e.target.value)}
+              placeholder="title..."
+              aria-label="Find within current lens"
+              style={{
+                flex: 1, minWidth: 0,
+                background: 'transparent', border: 'none', outline: 'none',
+                color: 'var(--paper)', fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit',
+                padding: 0,
+              }}
+            />
+            {findQuery && (
+              <button
+                type="button"
+                aria-label="Clear find"
+                onClick={() => setFindQuery('')}
+                style={{ background: 'transparent', border: 'none', color: 'var(--paper-dim)', cursor: 'pointer', padding: '0 4px', fontSize: 'var(--text-md)', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            )}
+          </label>
+        </div>
         {(() => {
           const fullShelf = filteredData?.games ?? [];
-          const dimensions: { id: TagDimension; label: string; active: string | null }[] = [
-            { id: 'genre', label: 'genre', active: genreFilter },
-            { id: 'theme', label: 'theme', active: themeFilter },
-            { id: 'perspective', label: 'persp', active: perspectiveFilter },
-          ];
-          const rendered = dimensions.map((d) => {
+          const rendered = secondaryDims.map((d) => {
             const opts = pickTopTagCounts(fullShelf, d.id);
             if (d.active && !opts.some((o) => o.name === d.active)) {
               opts.unshift({ name: d.active, count: 0 });
@@ -375,12 +489,17 @@ export function LibraryMobile() {
               </div>
             );
           }).filter(Boolean);
-          if (rendered.length === 0) return null;
+          // change-lens chip always shown on filtered views (it's the
+          // pivot affordance, not a tag filter — disabled options are
+          // greyed out within its picker).
           return (
             <div
               className="thin-scroll"
               style={{ padding: '6px 16px 0', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, alignItems: 'center' }}
             >
+              <div style={{ flexShrink: 0 }}>
+                <ChangeLensPopover current={lens.type} options={changeLensOptions} onPick={handleChangeLens} />
+              </div>
               {rendered}
             </div>
           );
@@ -515,9 +634,15 @@ export function LibraryMobile() {
             </div>
           </div>
         ) : (
-          shelves.map((s, i) => (
-            <MobileShelf key={s.status} idx={i + 1} shelf={s} coverW={coverW} coverH={coverH} />
-          ))
+          <>
+            {shelves.map((s, i) => (
+              <MobileShelf key={s.status} idx={i + 1} shelf={s} coverW={coverW} coverH={coverH} />
+            ))}
+            {/* B-IGDB-3b2 — browse-by panel below the shelves. */}
+            <div style={{ padding: '0 16px' }}>
+              <BrowseByPanel data={lensIndex} />
+            </div>
+          </>
         )}
       </PullableScroll>
     </>

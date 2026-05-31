@@ -26,6 +26,7 @@ import type {
   FeedbackWithUser,
   PostFeedbackBody,
   UserEventListResponse,
+  LensIndexResponse,
 } from '@hoard/types';
 import * as cache from './cache';
 
@@ -173,6 +174,10 @@ export const api = {
 
   gameCounts: () =>
     get<{ counts: Partial<Record<GameStatus, number>> }>('/api/games/counts'),
+
+  /** B-IGDB-3b2 — IGDB-tag triple values + counts (uncapped). */
+  lensIndex: () =>
+    get<LensIndexResponse>('/api/games/lens-index'),
 
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),

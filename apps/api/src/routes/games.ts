@@ -146,6 +146,43 @@ router.get('/games/counts', requireUser, requireActive, async (req: Request, res
   res.json({ counts });
 });
 
+// B-IGDB-3b2 — GET /api/games/lens-index returns every IGDB-tag value
+// (genre / theme / perspective) present in the user's library with the
+// number of UserGames carrying it. Used by:
+//   - Library overview's browse-by panel (top-N + "show all" inline expand)
+//   - /library/by-genre/:slug etc. routes for slug → canonical-name resolution
+//
+// Sorted by count desc, ties broken by name asc — matches the client-side
+// pickTopTags helper so a "top 5" sliced server-side or client-side yield
+// the same set. Wishlist UserGames included so the panel surfaces
+// "wishlist-only" tag values too; the lens routes already constrain via
+// the unified /api/games filter when the user drills into a value.
+router.get('/games/lens-index', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const userId = req.userId;
+  const rows = await prisma.userGame.findMany({
+    where: { userId },
+    select: { game: { select: { genres: true, themes: true, playerPerspectives: true } } },
+  });
+  const genre = new Map<string, number>();
+  const theme = new Map<string, number>();
+  const perspective = new Map<string, number>();
+  for (const r of rows) {
+    for (const t of r.game.genres) genre.set(t, (genre.get(t) ?? 0) + 1);
+    for (const t of r.game.themes) theme.set(t, (theme.get(t) ?? 0) + 1);
+    for (const t of r.game.playerPerspectives) perspective.set(t, (perspective.get(t) ?? 0) + 1);
+  }
+  const toSorted = (m: Map<string, number>) =>
+    [...m.entries()]
+      .sort(([aName, aCount], [bName, bCount]) => bCount - aCount || aName.localeCompare(bName))
+      .map(([name, count]) => ({ name, count }));
+  res.set('Cache-Control', 'private, max-age=30');
+  res.json({
+    genre: toSorted(genre),
+    theme: toSorted(theme),
+    perspective: toSorted(perspective),
+  });
+});
+
 const SHELF_STATUSES: PrismaGameStatus[] = ['Playing', 'Backlog', 'Completed', 'OnHold', 'Dropped', 'Wishlist'];
 const shelvesQuerySchema = z.object({
   perStatus: z.coerce.number().int().min(1).max(50).default(12),

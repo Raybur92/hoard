@@ -81,6 +81,10 @@ vi.mock('../../../lib/api', () => ({
       },
     }),
     platformStatus: vi.fn().mockResolvedValue({ platforms: [] }),
+    // B-IGDB-3b2 — LibraryDesktop now reads lens-index on every render
+    // (overview + lens-route slug resolution). Default empty arrays so
+    // the overview renders without a browse-by panel.
+    lensIndex: vi.fn().mockResolvedValue({ genre: [], theme: [], perspective: [] }),
     logout: vi.fn().mockResolvedValue(undefined),
     updateMe: vi.fn(),
   },

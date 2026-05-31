@@ -341,6 +341,20 @@ export interface DashboardResponse {
   activity: ActivityHeatmap;
 }
 
+/**
+ * B-IGDB-3b2 — `/api/games/lens-index` payload. Every IGDB-tag value
+ * present in the user's library with its UserGame count. Sorted by
+ * count desc, ties broken by name asc. Used by:
+ *   - Library overview's browse-by panel
+ *   - `/library/by-genre/:slug` etc. for slug → canonical-name lookup
+ */
+export interface LensIndexEntry { name: string; count: number; }
+export interface LensIndexResponse {
+  genre: LensIndexEntry[];
+  theme: LensIndexEntry[];
+  perspective: LensIndexEntry[];
+}
+
 export interface GameListResponse {
   games: UserGameDetail[];
   total: number;

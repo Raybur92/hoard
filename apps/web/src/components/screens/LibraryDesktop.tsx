@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
 import { Cover } from '../primitives/Cover';
@@ -10,10 +10,14 @@ import { Btn } from '../primitives/Btn';
 import { Marker } from '../primitives/Marker';
 import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
+import { useLensIndex } from '../../hooks/useLensIndex';
+import { useLensRoute, type LensType } from '../../hooks/useLensRoute';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours, formatRelative, shortYear } from '../../lib/utils';
 import { pickTopTagCounts, filterByTag, type TagDimension } from '../../lib/pickTopTags';
+import { slugifyTag, findTagBySlug } from '../../lib/tagSlug';
 import { FilterPopover } from '../library/FilterPopover';
+import { ChangeLensPopover } from '../library/ChangeLensPopover';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
 
@@ -189,9 +193,34 @@ const SORT_CYCLE: SortBy[] = ['lastPlayed', 'title', 'playtime'];
 
 export function LibraryDesktop() {
   const navigate = useNavigate();
-  const { status: statusParam } = useParams<{ status?: string }>();
-  const isFiltered = !!statusParam;
-  useDocumentTitle(statusParam ? `Library · ${statusParam}` : 'Library');
+  // B-IGDB-3b2 — lens-aware routing. `lens.type` is one of:
+  //   null         → overview (`/library`)
+  //   'status'     → `/library/:status` (existing)
+  //   'genre'|'theme'|'perspective' → `/library/by-X/:slug` (NEW)
+  // `statusParam` derived for back-compat with existing status-lens code.
+  const lens = useLensRoute();
+  const statusParam = lens.type === 'status' ? lens.slug : undefined;
+  const isFiltered = lens.type !== null;
+  // Resolve tag slug → canonical name via lens-index. `null` when:
+  //  - not on a tag lens, OR
+  //  - lens-index hasn't loaded yet (loading state below catches it),
+  //  - the slug doesn't match any known tag (we render a 404-style view).
+  const { data: lensIndex, loading: lensIndexLoading } = useLensIndex();
+  const lensCanonical: string | null = (() => {
+    if (!lens.slug) return null;
+    if (lens.type === 'status') return lens.slug;
+    if (!lensIndex) return null;
+    const dim = lens.type === 'genre' ? lensIndex.genre
+              : lens.type === 'theme' ? lensIndex.theme
+              : lens.type === 'perspective' ? lensIndex.perspective
+              : null;
+    return dim ? findTagBySlug(dim.map((e) => e.name), lens.slug) : null;
+  })();
+  useDocumentTitle(
+    lens.type === null
+      ? 'Library'
+      : `Library · ${lens.type === 'status' ? statusParam : (lensCanonical ?? lens.slug)}`,
+  );
 
   // Library-only search input — A1. The user wanted "two searches": Cmd-K
   // global (IGDB-wide, finds games not yet owned) and Library `/` (only games
@@ -214,11 +243,23 @@ export function LibraryDesktop() {
   // count comes from `filteredData.total` (server's pre-pagination count)
   // when no secondary filters are active, falling back to `items.length`
   // when filters narrow the visible set.
+  // B-IGDB-3b2 — params depend on the active primary lens. Tag lenses
+  // (genre/theme/perspective) gate enablement on lensCanonical so the
+  // request fires only after the slug has resolved.
+  const filteredParams = (() => {
+    if (lens.type === 'status' && statusParam)
+      return { status: statusParam as GameStatus, limit: 50000 };
+    if (lens.type === 'genre' && lensCanonical)
+      return { genre: lensCanonical, limit: 50000 };
+    if (lens.type === 'theme' && lensCanonical)
+      return { theme: lensCanonical, limit: 50000 };
+    if (lens.type === 'perspective' && lensCanonical)
+      return { perspective: lensCanonical, limit: 50000 };
+    return undefined;
+  })();
+  const filteredEnabled = filteredParams !== undefined;
   const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
-    useGames(
-      isFiltered ? { status: statusParam as GameStatus, limit: 50000 } : undefined,
-      { enabled: isFiltered },
-    );
+    useGames(filteredParams, { enabled: filteredEnabled });
 
   // Search results: hits the existing /api/games?q= endpoint (already supports
   // case-insensitive title match scoped to the user's library).
@@ -259,8 +300,8 @@ export function LibraryDesktop() {
 
   // B-IGDB-3b1 — IGDB-tag triple secondary filters live in URL params per
   // PAGES_PLAN §4.4.1. `null` = no filter applied. Reset alongside platFilter
-  // when statusParam changes (same React Router 6 reuse-across-route-params
-  // problem documented below).
+  // when the lens slug changes (same React Router 6 reuse-across-route-params
+  // problem — the component doesn't unmount, so filters stick).
   const genreFilter = searchParams.get('genre');
   const themeFilter = searchParams.get('theme');
   const perspectiveFilter = searchParams.get('perspective');
@@ -269,26 +310,29 @@ export function LibraryDesktop() {
     if (value === null) next.delete(dimension); else next.set(dimension, value);
     setSearchParams(next, { replace: true });
   };
+  // B-IGDB-3b2 — find input scoped to the active lens. URL-state-resident
+  // as `?q=` per PAGES_PLAN §4.4.1; composes with all other filters.
+  const findQuery = searchParams.get('q') ?? '';
+  const setFindQuery = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.trim().length === 0) next.delete('q'); else next.set('q', value);
+    setSearchParams(next, { replace: true });
+  };
 
-  // Reset platform filter whenever the route's status param changes
-  // (including back to the shelves view where statusParam is undefined).
-  // Without this, the SAME LibraryDesktop component instance is reused
-  // across /library and /library/:status routes (React Router 6 doesn't
-  // unmount on param changes), so the filter sticks across navigations
-  // and silently filters the shelves view too — where there's no chip
-  // strip to reset it from. Reported 2026-05-25.
+  // Reset the LOCAL platform filter state when the lens changes. The
+  // component instance is reused across /library, /library/:status,
+  // and /library/by-X/:slug (React Router 6 doesn't unmount on param
+  // changes), so `useState`-backed state needs explicit reset.
+  //
+  // URL-resident filters (genre/theme/perspective/q) are NOT cleared
+  // here — they're already accurate to the new URL by virtue of being
+  // URL state, and the change-lens pivot intentionally carries
+  // secondary filters across (e.g. /library/by-genre/action?theme=Horror
+  // → /library/by-theme/horror?genre=Action). A blanket clear here
+  // would defeat that pivot.
   useEffect(() => {
     setPlatFilter('all');
-    // B-IGDB-3b1 — same reset for the tag filters. URL-state-resident, so
-    // clearing the params replace-style.
-    const next = new URLSearchParams(searchParams);
-    let changed = false;
-    for (const k of ['genre', 'theme', 'perspective']) {
-      if (next.has(k)) { next.delete(k); changed = true; }
-    }
-    if (changed) setSearchParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusParam]);
+  }, [lens.slug, lens.type]);
   // Sort persists in URL so filtered single-shelf views (`/library/Backlog?sort=playtime`)
   // are shareable. Only consumed on the filtered view — shelves view dropped
   // the sort control in PR A (D4): it operated on top-12 per shelf only.
@@ -356,15 +400,20 @@ export function LibraryDesktop() {
     );
   }
 
-  if (loading || (!isFiltered && !shelvesData) || (isFiltered && !filteredData)) {
-    // Skeleton mirrors the real layout (filter bar + 6 shelves with the
-    // current cover-density dims) so the swap to loaded content doesn't jolt.
+  if (loading || lensIndexLoading || (!isFiltered && !shelvesData) || (isFiltered && filteredEnabled && !filteredData)) {
+    // Skeleton mirrors the real layout (filter bar + grid) so the swap
+    // to loaded content doesn't jolt. Same skeleton for all 4 lens types.
     if (isFiltered) {
-      const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
+      const cfg = lens.type === 'status'
+        ? SHELF_CONFIG.find(c => c.status === statusParam)
+        : null;
+      const skelTitle = lens.type === 'status'
+        ? (cfg?.name ?? statusParam ?? '').toLowerCase()
+        : `${lens.type ?? ''} · ${lens.slug ?? ''}`;
       return (
         <>
           {modalElement}
-          <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam ?? '').toLowerCase()]} />
+          <TopBar crumbs={['hoard', 'library', skelTitle]} />
           <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div className="skel" style={{ width: 88, height: 24 }} />
             <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
@@ -423,39 +472,166 @@ export function LibraryDesktop() {
     );
   }
 
-  if (statusParam) {
-    const cfg = SHELF_CONFIG.find(c => c.status === statusParam);
-    const filteredGames = filteredData?.games ?? [];
-    const items = applyFilters(filteredGames).map(toGameDisplay);
-    const isBacklog = statusParam === 'Backlog';
-    const accent = cfg?.tone === 'green' ? 'var(--green)' : cfg?.tone === 'amber' ? 'var(--amber)' : cfg?.tone === 'red' ? 'var(--red)' : 'var(--paper)';
-    // Display count — when no secondary filter is active, mirror the
-    // sidebar's truthful per-status count (filteredData.total — server's
-    // pre-pagination count()). When any filter narrows the visible set,
-    // show the filtered count. Reported 2026-05-31 when On Hold showed
-    // 500 (loaded array length) instead of 513 (true shelf size).
-    const anyFilterActive = platFilter !== 'all'
-      || genreFilter !== null
-      || themeFilter !== null
-      || perspectiveFilter !== null;
-    const displayCount = anyFilterActive ? items.length : (filteredData?.total ?? items.length);
+  // B-IGDB-3b2 — tag lens slug failed to resolve (unknown tag). Show a
+  // friendly 404-style view instead of a blank shelf.
+  if (lens.type && lens.type !== 'status' && !lensIndexLoading && lensCanonical === null) {
     return (
       <>
         {modalElement}
-        <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam).toLowerCase()]} />
+        <TopBar crumbs={['hoard', 'library', lens.type, lens.slug ?? '?']} />
+        <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <span className="t-mono t-faint" style={{ fontSize: 'var(--text-xs)' }}>// {lens.type} not found</span>
+          <span className="t-mono" style={{ fontSize: 'var(--text-sm)' }}>
+            no {lens.type} matches "{lens.slug}" in your library
+          </span>
+          <div>
+            <Btn sm onClick={() => navigate('/library')}>
+              <Icon name="back" size={10} /> back to library
+            </Btn>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (filteredEnabled && lens.type) {
+    // Derive view config from the active lens. Status uses SHELF_CONFIG;
+    // tag lenses use the resolved canonical name as both display label
+    // and value (no accent color — tag dimensions are not status-tinted).
+    const lensTypeLabel: Record<LensType, string> = {
+      status: 'status',
+      genre: 'genre',
+      theme: 'theme',
+      perspective: 'perspective',
+    };
+    const cfg = lens.type === 'status'
+      ? SHELF_CONFIG.find((c) => c.status === statusParam)
+      : null;
+    const displayName = lens.type === 'status'
+      ? (cfg?.name ?? statusParam ?? '')
+      : (lensCanonical ?? '');
+    const filteredGames = filteredData?.games ?? [];
+    // Find query filters titles client-side over the already-loaded set
+    // (limit:50000 means we have the full intersection in memory).
+    const findTrimmed = findQuery.trim().toLowerCase();
+    const findFilteredGames = findTrimmed.length === 0
+      ? filteredGames
+      : filteredGames.filter((g) => g.game.title.toLowerCase().includes(findTrimmed));
+    const items = applyFilters(findFilteredGames).map(toGameDisplay);
+    const isBacklog = lens.type === 'status' && statusParam === 'Backlog';
+    const accent = cfg?.tone === 'green' ? 'var(--green)' : cfg?.tone === 'amber' ? 'var(--amber)' : cfg?.tone === 'red' ? 'var(--red)' : 'var(--paper)';
+    // Display count — when no secondary filter is active AND no find
+    // query, mirror the sidebar's truthful pre-pagination count from
+    // the server. Otherwise show the filtered count.
+    const anyFilterActive = platFilter !== 'all'
+      || genreFilter !== null
+      || themeFilter !== null
+      || perspectiveFilter !== null
+      || findTrimmed.length > 0;
+    const displayCount = anyFilterActive ? items.length : (filteredData?.total ?? items.length);
+    // Secondary filter visibility per PAGES_PLAN §4.4.1: hide the popover
+    // for the dimension that's PRIMARY (it's already constrained by URL).
+    const secondaryDims: { id: TagDimension; label: string; active: string | null }[] = (
+      [
+        { id: 'genre',       label: 'genre', active: genreFilter,       hideOnLens: 'genre' },
+        { id: 'theme',       label: 'theme', active: themeFilter,       hideOnLens: 'theme' },
+        { id: 'perspective', label: 'persp', active: perspectiveFilter, hideOnLens: 'perspective' },
+      ] as const
+    ).filter((d) => d.hideOnLens !== lens.type)
+     .map(({ id, label, active }) => ({ id, label, active }));
+    // Change-lens handler — pivots primary lens, transferring lens
+    // semantics to/from URL where possible.
+    //   FROM status TO tag: enabled if `?<dim>=value` is set as secondary;
+    //                       status preserved as `?status=<S>` query param.
+    //   FROM tag TO another tag: enabled if `?<targetDim>=value` is set;
+    //                       old primary preserved as `?<oldDim>=<canonical>`.
+    //   FROM tag TO status: deferred until status-as-secondary on tag
+    //                       lenses ships (v1 has no `?status=` chip yet).
+    const changeLensOptions = ([
+      { type: 'status' as LensType,      label: 'status' },
+      { type: 'genre' as LensType,       label: 'genre' },
+      { type: 'theme' as LensType,       label: 'theme' },
+      { type: 'perspective' as LensType, label: 'perspective' },
+    ]).map((o) => {
+      if (o.type === lens.type) return { ...o, disabled: true };
+      if (o.type === 'status') return { ...o, disabled: true }; // deferred
+      // Pivot to a tag lens is enabled when its corresponding URL
+      // filter is set as a secondary filter on the current lens.
+      if (o.type === 'genre' && genreFilter) return { ...o, disabled: false };
+      if (o.type === 'theme' && themeFilter) return { ...o, disabled: false };
+      if (o.type === 'perspective' && perspectiveFilter) return { ...o, disabled: false };
+      return { ...o, disabled: true };
+    });
+    const handleChangeLens = (target: LensType) => {
+      if (target === 'status') return; // deferred
+      let activeValue: string | null = null;
+      if (target === 'genre') activeValue = genreFilter;
+      else if (target === 'theme') activeValue = themeFilter;
+      else if (target === 'perspective') activeValue = perspectiveFilter;
+      if (!activeValue) return;
+      // Build new query params:
+      //   - drop the target dimension (it becomes the URL slug)
+      //   - preserve other secondary filters as-is
+      //   - preserve the OLD primary as a secondary filter on the new lens
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete(target);
+      if (lens.type === 'status' && statusParam) {
+        // status was URL-path primary → becomes ?status= secondary
+        newParams.set('status', statusParam);
+      } else if (lens.type && lens.type !== 'status' && lensCanonical) {
+        // tag→tag: old primary's CANONICAL name becomes secondary on new lens
+        newParams.set(lens.type, lensCanonical);
+      }
+      const qs = newParams.toString();
+      navigate(`/library/by-${target}/${slugifyTag(activeValue)}${qs ? `?${qs}` : ''}`);
+    };
+    return (
+      <>
+        {modalElement}
+        <TopBar crumbs={['hoard', 'library', lensTypeLabel[lens.type], displayName.toLowerCase()]} />
         <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Row 1: shelves crumb · name · count · (spacer) · sort · add.
-              Primary action [+ add game] is always anchored top-right on
-              its own row — never wraps below filter controls (Andrea
-              2026-05-31). */}
+          {/* Row 1: back · lens label · primary value · count · (spacer)
+              · find · change-lens · sort · add. Primary action
+              [+ add game] is always anchored top-right on its own row. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Btn sm onClick={() => navigate('/library')}>
-              <Icon name="back" size={10} /> shelves
+              <Icon name="back" size={10} /> library
             </Btn>
             <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
-            <span className="t-up" style={{ fontSize: "var(--text-2xs)", color: accent }}>{cfg?.name ?? statusParam}</span>
+            <span className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)' }}>{lensTypeLabel[lens.type]}</span>
+            <span className="t-up" style={{ fontSize: "var(--text-2xs)", color: accent }}>{displayName}</span>
             <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {displayCount} titles</span>
             <span style={{ flex: 1 }} />
+            {/* B-IGDB-3b2 — find input scoped to current lens intersection. */}
+            <label htmlFor="library-find" className="field" style={{ width: 200, cursor: 'text' }} aria-label={`Find within ${displayName}`}>
+              <span className="pre">$</span>
+              <span style={{ color: 'var(--paper)' }}>find</span>
+              <input
+                id="library-find"
+                type="text"
+                value={findQuery}
+                onChange={(e) => setFindQuery(e.target.value)}
+                placeholder="title..."
+                aria-label="Find within current lens"
+                style={{
+                  flex: 1, minWidth: 0,
+                  background: 'transparent', border: 'none', outline: 'none',
+                  color: 'var(--paper)', fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit',
+                  padding: 0,
+                }}
+              />
+              {findQuery && (
+                <button
+                  type="button"
+                  aria-label="Clear find"
+                  onClick={() => setFindQuery('')}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--paper-dim)', cursor: 'pointer', padding: 0, fontSize: 'var(--text-2xs)' }}
+                >
+                  ×
+                </button>
+              )}
+            </label>
+            <ChangeLensPopover current={lens.type} options={changeLensOptions} onPick={handleChangeLens} />
             <button
               type="button"
               className="t-mono t-faint"
@@ -469,10 +645,8 @@ export function LibraryDesktop() {
               <Icon name="plus" size={10} /> add game
             </Btn>
           </div>
-          {/* Row 2: plat label · platform chips · (spacer) · genre · theme
-              · persp dropdowns. Filters cluster together; if the row gets
-              too wide it wraps within this row only — [+ add game] above
-              stays anchored. */}
+          {/* Row 2: plat label · platform chips · (spacer) · secondary
+              tag-triple popovers (those NOT primary on this lens). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
             <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
@@ -486,21 +660,13 @@ export function LibraryDesktop() {
             <span style={{ flex: 1 }} />
             {(() => {
               const fullShelf = filteredData?.games ?? [];
-              const dimensions: { id: TagDimension; label: string; active: string | null }[] = [
-                { id: 'genre', label: 'genre', active: genreFilter },
-                { id: 'theme', label: 'theme', active: themeFilter },
-                { id: 'perspective', label: 'persp', active: perspectiveFilter },
-              ];
-              return dimensions.map((d) => {
+              return secondaryDims.map((d) => {
                 const opts = pickTopTagCounts(fullShelf, d.id);
                 if (d.active && !opts.some((o) => o.name === d.active)) {
                   opts.unshift({ name: d.active, count: 0 });
                 }
                 if (opts.length === 0) return null;
                 return (
-                  // `minWidth: 0` lets this flex child shrink with the
-                  // FilterPopover's ellipsis instead of wrapping the row
-                  // (Andrea 2026-05-31).
                   <div key={d.id} data-testid={`library-${d.id}-filter`} style={{ minWidth: 0 }}>
                     <FilterPopover
                       label={d.label}
@@ -624,6 +790,10 @@ export function LibraryDesktop() {
             <Shelf key={s.status} idx={i + 1} shelf={s} coverW={coverDims.w} coverH={coverDims.h} showHltb={prefs.showHltb} />
           ))
         )}
+        {/* B-IGDB-3b2 follow-up — browse-by entry-points are in the
+            Sidebar on desktop (always-visible Steam-style left rail),
+            not duplicated here. Mobile still renders the inline
+            BrowseByPanel below shelves since there's no sidebar. */}
       </div>
     </>
   );
