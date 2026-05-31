@@ -11,6 +11,7 @@ function makeResult(overrides: Partial<IgdbSearchResult>): IgdbSearchResult {
     themes: [],
     playerPerspectives: [],
     coverUrl: null,
+    heroImageUrl: null,
     platforms: [],
     totalRatingCount: 0,
     ...overrides,

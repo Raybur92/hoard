@@ -54,6 +54,7 @@ function makeGame(id: string, title: string, lastPlayedAt: string, mins: number)
       publisher: 'pub',
       releaseYear: 2024,
       coverUrl: null,
+      heroImageUrl: null,
       genres: ['action'],
       platforms: ['Steam'],
       summary: null,
@@ -77,6 +78,7 @@ function makeRelease(id: string, title: string, daysFromNow: number): WishlistRe
     hype: 100,
     synopsis: 'syn',
     coverUrl: null,
+    heroImageUrl: null,
     category: 0,
   };
 }

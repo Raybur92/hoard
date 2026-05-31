@@ -21,6 +21,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     platforms: ['PlayStation 5', 'PC (Microsoft Windows)'],
     genres: ['Action RPG'],
     coverUrl: null,
+    heroImageUrl: null,
     synopsis: null,
     wishlisted: false,
     category: 0,

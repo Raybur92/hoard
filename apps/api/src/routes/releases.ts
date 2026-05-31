@@ -57,6 +57,9 @@ function wishlistRowToUpcoming(
     themes: [],
     playerPerspectives: [],
     coverUrl: w.coverUrl,
+    // WishlistRelease doesn't snapshot heroImageUrl (see igdb.ts wishlist
+    // branch comment); null is acceptable for Releases-card rendering.
+    heroImageUrl: null,
     synopsis: w.synopsis,
     wishlisted: true,  // every row in `starred` is by definition wishlisted
     category: w.category,

@@ -40,6 +40,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     platforms: ['PC (Microsoft Windows)'],
     genres: [],
     coverUrl: null,
+    heroImageUrl: null,
     synopsis: null,
     wishlisted: false,
     category: 0,

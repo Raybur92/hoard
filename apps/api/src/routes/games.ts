@@ -421,6 +421,7 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
       themes: igdb.themes,
       playerPerspectives: igdb.playerPerspectives,
       coverUrl: igdb.coverUrl,
+      heroImageUrl: igdb.heroImageUrl,
     },
     create: {
       igdbId: igdb.igdbId,
@@ -431,6 +432,7 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
       themes: igdb.themes,
       playerPerspectives: igdb.playerPerspectives,
       coverUrl: igdb.coverUrl,
+      heroImageUrl: igdb.heroImageUrl,
     },
   });
 

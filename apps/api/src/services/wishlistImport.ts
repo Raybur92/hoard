@@ -99,6 +99,7 @@ export async function applySteamWishlistImport(
             themes: release.themes,
             playerPerspectives: release.playerPerspectives,
             coverUrl: release.coverUrl,
+            heroImageUrl: release.heroImageUrl,
             // Persist steamAppId on the Game row if it isn't set yet —
             // future Steam syncs will hit the steamAppId-keyed exact match
             // path instead of the title-search fallback (see syncRunner).
@@ -113,6 +114,7 @@ export async function applySteamWishlistImport(
             themes: release.themes,
             playerPerspectives: release.playerPerspectives,
             coverUrl: release.coverUrl,
+            heroImageUrl: release.heroImageUrl,
             steamAppId: item.appid,
           },
         });

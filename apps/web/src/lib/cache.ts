@@ -26,13 +26,22 @@ const store = new Map<string, Entry>();
 const subs = new Map<string, Set<() => void>>();
 
 /**
- * localStorage key prefix. Bump the `v1` suffix to invalidate every
+ * localStorage key prefix. Bump the `v<N>` suffix to invalidate every
  * persisted entry app-wide — e.g. after a breaking schema change in the
  * cached payload shape. Bumping does NOT migrate; old entries are simply
  * orphaned and eventually evicted by browser quota pressure (or
  * explicitly cleared in `_resetForTests`).
+ *
+ * History:
+ *   v1 → v2 (2026-05-31): Game.heroImageUrl added to the shelves +
+ *   game-detail payloads. Cached payloads from v1 lack the field so
+ *   the new LibraryOverviewCard falls back to coverUrl (cropped
+ *   portrait) until the SWR refetch lands — which can be delayed by
+ *   the 30s stale window if a user already revalidated post-deploy
+ *   but before the wishlist subset was backfilled. Bumping forces a
+ *   cold refetch on every cached endpoint.
  */
-const STORAGE_PREFIX = 'hoard:cache:v1:';
+const STORAGE_PREFIX = 'hoard:cache:v2:';
 
 /**
  * Per-entry size cap when writing to localStorage (UTF-16 chars in the

@@ -43,6 +43,7 @@ function makeResult(overrides: Partial<IgdbSearchResult> = {}): IgdbSearchResult
     themes: [],
     playerPerspectives: [],
     coverUrl: null,
+    heroImageUrl: null,
     platforms: ['Game Boy'],
     totalRatingCount: 1000,
     ...overrides,

@@ -377,6 +377,9 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     hype: w.hype,
     synopsis: w.synopsis,
     coverUrl: w.coverUrl ?? null,
+    // WishlistRelease doesn't snapshot heroImageUrl. Dashboard's
+    // wishlistCountdown is the next-release widget — uses portrait cover.
+    heroImageUrl: null,
     category: w.category,
   }));
 

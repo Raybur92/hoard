@@ -75,6 +75,12 @@ interface IgdbRawGame {
   // optional on the raw payload; fetchers map to `[]` when absent.
   themes?: { name: string }[];
   player_perspectives?: { name: string }[];
+  // B-IGDB-3b2 follow-up — landscape hero image candidates. Artworks
+  // are curated key art / banners (typically 16:9); screenshots are
+  // in-game shots (always 16:9). `deriveHeroImageUrl` prefers
+  // artworks[0] over screenshots[0].
+  artworks?: { image_id: string }[];
+  screenshots?: { image_id: string }[];
   platforms?: { id: number; name: string }[];
   involved_companies?: { company: { name: string }; developer: boolean }[];
   summary?: string;
@@ -103,6 +109,35 @@ function normalizeCover(url: string | null | undefined): string | null {
   if (!url) return null;
   // Raw URLs are protocol-relative: //images.igdb.com/igdb/image/upload/t_thumb/xxxxx.jpg
   return ('https:' + url).replace('/t_thumb/', '/t_cover_big/');
+}
+
+/**
+ * Build a 16:9 hero image URL for Library OVERVIEW shelf cards from
+ * IGDB's `screenshots` or `artworks` collections.
+ *
+ * Prefers SCREENSHOTS first — they're always in-game shots, uniformly
+ * 16:9 landscape, JPG-baked (no transparency issues). Falls back to
+ * artworks (community-uploaded key art / logos) ONLY when no screenshot
+ * exists, since artworks are wildly variable: some are beautiful
+ * landscape banners, but many are logo-on-white JPGs or non-16:9
+ * portraits that crop awkwardly in our 16:9 card box.
+ *
+ * The trade-off: upcoming/announced games often have no screenshots
+ * yet, only artworks → those still get a landscape image (potentially
+ * awkward) instead of falling all the way back to portrait coverUrl.
+ *
+ * `t_screenshot_big` (889×500) is the right size for our ~280px wide
+ * landscape cards on retina displays.
+ *
+ * Returns null when both arrays are empty; caller falls back to coverUrl.
+ */
+function deriveHeroImageUrl(
+  artworks?: { image_id: string }[] | null,
+  screenshots?: { image_id: string }[] | null,
+): string | null {
+  const id = artworks?.[0]?.image_id ?? screenshots?.[0]?.image_id;
+  if (!id) return null;
+  return `https://images.igdb.com/igdb/image/upload/t_screenshot_big/${id}.jpg`;
 }
 
 function getDeveloper(companies?: { company: { name: string }; developer: boolean }[]): string | null {
@@ -151,6 +186,7 @@ function mapToSearchResult(raw: IgdbRawGame): IgdbSearchResult {
     themes: raw.themes?.map((t) => t.name) ?? [],
     playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
     coverUrl: normalizeCover(raw.cover?.url),
+    heroImageUrl: deriveHeroImageUrl(raw.artworks, raw.screenshots),
     platforms: raw.platforms?.map((p) => p.name) ?? [],
     totalRatingCount: raw.total_rating_count ?? null,
   };
@@ -166,7 +202,7 @@ export async function searchGames(query: string): Promise<IgdbSearchResult[]> {
   const results = await igdbPost(
     'games',
     `search "${query}";
-fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
+fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, artworks.image_id, screenshots.image_id, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
 limit 10;`,
   );
 
@@ -244,7 +280,7 @@ limit 20;`,
   try {
     parents = await igdbPost(
       'games',
-      `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
+      `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, artworks.image_id, screenshots.image_id, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
 where id = (${gameIds.join(',')});
 limit ${gameIds.length};`,
     );
@@ -266,7 +302,7 @@ export async function getGame(igdbId: number): Promise<IgdbSearchResult | null> 
 
   const results = await igdbPost(
     'games',
-    `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, involved_companies.company.name, involved_companies.developer;
+    `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, artworks.image_id, screenshots.image_id, involved_companies.company.name, involved_companies.developer;
 where id = ${igdbId};
 limit 1;`,
   );
@@ -326,7 +362,7 @@ export async function getUpcomingReleases(opts: UpcomingOptions): Promise<IgdbUp
     : '';
   const hypeClause = hypeThreshold > 0 ? `& hypes > ${hypeThreshold}` : '';
 
-  const query = `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
+  const query = `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, artworks.image_id, screenshots.image_id, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
 where (category = (2, 8) | category = null)
   ${hypeClause}
   & version_parent = null
@@ -357,6 +393,7 @@ limit ${limit};`;
       themes: raw.themes?.map((t) => t.name) ?? [],
       playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
       coverUrl: normalizeCover(raw.cover?.url),
+    heroImageUrl: deriveHeroImageUrl(raw.artworks, raw.screenshots),
       synopsis: raw.summary ?? null,
       wishlisted: false,
       category: raw.category ?? 0,
@@ -394,7 +431,7 @@ export async function getRecentlyReleased(opts: RecentReleasesOptions): Promise<
   const cached = upcomingCache.get(cacheKey);
   if (cached) return cached;
 
-  const query = `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
+  const query = `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, artworks.image_id, screenshots.image_id, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category, version_parent, total_rating_count;
 where (category = (0, 2, 8) | category = null)
   & hypes >= ${minHype}
   & version_parent = null
@@ -416,6 +453,7 @@ limit ${limit};`;
       themes: raw.themes?.map((t) => t.name) ?? [],
       playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
     coverUrl: normalizeCover(raw.cover?.url),
+    heroImageUrl: deriveHeroImageUrl(raw.artworks, raw.screenshots),
     synopsis: raw.summary ?? null,
     wishlisted: false,  // caller fills this in (always false for the hyped list)
     category: raw.category ?? 0,
@@ -461,7 +499,7 @@ async function getGameByExternalUid(
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'text/plain',
     },
-    body: `fields game.id, game.name, game.first_release_date, game.cover.url, game.genres.name, game.themes.name, game.player_perspectives.name, game.involved_companies.company.name, game.involved_companies.developer, game.platforms.name, game.total_rating_count;
+    body: `fields game.id, game.name, game.first_release_date, game.cover.url, game.genres.name, game.themes.name, game.player_perspectives.name, game.artworks.image_id, game.screenshots.image_id, game.involved_companies.company.name, game.involved_companies.developer, game.platforms.name, game.total_rating_count;
 where uid = "${uid}" & url ~ *"${urlPattern}"*;
 limit 1;`,
   });
@@ -618,7 +656,7 @@ export async function getReleaseDetails(igdbId: number): Promise<IgdbUpcomingRel
 
   const results = await igdbPost(
     'games',
-    `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category;
+    `fields id, name, first_release_date, cover.url, genres.name, themes.name, player_perspectives.name, artworks.image_id, screenshots.image_id, platforms.id, platforms.name, involved_companies.company.name, involved_companies.developer, summary, hypes, category;
 where id = ${igdbId};
 limit 1;`,
   );
@@ -638,6 +676,7 @@ limit 1;`,
       themes: raw.themes?.map((t) => t.name) ?? [],
       playerPerspectives: raw.player_perspectives?.map((p) => p.name) ?? [],
     coverUrl: normalizeCover(raw.cover?.url),
+    heroImageUrl: deriveHeroImageUrl(raw.artworks, raw.screenshots),
     synopsis: raw.summary ?? null,
     wishlisted: false,  // caller fills this in
     category: raw.category ?? 0,

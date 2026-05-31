@@ -27,7 +27,23 @@ export function Cover({ w, h, src, label, year, dev, bright, style, children, de
     // WCAG 1.1.1: provide descriptive alt unless explicitly decorative.
     const altText = decorative ? '' : (label && label.length > 0 ? `${label} cover art` : 'Game cover');
     return (
-      <div style={{ width: w, height: h, overflow: 'hidden', flexShrink: 0, ...style }}>
+      <div
+        style={{
+          width: w,
+          height: h,
+          overflow: 'hidden',
+          flexShrink: 0,
+          // 2026-05-31 — many IGDB artworks/screenshots are PNG/WebP
+          // with transparent backgrounds (logo-only key art especially).
+          // Without a background here the transparency shows through to
+          // whatever's behind, which on white-ish surfaces or the page
+          // body looks bad. `--ink-2` is the "raised panel" token —
+          // dark grey that reads as an intentional card surface, on-
+          // brand with the rest of the design system.
+          background: 'var(--ink-2)',
+          ...style,
+        }}
+      >
         <img
           src={sized ?? src}
           alt={altText}

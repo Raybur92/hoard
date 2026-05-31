@@ -23,6 +23,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     platforms: [],
     genres: [],
     coverUrl: null,
+    heroImageUrl: null,
     synopsis: null,
     wishlisted: false,
     category: 0,

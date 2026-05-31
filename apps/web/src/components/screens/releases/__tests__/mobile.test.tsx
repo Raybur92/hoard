@@ -32,6 +32,7 @@ function makeRelease(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcoming
     platforms: ['PlayStation 5'],
     genres: [],
     coverUrl: null,
+    heroImageUrl: null,
     synopsis: null,
     wishlisted: false,
     category: 0,

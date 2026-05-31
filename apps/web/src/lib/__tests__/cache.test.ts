@@ -86,7 +86,7 @@ describe('cache', () => {
  * the get-from-storage path indirectly via `_resetForTests` round-trip.
  */
 describe('cache — localStorage persistence', () => {
-  const STORAGE_PREFIX = 'hoard:cache:v1:';
+  const STORAGE_PREFIX = 'hoard:cache:v2:';
 
   beforeEach(() => {
     // _resetForTests already clears localStorage too; belt-and-suspenders

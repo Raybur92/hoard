@@ -90,6 +90,10 @@ router.get('/igdb/upcoming', requireUser, requireActive, async (req: Request, re
         themes: [],
         playerPerspectives: [],
         coverUrl: w.coverUrl,
+        // WishlistRelease doesn't snapshot heroImageUrl. For wishlist-scope
+        // rendering the Library OVERVIEW landscape cards aren't shown
+        // (Releases uses portrait covers), so null is fine here.
+        heroImageUrl: null,
         synopsis: w.synopsis,
         wishlisted: true,
         category: w.category,

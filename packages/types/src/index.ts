@@ -122,6 +122,7 @@ export interface Game {
   themes: string[];
   playerPerspectives: string[];
   coverUrl: string | null;
+  heroImageUrl: string | null;
   // Captured from the codepotatoes.de payload during HLTB lookups (PR D).
   // Used to build the HLTB deep-link on GameDetail and as a future GOG sync key.
   hltbId: number | null;
@@ -242,6 +243,7 @@ export interface WishlistRelease {
   hype: number | null;
   synopsis: string | null;
   coverUrl: string | null;
+  heroImageUrl: string | null;
   // IGDB category (e.g. main_game=0, dlc_addon=2, remake=8). Drives the
   // DLC / remake chip on Upcoming. Persisted from PR B onward.
   category: number;
@@ -527,6 +529,7 @@ export interface IgdbSearchResult {
   // Third-person / Side-view / Top-down / etc.). Empty when IGDB has none.
   playerPerspectives: string[];
   coverUrl: string | null;
+  heroImageUrl: string | null;
   // IGDB platform names (e.g. "PlayStation 5", "PC (Microsoft Windows)")
   // used by `pickBestMatch` to prefer results that match the syncing
   // platform. Empty when IGDB has no platform data — treated as "unknown,
@@ -580,6 +583,7 @@ export interface IgdbUpcomingRelease {
   themes: string[];
   playerPerspectives: string[];
   coverUrl: string | null;
+  heroImageUrl: string | null;
   synopsis: string | null;
   wishlisted: boolean;
   category: number;

@@ -39,6 +39,7 @@ async function fetchUpcoming(scope: UpcomingScope): Promise<IgdbUpcomingRelease[
       themes: [],
       playerPerspectives: [],
       coverUrl: w.coverUrl,
+      heroImageUrl: null,
       synopsis: w.synopsis,
       wishlisted: true,
       category: w.category,

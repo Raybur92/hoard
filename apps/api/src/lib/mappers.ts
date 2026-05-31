@@ -39,6 +39,7 @@ export interface UserGameRow {
     themes: string[];
     playerPerspectives: string[];
     coverUrl: string | null;
+    heroImageUrl: string | null;
     hltbId: number | null;
     gogAppId: number | null;
     psnNpCommunicationId: string | null;
@@ -171,6 +172,7 @@ export function mapUserGame(ug: UserGameRow): UserGameDetail {
       themes: ug.game.themes,
       playerPerspectives: ug.game.playerPerspectives,
       coverUrl: ug.game.coverUrl,
+      heroImageUrl: ug.game.heroImageUrl,
       hltbId: ug.game.hltbId,
       gogAppId: ug.game.gogAppId,
       psnNpCommunicationId: ug.game.psnNpCommunicationId,

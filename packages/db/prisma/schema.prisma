@@ -258,6 +258,11 @@ model Game {
   // Bird-view / Auditory / VR.
   playerPerspectives   String[] @default([])
   coverUrl             String?
+  // Landscape hero image (IGDB artworks[0] preferred, screenshots[0] fallback).
+  // Used by the Library OVERVIEW shelf cards which render landscape vs the
+  // portrait coverUrl shown elsewhere. Nullable because not every game has
+  // artworks/screenshots in IGDB; renderer falls back to coverUrl.
+  heroImageUrl         String?
   metadata             Json?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt

@@ -17,6 +17,7 @@ import { minutesToHours, formatRelative, shortYear } from '../../lib/utils';
 import { pickTopTagCounts, filterByTag, type TagDimension } from '../../lib/pickTopTags';
 import { slugifyTag, findTagBySlug } from '../../lib/tagSlug';
 import { FilterPopover } from '../library/FilterPopover';
+import { LibraryOverviewCard } from '../library/LibraryOverviewCard';
 import { ChangeLensPopover } from '../library/ChangeLensPopover';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
@@ -32,6 +33,9 @@ interface GameDisplay {
   progress: number;
   hltbHours?: number;
   coverUrl: string | null;
+  // Landscape hero image for the OVERVIEW shelf cards (LibraryOverviewCard).
+  // null falls back to coverUrl (the portrait, used elsewhere).
+  heroImageUrl: string | null;
 }
 
 interface ShelfDisplay {
@@ -69,6 +73,7 @@ function toGameDisplay(ug: UserGameDetail): GameDisplay {
     lastPlayed: formatRelative(ug.lastPlayedAt),
     progress,
     coverUrl: ug.game.coverUrl,
+    heroImageUrl: ug.game.heroImageUrl,
     ...(ug.hltb?.mainStory ? { hltbHours: Math.round(ug.hltb.mainStory / 60) } : {}),
   };
 }
@@ -130,32 +135,40 @@ const ShelfItem = memo(function ShelfItem({ g, w = 130, h = 174, isBacklog, show
 interface ShelfProps {
   idx: number;
   shelf: ShelfDisplay;
-  coverW: number;
-  coverH: number;
-  showHltb: boolean;
 }
 
 const SHELF_GAP = 16;
 
-function Shelf({ idx, shelf, coverW, coverH, showHltb }: ShelfProps) {
+// Overview shelf card sizes (LANDSCAPE 16:9 — per Andrea 2026-05-31).
+// Now Playing is wider so the same row holds 4 cards vs 5 for other
+// shelves; the visual hierarchy reflects "what I'm currently playing"
+// as the page's primary signal.
+const OVERVIEW_CARD_W_DEFAULT = 220;
+const OVERVIEW_CARD_W_NOW_PLAYING = 280;
+
+function Shelf({ idx, shelf }: ShelfProps) {
   const navigate = useNavigate();
   const rowRef = useRef<HTMLDivElement>(null);
+  const cardW = shelf.status === 'Playing' ? OVERVIEW_CARD_W_NOW_PLAYING : OVERVIEW_CARD_W_DEFAULT;
+  const cardH = Math.round(cardW * 9 / 16);
+  // Account for the card body (cover + title row underneath, ~26px) when
+  // sizing the "view all" trailer button so it lines up vertically.
+  const viewAllH = cardH + 26;
   const [visibleSlots, setVisibleSlots] = useState(8);
 
   useEffect(() => {
     const el = rowRef.current;
     if (!el) return;
     const compute = (width: number) => {
-      const slots = Math.max(2, Math.floor((width + SHELF_GAP) / (coverW + SHELF_GAP)));
+      const slots = Math.max(2, Math.floor((width + SHELF_GAP) / (cardW + SHELF_GAP)));
       setVisibleSlots(slots);
     };
     compute(el.clientWidth);
     const ro = new ResizeObserver((entries) => { if (entries[0]) compute(entries[0].contentRect.width); });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [coverW]);
+  }, [cardW]);
 
-  const isBacklog = shelf.status === 'Backlog';
   const accent = shelf.tone === 'green' ? 'var(--green)' : shelf.tone === 'amber' ? 'var(--amber)' : shelf.tone === 'red' ? 'var(--red)' : 'var(--paper)';
   // Reserve last slot for "view all", show the rest with game covers
   const shown = shelf.items.slice(0, visibleSlots - 1);
@@ -168,12 +181,12 @@ function Shelf({ idx, shelf, coverW, coverH, showHltb }: ShelfProps) {
         <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {shelf.count} titles</span>
       </div>
       <div ref={rowRef} style={{ display: 'flex', gap: SHELF_GAP, overflow: 'hidden' }}>
-        {shown.map(g => <ShelfItem key={g.id} g={g} w={coverW} h={coverH} isBacklog={isBacklog} showHltb={showHltb} />)}
+        {shown.map(g => <LibraryOverviewCard key={g.id} g={g} w={cardW} />)}
         <button
           type="button"
           onClick={() => navigate(`/library/${encodeURIComponent(shelf.status)}`)}
           aria-label={`View all ${shelf.status} games`}
-          style={{ width: coverW, flex: `0 0 ${coverW}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: coverH, color: 'var(--paper-dim)', fontSize: "var(--text-2xs)", gap: 6, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}
+          style={{ width: cardW, flex: `0 0 ${cardW}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--rule-bright)', height: viewAllH, color: 'var(--paper-dim)', fontSize: "var(--text-2xs)", gap: 6, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}
         >
           {remaining > 0 && <span style={{ fontSize: "var(--text-lg)" }}>+{remaining}</span>}
           <span className="t-up" style={{ fontSize: "var(--text-2xs)" }}>view all</span>
@@ -450,7 +463,10 @@ export function LibraryDesktop() {
           <div className="skel" style={{ width: 96, height: 24 }} />
         </div>
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '0 32px 40px' }}>
-          {SHELF_CONFIG.map((cfg) => (
+          {SHELF_CONFIG.map((cfg) => {
+            const skelW = cfg.status === 'Playing' ? OVERVIEW_CARD_W_NOW_PLAYING : OVERVIEW_CARD_W_DEFAULT;
+            const skelH = Math.round(skelW * 9 / 16);
+            return (
             <div key={cfg.status} style={{ padding: '24px 0' }}>
               <div className="shelf-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div className="skel" style={{ width: 22, height: 14 }} />
@@ -459,14 +475,15 @@ export function LibraryDesktop() {
               </div>
               <div style={{ display: 'flex', gap: SHELF_GAP, marginTop: 10, overflow: 'hidden' }}>
                 {Array.from({ length: 8 }).map((_, j) => (
-                  <div key={j} className="skel" style={{ width: coverDims.w, height: coverDims.h, flex: '0 0 auto' }} />
+                  <div key={j} className="skel" style={{ width: skelW, height: skelH, flex: '0 0 auto' }} />
                 ))}
               </div>
               <div style={{ height: 4, background: 'var(--rule-bright)', marginTop: 10, position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 0, right: 0, top: 4, height: 1, background: 'var(--rule)' }} />
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </>
     );
@@ -787,7 +804,7 @@ export function LibraryDesktop() {
           </div>
         ) : (
           shelves.map((s, i) => (
-            <Shelf key={s.status} idx={i + 1} shelf={s} coverW={coverDims.w} coverH={coverDims.h} showHltb={prefs.showHltb} />
+            <Shelf key={s.status} idx={i + 1} shelf={s} />
           ))
         )}
         {/* B-IGDB-3b2 follow-up — browse-by entry-points are in the

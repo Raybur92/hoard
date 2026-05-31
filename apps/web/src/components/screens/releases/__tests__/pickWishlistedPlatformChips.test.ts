@@ -22,6 +22,7 @@ function release(overrides: Partial<IgdbUpcomingRelease> = {}): IgdbUpcomingRele
     platforms: ['PlayStation 5', 'Nintendo Switch'],
     genres: [],
     coverUrl: null,
+    heroImageUrl: null,
     synopsis: null,
     wishlisted: false,
     category: 0,

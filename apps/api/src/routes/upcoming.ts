@@ -34,6 +34,9 @@ function mapRelease(w: {
     hype: w.hype,
     synopsis: w.synopsis,
     coverUrl: w.coverUrl,
+    // WishlistRelease doesn't snapshot heroImageUrl — used only by Library
+    // OVERVIEW landscape cards which read it off the joined Game row.
+    heroImageUrl: null,
     category: w.category,
   };
 }
@@ -140,6 +143,7 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
         themes: igdbRelease.themes,
         playerPerspectives: igdbRelease.playerPerspectives,
         coverUrl: igdbRelease.coverUrl,
+        heroImageUrl: igdbRelease.heroImageUrl,
       },
       create: {
         igdbId,
@@ -150,6 +154,7 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
         themes: igdbRelease.themes,
         playerPerspectives: igdbRelease.playerPerspectives,
         coverUrl: igdbRelease.coverUrl,
+        heroImageUrl: igdbRelease.heroImageUrl,
       },
     });
 
