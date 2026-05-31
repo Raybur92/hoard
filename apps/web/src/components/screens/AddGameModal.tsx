@@ -89,6 +89,14 @@ export interface AddGameModalProps {
   onAdded: () => void;
   /** Entry intent. 'own' → default status = Backlog; 'wishlist' → default status = Wishlist. */
   intent?: 'own' | 'wishlist';
+  /**
+   * GD-PR1 — pre-populate the search input when the modal opens. Used by
+   * the GameDetail v2 S1 surface so a user on `/game/:igdbId` who hits
+   * `[+ add to library]` doesn't have to re-type the title they were
+   * just looking at. The debounced IGDB search fires automatically on
+   * mount.
+   */
+  prefilledQuery?: string;
 }
 
 interface SuccessPayload {
@@ -108,10 +116,10 @@ interface SuccessPayload {
 // or click outside / Esc to close immediately.
 const AUTO_CLOSE_MS = 15000;
 
-export function AddGameModal({ onClose, onAdded, intent = 'own' }: AddGameModalProps) {
+export function AddGameModal({ onClose, onAdded, intent = 'own', prefilledQuery }: AddGameModalProps) {
   const navigate = useNavigate();
   // Search
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(prefilledQuery ?? '');
   const [results, setResults] = useState<IgdbSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);

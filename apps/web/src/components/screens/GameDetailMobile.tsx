@@ -25,8 +25,11 @@ const STATUS_COLOR: Record<string, string> = {
 
 const ALL_STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist'];
 
-export function GameDetailMobile() {
-  const { id } = useParams<{ id: string }>();
+// GD-PR1 — `userGameId` optional prop mirrors the desktop component;
+// see GameDetailDesktop for the rationale.
+export function GameDetailMobile({ userGameId: propUserGameId }: { userGameId?: string } = {}) {
+  const { id: paramId } = useParams<{ id: string }>();
+  const id = propUserGameId ?? paramId;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: ug, loading, error, update, refetch } = useGame(id);

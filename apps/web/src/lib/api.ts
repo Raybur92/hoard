@@ -28,6 +28,8 @@ import type {
   UserEventListResponse,
   LensIndexResponse,
   DealsResponse,
+  GameDetailResponse,
+  GameDealsResponse,
 } from '@hoard/types';
 import * as cache from './cache';
 
@@ -159,6 +161,10 @@ function invalidateLibrary(): void {
   cache.invalidate('shelves:');
   cache.invalidate('gameCounts');
   cache.invalidate('dashboard');
+  // GD-PR1 — the per-game detail caches need to flip too when library
+  // membership changes (S1 → S3 transition on add-to-library, etc.).
+  cache.invalidate('game:igdb:');
+  cache.invalidate('game:deals:');
 }
 
 export const api = {
@@ -186,6 +192,27 @@ export const api = {
 
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),
+
+  /**
+   * GD-PR1 — GameDetail v2 unified endpoint. Returns the state-classified
+   * payload for the `/game/:igdbId` route. See docs/PAGES_PLAN.md §3.
+   */
+  gameByIgdb: (igdbId: number) =>
+    get<GameDetailResponse>(`/api/games/by-igdb/${igdbId}`),
+
+  /**
+   * GD-PR1 — Option A per-game deals for the S1 price-offers card.
+   * Returns an empty `deals` array (not 404) when no active deals exist.
+   */
+  gameDeals: (igdbId: number) =>
+    get<GameDealsResponse>(`/api/games/by-igdb/${igdbId}/deals`),
+
+  /**
+   * GD-PR1 — old-URL redirect resolver. Maps `/game/:userGameId` (cuid)
+   * to the canonical `/game/:igdbId`. User-scoped on the server side.
+   */
+  userGameIgdbId: (userGameId: string) =>
+    get<{ igdbId: number }>(`/api/games/usergame/${userGameId}/igdb-id`),
 
   patchGame: async (id: string, body: PatchGameBody) => {
     const updated = await patch<UserGameDetail>(`/api/games/${id}`, body);

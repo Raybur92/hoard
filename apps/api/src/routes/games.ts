@@ -7,9 +7,12 @@ import { requireUser } from '../middleware/user';
 import { requireActive } from '../middleware/active';
 import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
 import { fetchHltbWithFallback } from '../services/hltb';
-import { getGame, getTimeToBeat } from '../services/igdb';
+import { getGame, getReleaseDetails, getTimeToBeat } from '../services/igdb';
 import { mapUserGame } from '../lib/mappers';
 import { logEvent } from '../services/userEvents';
+import { detectGameDetailState } from '../lib/gameDetailState';
+import { routeAffiliateUrl } from '../services/deals/affiliate';
+import type { GameDetailResponse, GameDetailGameInfo, GameDealsResponse, DealRow } from '@hoard/types';
 
 function triggerHltbBackground(gameId: string, title: string, steamAppId: number | null | undefined, igdbId: number): void {
   void (async () => {
@@ -264,6 +267,180 @@ router.get('/games/shelves', requireUser, requireActive, async (req: Request, re
 
   const body: ShelvesResponse = { shelves, counts };
   res.json(body);
+});
+
+// GET /api/games/by-igdb/:igdbId
+//
+// GD-PR1 — GameDetail v2 unified endpoint. Returns the state-classified
+// payload powering the new /game/:igdbId route. State detection rules
+// live in `lib/gameDetailState.ts` (testable in isolation).
+//
+// Rich IGDB fields (synopsis, full releaseDate, platforms, category) are
+// fetched lazily via `getReleaseDetails` (24h server-side cache). If IGDB
+// is unreachable, falls back to Game-row data only — the page degrades
+// gracefully rather than 503'ing.
+//
+// 404 when no Game row exists for the IGDB id. The "user wants to view an
+// IGDB game we've never seen" case is GD-PR2 scope (lazy Game-row create).
+router.get('/games/by-igdb/:igdbId', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const igdbId = Number(req.params['igdbId']);
+  if (!Number.isInteger(igdbId) || igdbId < 1) {
+    res.status(400).json({ error: 'Invalid igdbId' });
+    return;
+  }
+
+  const game = await prisma.game.findUnique({ where: { igdbId } });
+  if (!game) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  // UserGame lookup happens separately so we can return the existing
+  // UserGameDetail shape (with nested `game.hltbData`) untouched for
+  // the S3/S4 dispatcher path.
+  const userGameRow = await prisma.userGame.findFirst({
+    where: { userId: req.userId, gameId: game.id },
+    include: { game: { include: { hltbData: true } } },
+  });
+  const userGame = userGameRow ? mapUserGame(userGameRow) : null;
+
+  // Lazy IGDB fetch — degrades gracefully on failure.
+  let igdb: Awaited<ReturnType<typeof getReleaseDetails>> = null;
+  try {
+    igdb = await getReleaseDetails(igdbId);
+  } catch {
+    igdb = null;
+  }
+
+  const releaseDate = igdb?.releaseDate ? new Date(igdb.releaseDate) : null;
+  const status = userGame ? userGame.status : null;
+  const state = detectGameDetailState(status, releaseDate, new Date());
+
+  const gameInfo: GameDetailGameInfo = {
+    id: game.id,
+    igdbId: game.igdbId,
+    title: game.title,
+    developer: game.developer,
+    releaseYear: game.releaseYear,
+    releaseDate: igdb?.releaseDate ?? null,
+    platforms: igdb?.platforms ?? [],
+    genres: game.genres,
+    themes: game.themes,
+    playerPerspectives: game.playerPerspectives,
+    coverUrl: game.coverUrl,
+    heroImageUrl: game.heroImageUrl,
+    synopsis: igdb?.synopsis ?? null,
+    category: igdb?.category ?? null,
+    steamAppId: game.steamAppId,
+    gogAppId: game.gogAppId,
+    psnConceptId: game.psnConceptId,
+    xboxTitleId: game.xboxTitleId,
+    epicCatalogItemId: game.epicCatalogItemId,
+    nintendoTitleId: game.nintendoTitleId,
+    itchGameId: game.itchGameId,
+    hltbId: game.hltbId,
+  };
+
+  const body: GameDetailResponse = {
+    state,
+    igdbId,
+    game: gameInfo,
+    userGame,
+  };
+  res.json(body);
+});
+
+// GET /api/games/by-igdb/:igdbId/deals
+//
+// GD-PR1 — Option A single-game deals endpoint for the S1 price-offers
+// card. Returns the user's market deals for one Game; affiliate URLs are
+// pre-rewritten server-side per the DEALS-PR1 router. Empty `deals`
+// array (not 404) when no active deals exist; 404 only when no Game row
+// exists.
+router.get('/games/by-igdb/:igdbId/deals', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const igdbId = Number(req.params['igdbId']);
+  if (!Number.isInteger(igdbId) || igdbId < 1) {
+    res.status(400).json({ error: 'Invalid igdbId' });
+    return;
+  }
+
+  const game = await prisma.game.findUnique({
+    where: { igdbId },
+    select: { id: true, igdbId: true, title: true, coverUrl: true, heroImageUrl: true },
+  });
+  if (!game) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.userId },
+    select: { marketCode: true },
+  });
+  const marketCode = user?.marketCode ?? 'US';
+
+  // `isWishlisted` mirrors CM12 semantics — UserGame.status='Wishlist'
+  // OR a non-empty wishlistedPlatforms entry. Single boolean per game,
+  // same shape as /api/deals so the frontend can render the wishlist
+  // chip uniformly.
+  const userGame = await prisma.userGame.findFirst({
+    where: { userId: req.userId, gameId: game.id },
+    select: { status: true, wishlistedPlatforms: true },
+  });
+  const isWishlisted = userGame
+    ? userGame.status === 'Wishlist' || userGame.wishlistedPlatforms.length > 0
+    : false;
+
+  const dealRows = await prisma.deal.findMany({
+    where: { gameId: game.id },
+    orderBy: [{ discountPct: 'desc' }, { currentPrice: 'asc' }],
+  });
+
+  const deals: DealRow[] = dealRows.map((d) => ({
+    id: d.id,
+    gameId: d.gameId,
+    gameIgdbId: game.igdbId,
+    gameTitle: game.title,
+    gameCoverUrl: game.coverUrl,
+    gameHeroImageUrl: game.heroImageUrl,
+    shopId: d.shopId,
+    shopName: d.shopName,
+    isReseller: d.isReseller,
+    currentPrice: d.currentPrice,
+    originalPrice: d.originalPrice,
+    currency: d.currency,
+    discountPct: d.discountPct,
+    dealUrl: routeAffiliateUrl(d.shopName, d.dealUrl),
+    voucher: d.voucher,
+    expiresAt: d.expiresAt?.toISOString() ?? null,
+    storeLow: d.storeLow,
+    isHistoricalLow: d.isHistoricalLow,
+    isTrendingDown: d.isTrendingDown,
+    isWishlisted,
+  }));
+
+  const body: GameDealsResponse = { igdbId, marketCode, deals };
+  res.json(body);
+});
+
+// GET /api/games/usergame/:id/igdb-id
+//
+// GD-PR1 — old-URL redirect resolver. The `/game/:userGameId` URL stays
+// working during the transition window per OQ-GD-1; the React Router
+// dispatcher calls this endpoint to map a cuid to the canonical
+// `/game/:igdbId` URL, then `navigate(replace: true)` flips the address
+// bar. User-scoped — only resolves UserGames owned by the requester.
+router.get('/games/usergame/:id/igdb-id', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const ug = await prisma.userGame.findFirst({
+    where: { id, userId: req.userId },
+    select: { game: { select: { igdbId: true } } },
+  });
+  if (!ug) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  res.json({ igdbId: ug.game.igdbId });
 });
 
 // GET /api/games/:id

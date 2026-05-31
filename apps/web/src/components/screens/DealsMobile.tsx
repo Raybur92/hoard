@@ -42,8 +42,8 @@ function MobileDealRow({ deal }: { deal: DealRow }) {
       <div
         role="button"
         tabIndex={0}
-        onClick={() => navigate(`/game/${deal.gameId}`)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${deal.gameId}`); }}
+        onClick={() => navigate(`/game/${deal.gameIgdbId}`)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${deal.gameIgdbId}`); }}
         aria-label={`Open ${deal.gameTitle}`}
       >
         <Cover w={60} h={34} src={deal.gameHeroImageUrl ?? deal.gameCoverUrl} label={deal.gameTitle.toUpperCase()} />

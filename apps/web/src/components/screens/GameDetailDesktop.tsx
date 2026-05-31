@@ -26,8 +26,14 @@ const STATUS_COLOR: Record<string, string> = {
 
 const ALL_STATUSES: GameStatus[] = ['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist'];
 
-export function GameDetailDesktop() {
-  const { id } = useParams<{ id: string }>();
+// GD-PR1 — `userGameId` optional prop lets the GameDetail v2 dispatcher
+// pass a UserGame id explicitly (S3/S4 path) without forcing a URL change
+// to `/game/:userGameId`. When the prop is omitted the component falls
+// back to the URL param (today's behaviour, unchanged for backward
+// compat during the /game/:igdbId migration window).
+export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?: string } = {}) {
+  const { id: paramId } = useParams<{ id: string }>();
+  const id = propUserGameId ?? paramId;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: ug, loading, error, update, refetch } = useGame(id);

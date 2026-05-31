@@ -68,17 +68,6 @@ export interface ItadGamePrices {
   deals: ItadDeal[];
 }
 
-interface ItadLookupGame {
-  id: string;
-  slug?: string;
-  title?: string;
-}
-
-interface ItadLookupTitleResponseEntry {
-  found: boolean;
-  game?: ItadLookupGame;
-}
-
 function getApiKey(): string | null {
   return process.env['ITAD_API_KEY'] ?? null;
 }

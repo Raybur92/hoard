@@ -218,6 +218,116 @@ export interface UserGameDetail extends UserGame {
   hltb: HltbData | null;
 }
 
+/**
+ * GD-PR1 (docs/PAGES_PLAN.md §3 — GameDetail v2).
+ *
+ * Page-state classification for the unified GameDetail v2 surface. The
+ * /game/:igdbId endpoint computes this on the server and returns it
+ * alongside the data needed to render the matching state.
+ *
+ * Detection rules (per OQ-GD-12):
+ *   - No UserGame for this user × Game:
+ *       releaseDate ≤ now or null → S1 (released, not owned)
+ *       releaseDate > now           → S2 (upcoming, not owned)
+ *   - UserGame exists, status=Wishlist:
+ *       releaseDate > now           → S2 (anticipation framing)
+ *       releaseDate ≤ now or null → S3 (library citizen — per-platform
+ *                                       wishlist on owned platforms etc.
+ *                                       still gets library treatments)
+ *   - UserGame exists, status ∈ {Playing, Backlog, OnHold, Dropped} → S3
+ *   - UserGame exists, status=Completed → S4
+ */
+export type GameDetailState = 'S1' | 'S2' | 'S3' | 'S4';
+
+/**
+ * Rich Game info returned with every GameDetailResponse. Combines the
+ * Game row's persistent columns + lazy-fetched IGDB data needed for S1/S2
+ * surfaces (synopsis, full releaseDate, IGDB-cataloged platforms list).
+ *
+ * For S3/S4 the existing UserGameDetail.game suffices for rendering
+ * today's GameDetailDesktop / GameDetailMobile — but this shape is also
+ * returned at the top level so future GD-PRs can fold the rich fields in
+ * without re-fetching.
+ *
+ * IGDB-derived fields (`releaseDate`, `platforms`, `synopsis`) may be
+ * `null`/`[]` when the IGDB lookup at the route layer fails (network,
+ * rate-limit, etc.). The page degrades gracefully — Game-row data is
+ * always present.
+ */
+export interface GameDetailGameInfo {
+  id: string; // Game.id (cuid)
+  igdbId: number;
+  title: string;
+  developer: string | null;
+  releaseYear: number | null;
+  /** Full ISO date when known (from IGDB getReleaseDetails); null when
+   *  IGDB lookup fails or the game has TBA / unknown release. */
+  releaseDate: string | null;
+  /** IGDB-cataloged platforms (e.g. ["PC (Microsoft Windows)", "PlayStation 5"]).
+   *  Empty when IGDB lookup fails. Distinct from `UserGame.wishlistedPlatforms`
+   *  (which is a per-user subset). */
+  platforms: string[];
+  genres: string[];
+  themes: string[];
+  playerPerspectives: string[];
+  coverUrl: string | null;
+  heroImageUrl: string | null;
+  /** Long-form description from IGDB (`summary` field). Null when IGDB
+   *  lookup fails or the game has no summary. */
+  synopsis: string | null;
+  /** IGDB category (main_game=0, dlc_addon=2, remake=8, etc.). Drives
+   *  inline `// DLC` / `// remake` chips on the detail header. Null when
+   *  IGDB lookup fails. */
+  category: number | null;
+  /** Stable platform-side IDs already on Game — used by GD-PR2 preorder
+   *  deep-links (OQ-GD-14). Surfaced now so the type stays whole; consumers
+   *  may ignore until GD-PR2 wires the deep-links. */
+  steamAppId: number | null;
+  gogAppId: number | null;
+  psnConceptId: number | null;
+  xboxTitleId: number | null;
+  epicCatalogItemId: string | null;
+  nintendoTitleId: string | null;
+  itchGameId: number | null;
+  hltbId: number | null;
+}
+
+/**
+ * GD-PR1 response shape from `GET /api/games/by-igdb/:igdbId`.
+ *
+ * `userGame` carries today's UserGameDetail shape (with nested `game`)
+ * untouched so the existing GameDetailDesktop / GameDetailMobile S3/S4
+ * fallback components don't need any changes in GD-PR1. The dispatcher
+ * routes to those components when `state ∈ {S3, S4}` and to the new S1/S2
+ * components when `state ∈ {S1, S2}` using the top-level `game` field.
+ *
+ * Returns 404 when no Game row exists for the IGDB id (the user navigated
+ * to an unowned, never-wishlisted IGDB id — out of scope for GD-PR1; will
+ * be handled in GD-PR2 by lazy-creating the Game row from IGDB).
+ */
+export interface GameDetailResponse {
+  state: GameDetailState;
+  igdbId: number;
+  game: GameDetailGameInfo;
+  userGame: UserGameDetail | null;
+}
+
+/**
+ * GD-PR1 — Option A endpoint shape for S1's price-offers card.
+ *
+ * `GET /api/games/by-igdb/:igdbId/deals` returns the user's market deals
+ * for a single Game. Reuses the `DealRow` shape from DEALS-PR1; affiliate
+ * URLs are pre-rewritten by the server (frontend never sees raw URLs).
+ *
+ * Empty `deals` array (not 404) when no active deals exist for the game
+ * — distinct from "game not found" (404 from the parent /by-igdb route).
+ */
+export interface GameDealsResponse {
+  igdbId: number;
+  marketCode: string;
+  deals: DealRow[];
+}
+
 export interface HltbData {
   id: string;
   gameId: string;
@@ -351,6 +461,10 @@ export interface DashboardResponse {
 export interface DealRow {
   id: string;
   gameId: string;
+  /** GD-PR1 — IGDB id of the parent Game; lets the Deals page navigate
+   *  directly to the canonical `/game/:igdbId` GameDetail URL without
+   *  resolving Game.id → igdbId on the client. */
+  gameIgdbId: number;
   gameTitle: string;
   gameCoverUrl: string | null;
   gameHeroImageUrl: string | null;

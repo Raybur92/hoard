@@ -30,8 +30,13 @@ const ReleasesRecentDesktop = lazyNamed(() => import('./components/screens/Relea
 const ReleasesRecentMobile  = lazyNamed(() => import('./components/screens/ReleasesRecentMobile'),  'ReleasesRecentMobile');
 const DealsDesktop          = lazyNamed(() => import('./components/screens/DealsDesktop'),          'DealsDesktop');
 const DealsMobile           = lazyNamed(() => import('./components/screens/DealsMobile'),           'DealsMobile');
-const GameDetailDesktop     = lazyNamed(() => import('./components/screens/GameDetailDesktop'),     'GameDetailDesktop');
-const GameDetailMobile      = lazyNamed(() => import('./components/screens/GameDetailMobile'),      'GameDetailMobile');
+// GD-PR1 — the v2 dispatchers replace direct GameDetailDesktop / GameDetailMobile
+// mounting at `/game/:id`. They classify the URL param (numeric IGDB id vs.
+// legacy cuid) and dispatch to S1 (new), S2 (S1 fallback for GD-PR1), or the
+// legacy GameDetailDesktop / GameDetailMobile for S3/S4 via the `userGameId`
+// prop (no URL flicker).
+const GameDetailV2Desktop   = lazyNamed(() => import('./components/screens/GameDetailV2Desktop'),   'GameDetailV2Desktop');
+const GameDetailV2Mobile    = lazyNamed(() => import('./components/screens/GameDetailV2Mobile'),    'GameDetailV2Mobile');
 const SettingsDesktop       = lazyNamed(() => import('./components/screens/SettingsDesktop'),       'SettingsDesktop');
 const SettingsMobile        = lazyNamed(() => import('./components/screens/SettingsMobile'),        'SettingsMobile');
 const PlatformDetailDesktop = lazyNamed(() => import('./components/screens/PlatformDetailDesktop'), 'PlatformDetailDesktop');
@@ -107,7 +112,7 @@ export default function App() {
                 <Route path="/upcoming"                         element={<Navigate to="/releases" replace />} />
                 {/* DEALS-PR1 — `/deals` top-level surface. */}
                 <Route path="/deals"                            element={desktop ? <DealsDesktop />          : <DealsMobile />} />
-                <Route path="/game/:id"                         element={desktop ? <GameDetailDesktop />     : <GameDetailMobile />} />
+                <Route path="/game/:id"                         element={desktop ? <GameDetailV2Desktop />   : <GameDetailV2Mobile />} />
                 <Route path="/settings"                         element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/:section"                element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/platforms/:code"         element={desktop ? <PlatformDetailDesktop /> : <PlatformDetailMobile />} />

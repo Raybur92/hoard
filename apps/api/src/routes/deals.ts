@@ -46,6 +46,7 @@ interface DealJoined {
   fetchedAt: Date;
   game: {
     id: string;
+    igdbId: number;
     title: string;
     coverUrl: string | null;
     heroImageUrl: string | null;
@@ -56,6 +57,7 @@ function dealToRow(d: DealJoined, isWishlisted: boolean): DealRow {
   return {
     id: d.id,
     gameId: d.gameId,
+    gameIgdbId: d.game.igdbId,
     gameTitle: d.game.title,
     gameCoverUrl: d.game.coverUrl,
     gameHeroImageUrl: d.game.heroImageUrl,
@@ -113,7 +115,7 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
   const deals = await prisma.deal.findMany({
     where: { gameId: { in: [...relevantGameIds] } },
     include: {
-      game: { select: { id: true, title: true, coverUrl: true, heroImageUrl: true } },
+      game: { select: { id: true, igdbId: true, title: true, coverUrl: true, heroImageUrl: true } },
     },
     orderBy: { discountPct: 'desc' },
   });

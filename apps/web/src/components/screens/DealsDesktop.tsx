@@ -65,8 +65,8 @@ function DealCard({ deal, variant }: DealCardProps) {
         <div
           role="button"
           tabIndex={0}
-          onClick={() => navigate(`/game/${deal.gameId}`)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${deal.gameId}`); }}
+          onClick={() => navigate(`/game/${deal.gameIgdbId}`)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${deal.gameIgdbId}`); }}
           aria-label={`Open ${deal.gameTitle}`}
           style={{ cursor: 'pointer' }}
         >
@@ -115,8 +115,8 @@ function DealCard({ deal, variant }: DealCardProps) {
       <div
         role="button"
         tabIndex={0}
-        onClick={() => navigate(`/game/${deal.gameId}`)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${deal.gameId}`); }}
+        onClick={() => navigate(`/game/${deal.gameIgdbId}`)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${deal.gameIgdbId}`); }}
         aria-label={`Open ${deal.gameTitle}`}
         style={{ cursor: 'pointer' }}
       >
