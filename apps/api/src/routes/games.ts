@@ -57,7 +57,15 @@ const gamesQuerySchema = z.object({
   q: z.string().max(100).optional(),
   sort: z.enum(['lastPlayed', 'title', 'playtime']).default('lastPlayed'),
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(500).default(50),
+  // Max bumped 500 → 5000 → 50000 (2026-05-31) — the 5000 cap was still
+  // arbitrary; 50000 is effectively unbounded for any realistic personal
+  // library while keeping a sanity guard against malicious clients. The
+  // Library single-shelf view passes 50000 so the entire shelf loads and
+  // the chip-strip count matches the sidebar's truthful per-status count.
+  // Default stays at 50 for callers that want a small slice (search overlay,
+  // etc.). If someone ever has more than 50k games in a single shelf, this
+  // cap is the least of their problems.
+  limit: z.coerce.number().int().min(1).max(50000).default(50),
 });
 
 // GET /api/games

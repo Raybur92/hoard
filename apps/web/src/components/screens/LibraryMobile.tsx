@@ -11,6 +11,7 @@ import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours } from '../../lib/utils';
+import { pickTopTags, filterByTag, type TagDimension } from '../../lib/pickTopTags';
 import { PullableScroll } from '../primitives/PullableScroll';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
@@ -148,7 +149,10 @@ export function LibraryMobile() {
     useShelves(4, { enabled: !isFiltered && !isSearching });
   const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
     useGames(
-      isFiltered ? { status: statusParam as GameStatus, limit: 500 } : undefined,
+      // limit 50000 (effectively unbounded for any realistic personal
+      // library) so the count display can mirror the sidebar — see
+      // LibraryDesktop's matching comment.
+      isFiltered ? { status: statusParam as GameStatus, limit: 50000 } : undefined,
       { enabled: isFiltered },
     );
   const { data: searchData, loading: searchLoading } =
@@ -163,14 +167,32 @@ export function LibraryMobile() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // B-IGDB-3b1 — IGDB-tag triple secondary filters live in URL params.
+  const genreFilter = searchParams.get('genre');
+  const themeFilter = searchParams.get('theme');
+  const perspectiveFilter = searchParams.get('perspective');
+  const setTagFilter = (dimension: 'genre' | 'theme' | 'perspective', value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (value === null) next.delete(dimension); else next.set(dimension, value);
+    setSearchParams(next, { replace: true });
+  };
 
   // Reset platform filter whenever the route's status param changes
   // (including back to the shelves view where statusParam is undefined).
   // Same fix as LibraryDesktop — see the explanatory comment there.
+  // B-IGDB-3b1 also clears the URL tag filters on shelf change.
   useEffect(() => {
     setPlatFilter('all');
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
+    for (const k of ['genre', 'theme', 'perspective']) {
+      if (next.has(k)) { next.delete(k); changed = true; }
+    }
+    if (changed) setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusParam]);
-  const [searchParams, setSearchParams] = useSearchParams();
   const sortBy: SortBy = (() => {
     const v = searchParams.get('sort');
     return v === 'title' || v === 'playtime' || v === 'lastPlayed' ? v : 'lastPlayed';
@@ -182,14 +204,18 @@ export function LibraryMobile() {
   };
 
   const applyFilters = useCallback((games: UserGameDetail[]): UserGameDetail[] => {
-    const result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    let result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    // B-IGDB-3b1 — IGDB-tag triple secondary filters compose with platform.
+    result = filterByTag(result, 'genre', genreFilter);
+    result = filterByTag(result, 'theme', themeFilter);
+    result = filterByTag(result, 'perspective', perspectiveFilter);
     if (sortBy === 'title') return [...result].sort((a, b) => a.game.title.localeCompare(b.game.title));
     if (sortBy === 'playtime') return [...result].sort((a, b) => {
       const total = (ug: UserGameDetail) => Object.values(ug.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0);
       return total(b) - total(a);
     });
     return [...result].sort((a, b) => (b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : 0) - (a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0));
-  }, [platFilter, sortBy]);
+  }, [platFilter, sortBy, genreFilter, themeFilter, perspectiveFilter]);
 
   const shelfCounts: Partial<Record<GameStatus, number>> = shelvesData?.counts ?? {};
   const totalGames = (Object.values(shelfCounts) as number[]).reduce((s, n) => s + n, 0);
@@ -283,12 +309,21 @@ export function LibraryMobile() {
     const items = applyFilters(filteredGames).map(toGameDisplay);
     const isBacklog = statusParam === 'Backlog';
     const title = (cfg?.name ?? statusParam).toLowerCase();
+    // Display count — mirror the sidebar's truthful per-status count
+    // (filteredData.total) when no secondary filter is active; show the
+    // filtered count when filters narrow the visible set. See
+    // LibraryDesktop's matching comment.
+    const anyFilterActive = platFilter !== 'all'
+      || genreFilter !== null
+      || themeFilter !== null
+      || perspectiveFilter !== null;
+    const displayCount = anyFilterActive ? items.length : (filteredData?.total ?? items.length);
     return (
       <>
         {modalElement}
         <MobileHeader
           title={title}
-          sub={`// ${items.length} titles`}
+          sub={`// ${displayCount} titles`}
           back
           onBack={() => navigate('/library')}
           right={<Btn sm variant="primary" ariaLabel="Add game" onClick={() => setShowAddModal(true)}><Icon name="plus" size={10} /></Btn>}
@@ -307,6 +342,46 @@ export function LibraryMobile() {
             <Icon name="arrowD" size={10} style={{ marginRight: 4 }} />{SORT_LABELS[sortBy]}
           </Chip>
         </div>
+
+        {/* B-IGDB-3b1 — IGDB-tag triple chip rows. Each dimension scrolls
+            horizontally independently; only renders when the loaded games
+            actually carry that tag. Chip values are derived from the FULL
+            shelf (pre-filter) so the user sees all options even after
+            narrowing on another dimension. */}
+        {(() => {
+          const fullShelf = filteredData?.games ?? [];
+          const dimensions: { id: TagDimension; label: string; active: string | null }[] = [
+            { id: 'genre', label: 'genre', active: genreFilter },
+            { id: 'theme', label: 'theme', active: themeFilter },
+            { id: 'perspective', label: 'persp', active: perspectiveFilter },
+          ];
+          return dimensions.map((d) => {
+            const tags = pickTopTags(fullShelf, d.id);
+            if (d.active && !tags.includes(d.active)) tags.unshift(d.active);
+            if (tags.length === 0) return null;
+            return (
+              <div
+                key={d.id}
+                data-testid={`library-${d.id}-row`}
+                className="thin-scroll"
+                style={{ padding: '6px 16px 0', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, alignItems: 'center' }}
+              >
+                <span className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', minWidth: 36, flexShrink: 0 }}>{d.label}</span>
+                <Chip on={d.active === null} onClick={() => setTagFilter(d.id, null)}>all</Chip>
+                {tags.map((tag) => (
+                  <Chip
+                    key={tag}
+                    on={d.active === tag}
+                    onClick={() => setTagFilter(d.id, d.active === tag ? null : tag)}
+                    ariaLabel={`Filter by ${d.label} ${tag}`}
+                  >
+                    {tag.toLowerCase()}
+                  </Chip>
+                ))}
+              </div>
+            );
+          });
+        })()}
         <PullableScroll onRefresh={refetch} ariaLabel={`${title} games`} style={{ padding: '12px 16px 20px' }}>
           {items.length === 0 ? (
             <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>// no titles in this shelf yet</span>

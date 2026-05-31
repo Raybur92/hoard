@@ -149,6 +149,13 @@ export function DashboardDesktop() {
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
   const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = resolvedData;
+  // B-IGDB-3 — defensive fallback for the new IGDB-tag triple fields.
+  // Old cached payloads (Service Worker / in-memory SWR) from before the
+  // partial PR don't carry these; without the fallback, the breakdown card
+  // throws `undefined is not an object (evaluating 'stats.themes.length')`
+  // until the SW cache rotates. Matches the `activity` fallback above.
+  const breakdownThemes = stats.themes ?? [];
+  const breakdownPerspectives = stats.playerPerspectives ?? [];
   const np = nowPlaying[0] ?? null;
   const rotation = nowPlaying.slice(1);
   const nextRelease = wishlistCountdown[0] ?? null;
@@ -473,18 +480,18 @@ export function DashboardDesktop() {
               · perspective. Hoard keeps the three IGDB axes as separate
               dimensions per PAGES_PLAN §4.4.1; the tab strip surfaces all
               three from the same card without competing for grid space. */}
-          {(stats.genres.length + stats.themes.length + stats.playerPerspectives.length) > 0 && (
+          {(stats.genres.length + breakdownThemes.length + breakdownPerspectives.length) > 0 && (
             <BentoCard span={6} testId="card-breakdown">
               {(() => {
                 const series = breakdownTab === 'theme'
-                  ? stats.themes
+                  ? breakdownThemes
                   : breakdownTab === 'perspective'
-                    ? stats.playerPerspectives
+                    ? breakdownPerspectives
                     : stats.genres;
                 const tabs: { id: typeof breakdownTab; label: string; available: boolean }[] = [
                   { id: 'genre', label: 'genre', available: stats.genres.length > 0 },
-                  { id: 'theme', label: 'theme', available: stats.themes.length > 0 },
-                  { id: 'perspective', label: 'perspective', available: stats.playerPerspectives.length > 0 },
+                  { id: 'theme', label: 'theme', available: breakdownThemes.length > 0 },
+                  { id: 'perspective', label: 'perspective', available: breakdownPerspectives.length > 0 },
                 ];
                 const maxCount = series[0]?.count ?? 1;
                 return (

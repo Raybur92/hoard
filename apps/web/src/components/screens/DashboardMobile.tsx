@@ -94,6 +94,11 @@ export function DashboardMobile() {
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
   const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = resolvedData;
+  // B-IGDB-3 — defensive fallback for the new IGDB-tag triple fields.
+  // Old cached payloads (SW / in-memory SWR) from before the partial PR
+  // don't carry these. See DashboardDesktop's matching comment.
+  const breakdownThemes = stats.themes ?? [];
+  const breakdownPerspectives = stats.playerPerspectives ?? [];
 
   // First-run / empty state: zero games owned.
   if (stats.totalGames === 0) {
@@ -336,18 +341,18 @@ export function DashboardMobile() {
 
         {/* B-IGDB-3 — IGDB-tag triple breakdown with 3-tab strip
             (genre · theme · perspective). Same tab pattern as desktop. */}
-        {(stats.genres.length + stats.themes.length + stats.playerPerspectives.length) > 0 && (
+        {(stats.genres.length + breakdownThemes.length + breakdownPerspectives.length) > 0 && (
           <div data-testid="card-breakdown" style={{ padding: '14px 16px 0' }}>
             {(() => {
               const series = breakdownTab === 'theme'
-                ? stats.themes
+                ? breakdownThemes
                 : breakdownTab === 'perspective'
-                  ? stats.playerPerspectives
+                  ? breakdownPerspectives
                   : stats.genres;
               const tabs: { id: typeof breakdownTab; label: string; available: boolean }[] = [
                 { id: 'genre', label: 'genre', available: stats.genres.length > 0 },
-                { id: 'theme', label: 'theme', available: stats.themes.length > 0 },
-                { id: 'perspective', label: 'persp.', available: stats.playerPerspectives.length > 0 },
+                { id: 'theme', label: 'theme', available: breakdownThemes.length > 0 },
+                { id: 'perspective', label: 'persp.', available: breakdownPerspectives.length > 0 },
               ];
               const maxCount = series[0]?.count ?? 1;
               return (

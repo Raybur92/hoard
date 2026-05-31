@@ -12,6 +12,7 @@ import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours, formatRelative, shortYear } from '../../lib/utils';
+import { pickTopTags, filterByTag, type TagDimension } from '../../lib/pickTopTags';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
 
@@ -199,10 +200,17 @@ export function LibraryDesktop() {
   const { data: shelvesData, loading: shelvesLoading, error: shelvesError, refetch: refetchShelves } =
     useShelves(12, { enabled: !isFiltered && !isSearching });
 
-  // Filtered single-shelf view: paginated single-status fetch.
+  // Filtered single-shelf view: load the entire shelf so the chip-strip
+  // count matches the sidebar's truthful per-status count. Server cap is
+  // 50000 (effectively unbounded for any realistic personal library); we
+  // request that ceiling so the load is bounded only by the actual shelf
+  // size, not by an arbitrary pagination cap. The displayed "X titles"
+  // count comes from `filteredData.total` (server's pre-pagination count)
+  // when no secondary filters are active, falling back to `items.length`
+  // when filters narrow the visible set.
   const { data: filteredData, loading: filteredLoading, error: filteredError, refetch: refetchFiltered } =
     useGames(
-      isFiltered ? { status: statusParam as GameStatus, limit: 500 } : undefined,
+      isFiltered ? { status: statusParam as GameStatus, limit: 50000 } : undefined,
       { enabled: isFiltered },
     );
 
@@ -243,6 +251,19 @@ export function LibraryDesktop() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [platFilter, setPlatFilter] = useState<string>('all');
 
+  // B-IGDB-3b1 — IGDB-tag triple secondary filters live in URL params per
+  // PAGES_PLAN §4.4.1. `null` = no filter applied. Reset alongside platFilter
+  // when statusParam changes (same React Router 6 reuse-across-route-params
+  // problem documented below).
+  const genreFilter = searchParams.get('genre');
+  const themeFilter = searchParams.get('theme');
+  const perspectiveFilter = searchParams.get('perspective');
+  const setTagFilter = (dimension: 'genre' | 'theme' | 'perspective', value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (value === null) next.delete(dimension); else next.set(dimension, value);
+    setSearchParams(next, { replace: true });
+  };
+
   // Reset platform filter whenever the route's status param changes
   // (including back to the shelves view where statusParam is undefined).
   // Without this, the SAME LibraryDesktop component instance is reused
@@ -252,6 +273,15 @@ export function LibraryDesktop() {
   // strip to reset it from. Reported 2026-05-25.
   useEffect(() => {
     setPlatFilter('all');
+    // B-IGDB-3b1 — same reset for the tag filters. URL-state-resident, so
+    // clearing the params replace-style.
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
+    for (const k of ['genre', 'theme', 'perspective']) {
+      if (next.has(k)) { next.delete(k); changed = true; }
+    }
+    if (changed) setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusParam]);
   // Sort persists in URL so filtered single-shelf views (`/library/Backlog?sort=playtime`)
   // are shareable. Only consumed on the filtered view — shelves view dropped
@@ -268,14 +298,19 @@ export function LibraryDesktop() {
   const coverDims = COVER_DIMS[prefs.coverDensity] ?? COVER_DIMS['standard']!;
 
   const applyFilters = useCallback((games: UserGameDetail[]): UserGameDetail[] => {
-    const result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    let result = platFilter === 'all' ? games : games.filter(ug => Object.keys(ug.playtimeByPlatform).includes(platFilter));
+    // B-IGDB-3b1 — IGDB-tag triple secondary filters compose (intersection)
+    // with the platform filter + each other. URL-state-resident.
+    result = filterByTag(result, 'genre', genreFilter);
+    result = filterByTag(result, 'theme', themeFilter);
+    result = filterByTag(result, 'perspective', perspectiveFilter);
     if (sortBy === 'title') return [...result].sort((a, b) => a.game.title.localeCompare(b.game.title));
     if (sortBy === 'playtime') return [...result].sort((a, b) => {
       const total = (ug: UserGameDetail) => Object.values(ug.playtimeByPlatform).reduce<number>((s, m) => s + (m ?? 0), 0);
       return total(b) - total(a);
     });
     return [...result].sort((a, b) => (b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : 0) - (a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : 0));
-  }, [platFilter, sortBy]);
+  }, [platFilter, sortBy, genreFilter, themeFilter, perspectiveFilter]);
 
   const shelfCounts: Partial<Record<GameStatus, number>> = shelvesData?.counts ?? {};
   const totalGames = (Object.values(shelfCounts) as number[]).reduce((s, n) => s + n, 0);
@@ -388,40 +423,89 @@ export function LibraryDesktop() {
     const items = applyFilters(filteredGames).map(toGameDisplay);
     const isBacklog = statusParam === 'Backlog';
     const accent = cfg?.tone === 'green' ? 'var(--green)' : cfg?.tone === 'amber' ? 'var(--amber)' : cfg?.tone === 'red' ? 'var(--red)' : 'var(--paper)';
+    // Display count — when no secondary filter is active, mirror the
+    // sidebar's truthful per-status count (filteredData.total — server's
+    // pre-pagination count()). When any filter narrows the visible set,
+    // show the filtered count. Reported 2026-05-31 when On Hold showed
+    // 500 (loaded array length) instead of 513 (true shelf size).
+    const anyFilterActive = platFilter !== 'all'
+      || genreFilter !== null
+      || themeFilter !== null
+      || perspectiveFilter !== null;
+    const displayCount = anyFilterActive ? items.length : (filteredData?.total ?? items.length);
     return (
       <>
         {modalElement}
         <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam).toLowerCase()]} />
-        <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <Btn sm onClick={() => navigate('/library')}>
-            <Icon name="back" size={10} /> shelves
-          </Btn>
-          <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
-          <span className="t-up" style={{ fontSize: "var(--text-2xs)", color: accent }}>{cfg?.name ?? statusParam}</span>
-          <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {items.length} titles</span>
-          <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
-          <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
-          <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
-          <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')} ariaLabel="Filter by Steam"><Plat code="ST" /></Chip>
-          <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')} ariaLabel="Filter by PlayStation"><Plat code="PS" /></Chip>
-          <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')} ariaLabel="Filter by Xbox"><Plat code="XB" /></Chip>
-          <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')} ariaLabel="Filter by GOG"><Plat code="GG" /></Chip>
-          <Chip on={platFilter === 'IT'} onClick={() => setPlatFilter(platFilter === 'IT' ? 'all' : 'IT')} ariaLabel="Filter by itch.io"><Plat code="IT" /></Chip>
-          <Chip on={platFilter === 'EP'} onClick={() => setPlatFilter(platFilter === 'EP' ? 'all' : 'EP')} ariaLabel="Filter by Epic Games"><Plat code="EP" /></Chip>
-          <Chip on={platFilter === 'NT'} onClick={() => setPlatFilter(platFilter === 'NT' ? 'all' : 'NT')} ariaLabel="Filter by Nintendo"><Plat code="NT" /></Chip>
-          <span style={{ flex: 1 }} />
-          <button
-            type="button"
-            className="t-mono t-faint"
-            aria-label={`Sort by ${SORT_LABELS[sortBy]}, click to change`}
-            style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit', color: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}
-            onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}
-          >
-            sort: {SORT_LABELS[sortBy]} <Icon name="arrowD" size={10} />
-          </button>
-          <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
-            <Icon name="plus" size={10} /> add game
-          </Btn>
+        <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* First row: shelves crumb · name · count · platform chips · sort · add */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Btn sm onClick={() => navigate('/library')}>
+              <Icon name="back" size={10} /> shelves
+            </Btn>
+            <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
+            <span className="t-up" style={{ fontSize: "var(--text-2xs)", color: accent }}>{cfg?.name ?? statusParam}</span>
+            <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {displayCount} titles</span>
+            <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
+            <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
+            <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
+            <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')} ariaLabel="Filter by Steam"><Plat code="ST" /></Chip>
+            <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')} ariaLabel="Filter by PlayStation"><Plat code="PS" /></Chip>
+            <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')} ariaLabel="Filter by Xbox"><Plat code="XB" /></Chip>
+            <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')} ariaLabel="Filter by GOG"><Plat code="GG" /></Chip>
+            <Chip on={platFilter === 'IT'} onClick={() => setPlatFilter(platFilter === 'IT' ? 'all' : 'IT')} ariaLabel="Filter by itch.io"><Plat code="IT" /></Chip>
+            <Chip on={platFilter === 'EP'} onClick={() => setPlatFilter(platFilter === 'EP' ? 'all' : 'EP')} ariaLabel="Filter by Epic Games"><Plat code="EP" /></Chip>
+            <Chip on={platFilter === 'NT'} onClick={() => setPlatFilter(platFilter === 'NT' ? 'all' : 'NT')} ariaLabel="Filter by Nintendo"><Plat code="NT" /></Chip>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              className="t-mono t-faint"
+              aria-label={`Sort by ${SORT_LABELS[sortBy]}, click to change`}
+              style={{ fontSize: "var(--text-2xs)", display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', background: 'transparent', border: 'none', padding: 4, margin: -4, fontFamily: 'inherit', color: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}
+              onClick={() => setSortBy(SORT_CYCLE[(SORT_CYCLE.indexOf(sortBy) + 1) % SORT_CYCLE.length]!)}
+            >
+              sort: {SORT_LABELS[sortBy]} <Icon name="arrowD" size={10} />
+            </button>
+            <Btn sm variant="primary" onClick={() => setShowAddModal(true)}>
+              <Icon name="plus" size={10} /> add game
+            </Btn>
+          </div>
+
+          {/* B-IGDB-3b1 — IGDB-tag triple chip rows. Each dimension renders
+              its own row, only if the loaded games carry that tag. Compute
+              chip values from the FULL shelf (pre-filter so the user sees
+              all available tags even after narrowing on another dimension). */}
+          {(() => {
+            const fullShelf = filteredData?.games ?? [];
+            const dimensions: { id: TagDimension; label: string; active: string | null }[] = [
+              { id: 'genre', label: 'genre', active: genreFilter },
+              { id: 'theme', label: 'theme', active: themeFilter },
+              { id: 'perspective', label: 'persp', active: perspectiveFilter },
+            ];
+            return dimensions.map((d) => {
+              const tags = pickTopTags(fullShelf, d.id);
+              // If the active filter is a tag NOT in the top-N, include it
+              // anyway so the user can see what's selected + un-toggle it.
+              if (d.active && !tags.includes(d.active)) tags.unshift(d.active);
+              if (tags.length === 0) return null;
+              return (
+                <div key={d.id} data-testid={`library-${d.id}-row`} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', minWidth: 36 }}>{d.label}</span>
+                  <Chip on={d.active === null} onClick={() => setTagFilter(d.id, null)}>all</Chip>
+                  {tags.map((tag) => (
+                    <Chip
+                      key={tag}
+                      on={d.active === tag}
+                      onClick={() => setTagFilter(d.id, d.active === tag ? null : tag)}
+                      ariaLabel={`Filter by ${d.label} ${tag}`}
+                    >
+                      {tag.toLowerCase()}
+                    </Chip>
+                  ))}
+                </div>
+              );
+            });
+          })()}
         </div>
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px' }}>
           {items.length === 0 ? (

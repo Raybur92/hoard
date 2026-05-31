@@ -316,12 +316,23 @@ describe('GET /api/games/shelves (F6)', () => {
 /* ── GET /api/games — limit cap ── */
 
 describe('GET /api/games — limit cap (F6)', () => {
-  it('rejects limit > 500', async () => {
-    const res = await request(app).get('/api/games?limit=2000');
+  // Cap bumped 500 → 5000 → 50000 on 2026-05-31. The 5000 cap was still
+  // arbitrary; 50000 is effectively unbounded for any realistic personal
+  // library and lets Library's chip-strip count mirror the sidebar's
+  // truthful per-status count instead of `loaded.length`.
+  it('rejects limit > 50000', async () => {
+    const res = await request(app).get('/api/games?limit=100000');
     expect(res.status).toBe(400);
   });
 
-  it('accepts limit = 500', async () => {
+  it('accepts limit = 50000 (Library single-shelf request — entire shelf)', async () => {
+    (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.userGame.count as jest.Mock).mockResolvedValue(0);
+    const res = await request(app).get('/api/games?limit=50000');
+    expect(res.status).toBe(200);
+  });
+
+  it('still accepts limit = 500 (legacy/smaller callers)', async () => {
     (prisma.userGame.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.userGame.count as jest.Mock).mockResolvedValue(0);
     const res = await request(app).get('/api/games?limit=500');
