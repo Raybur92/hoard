@@ -341,6 +341,50 @@ export interface DashboardResponse {
   backlogItems: UserGameDetail[];
   platforms: Platform[];
   activity: ActivityHeatmap;
+  /** DEALS-PR1 — Dashboard alerts-strip callout: number of currently
+   *  active deals on the user's wishlist. 0 = no callout rendered. */
+  wishlistDealsCount: number;
+}
+
+/** DEALS-PR1 — per-Deal payload returned by `/api/deals`. One row per
+ *  (game, shop) pair where ITAD reports an active discount. */
+export interface DealRow {
+  id: string;
+  gameId: string;
+  gameTitle: string;
+  gameCoverUrl: string | null;
+  gameHeroImageUrl: string | null;
+  shopId: string;
+  shopName: string;
+  isReseller: boolean;
+  currentPrice: number;
+  originalPrice: number | null;
+  currency: string;
+  discountPct: number;
+  /** URL returned by ITAD (NOT yet affiliate-routed — server rewrites
+   *  per `routeAffiliateUrl()` before sending). */
+  dealUrl: string;
+  voucher: string | null;
+  expiresAt: string | null;
+  storeLow: number | null;
+  isHistoricalLow: boolean;
+  isTrendingDown: boolean;
+  /** `true` when the user has this game on their wishlist (Wishlist
+   *  status OR a non-empty wishlistedPlatforms entry per CM12). Drives
+   *  whether the deal lands in the wishlist section vs broader feed. */
+  isWishlisted: boolean;
+}
+
+export interface DealsResponse {
+  topWishlistDeal: DealRow | null;
+  wishlistDeals: DealRow[];
+  broaderFeed: DealRow[];
+  /** Active market code (e.g. "AT" / "US"); null when the user hasn't
+   *  set one and Accept-Language couldn't be derived at signup. */
+  marketCode: string | null;
+  /** ISO timestamp of the most recent deal-sync run that affected any
+   *  of the rows in this response; null when no deals exist yet. */
+  lastSyncedAt: string | null;
 }
 
 /**
@@ -409,6 +453,9 @@ export interface AuthUser {
   isAdmin: boolean;
   hasRequestedAccess: boolean;
   preferences: UserPreferences;
+  // DEALS-PR1 — ISO 3166-1 alpha-2 (e.g. "AT" / "US"). Drives locale
+  // currency on /deals + Amazon storefront selection (DEALS-PR3).
+  marketCode: string | null;
 }
 
 export interface AuthResponse {
@@ -434,6 +481,8 @@ export interface PatchMeBody {
   showHltb?: boolean;
   coverDensity?: 'cozy' | 'standard' | 'dense';
   terminalCursor?: boolean;
+  /** DEALS-PR1 — ISO 3166-1 alpha-2 market code; `null` clears. */
+  marketCode?: string | null;
 }
 
 /* ── Platform detail (settings) ── */

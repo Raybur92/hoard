@@ -7,6 +7,7 @@ const TABS: { label: string; icon: IconName; path: string }[] = [
   { label: 'Dash',    icon: 'home',  path: '/' },
   { label: 'Library', icon: 'rows',  path: '/library' },
   { label: 'Soon',    icon: 'clock', path: '/releases' },
+  { label: 'Deals',   icon: 'tag',   path: '/deals' },
   { label: 'Me',      icon: 'user',  path: '/settings' },
 ];
 

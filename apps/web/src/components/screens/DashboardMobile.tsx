@@ -93,7 +93,7 @@ export function DashboardMobile() {
 
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
-  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = resolvedData;
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] }, wishlistDealsCount = 0 } = resolvedData;
   // B-IGDB-3 — defensive fallback for the new IGDB-tag triple fields.
   // Old cached payloads (SW / in-memory SWR) from before the partial PR
   // don't carry these. See DashboardDesktop's matching comment.
@@ -181,7 +181,7 @@ export function DashboardMobile() {
             at the top when no alerts are active. */}
         {platforms.some((p) => p.syncStatus === 'error') && (
           <div style={{ padding: '12px 16px 0' }}>
-            <AlertsStrip platforms={platforms} />
+            <AlertsStrip platforms={platforms} wishlistDealsCount={wishlistDealsCount} />
           </div>
         )}
 

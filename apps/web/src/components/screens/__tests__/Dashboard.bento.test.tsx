@@ -126,6 +126,7 @@ const sampleData = (overrides: Partial<DashboardResponse> = {}): DashboardRespon
     } as unknown as DashboardResponse['platforms'][0],
   ],
   activity: { weeks: 24, cells: new Array(24 * 7).fill(0) },
+  wishlistDealsCount: 0,
   ...overrides,
 });
 

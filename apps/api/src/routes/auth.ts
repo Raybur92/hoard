@@ -15,6 +15,7 @@ type DbUser = {
   status: UserStatus; isAdmin: boolean; hasRequestedAccess: boolean;
   hypeThreshold: number; libraryView: string; showHltb: boolean;
   coverDensity: string; terminalCursor: boolean;
+  marketCode: string | null;
 };
 
 function toAuthUser(u: DbUser): AuthUser {
@@ -28,6 +29,7 @@ function toAuthUser(u: DbUser): AuthUser {
       coverDensity: u.coverDensity as AuthUser['preferences']['coverDensity'],
       terminalCursor: u.terminalCursor,
     },
+    marketCode: u.marketCode,
   };
 }
 
@@ -36,6 +38,7 @@ const USER_SELECT = {
   status: true, isAdmin: true, hasRequestedAccess: true,
   hypeThreshold: true, libraryView: true, showHltb: true,
   coverDensity: true, terminalCursor: true,
+  marketCode: true,
 } as const;
 
 const router = Router();
@@ -173,6 +176,13 @@ router.patch('/auth/me', requireUser, requireActive, async (req: Request, res: R
     showHltb: z.boolean().optional(),
     coverDensity: z.enum(['cozy', 'standard', 'dense']).optional(),
     terminalCursor: z.boolean().optional(),
+    // DEALS-PR1 — ISO 3166-1 alpha-2 (e.g. "AT" / "US"). Drives locale
+    // currency on /deals + Amazon storefront selection (DEALS-PR3).
+    // Length cap at 2 to enforce the standard (regex would be cleaner
+    // but Zod doesn't have a stock ISO-3166 validator); explicit null
+    // allowed so users can clear the preference if they don't want
+    // Hoard locale-tracking.
+    marketCode: z.string().length(2).regex(/^[A-Z]{2}$/, 'Must be 2 uppercase letters').nullable().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {

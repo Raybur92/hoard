@@ -27,6 +27,7 @@ import type {
   PostFeedbackBody,
   UserEventListResponse,
   LensIndexResponse,
+  DealsResponse,
 } from '@hoard/types';
 import * as cache from './cache';
 
@@ -178,6 +179,10 @@ export const api = {
   /** B-IGDB-3b2 — IGDB-tag triple values + counts (uncapped). */
   lensIndex: () =>
     get<LensIndexResponse>('/api/games/lens-index'),
+
+  /** DEALS-PR1 — current deals for the user (wishlist + broader feed). */
+  deals: () =>
+    get<DealsResponse>('/api/deals'),
 
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),

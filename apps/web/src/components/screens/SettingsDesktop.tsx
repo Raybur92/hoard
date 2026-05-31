@@ -12,6 +12,7 @@ import { Plat } from '../primitives/Plat';
 import { Hr } from '../primitives/Hr';
 import { FeedbackForm } from '../feedback/FeedbackForm';
 import { api } from '../../lib/api';
+import { MARKET_OPTIONS } from '../../lib/marketCodes';
 import { useUser } from '../../contexts/UserContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import type { AuthUser, PlatformDetail, PlatformCode } from '@hoard/types';
@@ -91,10 +92,19 @@ export function SettingsDesktop() {
 
 /* ── Account section ── */
 
+
 function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
+  // `setUser` from context lets us push the updated AuthUser into the
+  // cross-app store after each save. Without this, `useUser()` consumers
+  // on other pages (e.g. /deals reading user.marketCode) keep showing the
+  // stale value until the next /api/auth/me refresh — Andrea 2026-05-31:
+  // "When i open deals market is not set, i click on change market, ...
+  // but when i go back to the deals page, market is still not selected."
+  const { setUser } = useUser();
   const [name, setName] = useState(initialUser?.name ?? '');
   const [email, setEmail] = useState(initialUser?.email ?? '');
-  const [saved, setSaved] = useState<'name' | 'email' | null>(null);
+  const [marketCode, setMarketCode] = useState(initialUser?.marketCode ?? '');
+  const [saved, setSaved] = useState<'name' | 'email' | 'market' | null>(null);
   const [createdAt, setCreatedAt] = useState(initialUser?.createdAt ?? '');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -102,6 +112,7 @@ function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
     if (initialUser) {
       setName(initialUser.name ?? '');
       setEmail(initialUser.email ?? '');
+      setMarketCode(initialUser.marketCode ?? '');
       setCreatedAt(initialUser.createdAt);
     }
   }, [initialUser]);
@@ -112,9 +123,23 @@ function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
     const current = field === 'name' ? initialUser?.name : initialUser?.email;
     if (trimmed === current) return;
     try {
-      await api.updateMe({ [field]: trimmed });
+      const updated = await api.updateMe({ [field]: trimmed });
+      setUser(updated);
       if (timerRef.current) clearTimeout(timerRef.current);
       setSaved(field);
+      timerRef.current = setTimeout(() => setSaved(null), 2000);
+    } catch { /* silently ignore */ }
+  }
+
+  async function saveMarket(next: string): Promise<void> {
+    setMarketCode(next);
+    const payload = next === '' ? null : next;
+    if (payload === (initialUser?.marketCode ?? null)) return;
+    try {
+      const updated = await api.updateMe({ marketCode: payload });
+      setUser(updated);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setSaved('market');
       timerRef.current = setTimeout(() => setSaved(null), 2000);
     } catch { /* silently ignore */ }
   }
@@ -161,6 +186,26 @@ function AccountSection({ user: initialUser }: { user: AuthUser | null }) {
                   <Icon name="check" size={10} /> verified
                 </span>
             }
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          label="market"
+          hint="drives locale currency on the deals page + amazon storefront for physical deals (coming soon)."
+        >
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <select
+              className="field"
+              style={{ width: 240, fontFamily: 'var(--mono)' }}
+              value={marketCode}
+              onChange={(e) => void saveMarket(e.target.value)}
+              aria-label="Market"
+            >
+              {MARKET_OPTIONS.map((opt) => (
+                <option key={opt.code || 'none'} value={opt.code}>{opt.label}</option>
+              ))}
+            </select>
+            {saved === 'market' && <span role="status" aria-live="polite" className="t-mono t-green" style={{ fontSize: 'var(--text-3xs)' }}>// saved</span>}
           </div>
         </SettingsRow>
 

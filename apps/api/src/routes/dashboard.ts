@@ -141,6 +141,11 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
         lastPlayedAt: true,
         status: true,
         achievementsByPlatform: true,
+        // DEALS-PR1 — gameId + wishlistedPlatforms for the
+        // wishlistDealsCount tally that powers the Dashboard alerts-
+        // strip chip. Cheap; no extra Prisma query needed.
+        gameId: true,
+        wishlistedPlatforms: true,
         // B-IGDB-3 — themes + playerPerspectives ride along on the same
         // `game` projection used by the genre tally below. Three light
         // String[] columns; no schema overhead.
@@ -385,6 +390,16 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
 
   const activity = buildActivity(aggUserGames);
 
+  // DEALS-PR1 — count active deals on the user's wishlist (CM12: status=
+  // Wishlist OR non-empty wishlistedPlatforms). Drives the Dashboard
+  // alerts-strip chip; 0 = no chip rendered.
+  const wishlistGameIds = aggUserGames
+    .filter((ug) => ug.status === 'Wishlist' || (ug.wishlistedPlatforms?.length ?? 0) > 0)
+    .map((ug) => ug.gameId);
+  const wishlistDealsCount = wishlistGameIds.length === 0
+    ? 0
+    : await prisma.deal.count({ where: { gameId: { in: wishlistGameIds } } });
+
   const body: DashboardResponse = {
     stats,
     nowPlaying,
@@ -393,6 +408,7 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     backlogItems,
     platforms: mappedPlatforms,
     activity,
+    wishlistDealsCount,
   };
 
   res.json(body);

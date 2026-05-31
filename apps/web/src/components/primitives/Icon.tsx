@@ -37,6 +37,9 @@ export const ICON_PATHS = {
   home:     'M3 12L12 4l9 8M5 11v9h14v-9',
   rows:     'M3 7h12M3 12h18M3 17h15',
   clock:    'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
+  // DEALS-PR1 — price-tag glyph for the Deals nav entry. Stroke-only,
+  // matches the rest of the icon set's outline aesthetic.
+  tag:      'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01',
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;

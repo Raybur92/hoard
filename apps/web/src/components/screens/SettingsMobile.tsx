@@ -9,6 +9,7 @@ import { Btn } from '../primitives/Btn';
 import { Plat } from '../primitives/Plat';
 import { FeedbackForm } from '../feedback/FeedbackForm';
 import { api } from '../../lib/api';
+import { MARKET_OPTIONS } from '../../lib/marketCodes';
 import { useUser } from '../../contexts/UserContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import type { PlatformDetail, PlatformCode } from '@hoard/types';
@@ -43,7 +44,8 @@ export function SettingsMobile() {
   const [platforms, setPlatforms] = useState<PlatformDetail[]>([]);
   const [draftName, setDraftName] = useState('');
   const [draftEmail, setDraftEmail] = useState('');
-  const [saved, setSaved] = useState<'name' | 'email' | null>(null);
+  const [draftMarket, setDraftMarket] = useState('');
+  const [saved, setSaved] = useState<'name' | 'email' | 'market' | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -60,6 +62,7 @@ export function SettingsMobile() {
     if (user) {
       setDraftName(user.name ?? '');
       setDraftEmail(user.email ?? '');
+      setDraftMarket(user.marketCode ?? '');
     }
   }, [user]);
 
@@ -73,6 +76,22 @@ export function SettingsMobile() {
       setUser(updated);
       if (timerRef.current) clearTimeout(timerRef.current);
       setSaved(field);
+      timerRef.current = setTimeout(() => setSaved(null), 2000);
+    } catch { /* silently ignore */ }
+  }
+
+  // DEALS-PR1 — market picker, mirrors SettingsDesktop. Saves to
+  // User.marketCode + propagates the updated user to context so /deals
+  // (which reads user.marketCode) sees the new value immediately.
+  async function saveMarket(next: string): Promise<void> {
+    setDraftMarket(next);
+    const payload = next === '' ? null : next;
+    if (payload === (user?.marketCode ?? null)) return;
+    try {
+      const updated = await api.updateMe({ marketCode: payload });
+      setUser(updated);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setSaved('market');
       timerRef.current = setTimeout(() => setSaved(null), 2000);
     } catch { /* silently ignore */ }
   }
@@ -180,6 +199,27 @@ export function SettingsMobile() {
                     <Icon name="check" size={9} /> ok
                   </span>
               }
+            </div>
+          </div>
+          {/* DEALS-PR1 — market picker (parity with SettingsDesktop). */}
+          <div style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)' }}>
+            <div className="t-up t-faint" style={{ fontSize: 'var(--text-2xs)' }}>// market</div>
+            <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', marginTop: 2 }}>
+              locale currency on the deals page.
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <select
+                className="field"
+                style={{ flex: 1, fontSize: 'var(--text-xs)', fontFamily: 'var(--mono)' }}
+                value={draftMarket}
+                onChange={(e) => void saveMarket(e.target.value)}
+                aria-label="Market"
+              >
+                {MARKET_OPTIONS.map((opt) => (
+                  <option key={opt.code || 'none'} value={opt.code}>{opt.label}</option>
+                ))}
+              </select>
+              {saved === 'market' && <span role="status" aria-live="polite" className="t-mono t-green" style={{ fontSize: 'var(--text-3xs)' }}>ok</span>}
             </div>
           </div>
           <div style={{ padding: '14px 0' }}>

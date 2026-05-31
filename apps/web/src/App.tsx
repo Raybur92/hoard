@@ -28,6 +28,8 @@ const ReleasesDesktop       = lazyNamed(() => import('./components/screens/Relea
 const ReleasesMobile        = lazyNamed(() => import('./components/screens/ReleasesMobile'),        'ReleasesMobile');
 const ReleasesRecentDesktop = lazyNamed(() => import('./components/screens/ReleasesRecentDesktop'), 'ReleasesRecentDesktop');
 const ReleasesRecentMobile  = lazyNamed(() => import('./components/screens/ReleasesRecentMobile'),  'ReleasesRecentMobile');
+const DealsDesktop          = lazyNamed(() => import('./components/screens/DealsDesktop'),          'DealsDesktop');
+const DealsMobile           = lazyNamed(() => import('./components/screens/DealsMobile'),           'DealsMobile');
 const GameDetailDesktop     = lazyNamed(() => import('./components/screens/GameDetailDesktop'),     'GameDetailDesktop');
 const GameDetailMobile      = lazyNamed(() => import('./components/screens/GameDetailMobile'),      'GameDetailMobile');
 const SettingsDesktop       = lazyNamed(() => import('./components/screens/SettingsDesktop'),       'SettingsDesktop');
@@ -103,6 +105,8 @@ export default function App() {
                 <Route path="/releases"                         element={desktop ? <ReleasesDesktop />       : <ReleasesMobile />} />
                 <Route path="/releases/recent"                  element={desktop ? <ReleasesRecentDesktop /> : <ReleasesRecentMobile />} />
                 <Route path="/upcoming"                         element={<Navigate to="/releases" replace />} />
+                {/* DEALS-PR1 — `/deals` top-level surface. */}
+                <Route path="/deals"                            element={desktop ? <DealsDesktop />          : <DealsMobile />} />
                 <Route path="/game/:id"                         element={desktop ? <GameDetailDesktop />     : <GameDetailMobile />} />
                 <Route path="/settings"                         element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/:section"                element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />

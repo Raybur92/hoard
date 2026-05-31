@@ -55,7 +55,7 @@ function makeAdmin(): AuthUser {
     id: 'admin-id', email: 'andrea@hoard', name: 'Andrea',
     createdAt: '2026-04-01T00:00:00.000Z',
     status: 'ACTIVE', isAdmin: true, hasRequestedAccess: false,
-    preferences: { hypeThreshold: 5, libraryView: 'shelves', showHltb: true, coverDensity: 'standard', terminalCursor: true },
+    preferences: { hypeThreshold: 5, libraryView: 'shelves', showHltb: true, coverDensity: 'standard', terminalCursor: true }, marketCode: null,
   };
 }
 

@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dotO',   path: '/' },
   { label: 'Library',   icon: 'menu',   path: '/library' },
   { label: 'Releases',  icon: 'star',   path: '/releases' },
+  { label: 'Deals',     icon: 'tag',    path: '/deals' },
   { label: 'Settings',  icon: 'cog',    path: '/settings' },
 ] as const;
 

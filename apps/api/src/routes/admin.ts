@@ -381,6 +381,109 @@ router.delete('/admin/feedback/:id', async (req: Request, res: Response): Promis
   res.status(204).end();
 });
 
+/* ── Deals (DEALS-PR1 / docs/PAGES_PLAN.md §8) ────────────────── */
+
+// POST /api/admin/deals/refresh
+//
+// Manual nightly-sync-equivalent trigger. Fires the same orchestrator
+// the cron uses, but runs ad-hoc when an admin wants to refresh.
+// Returns the summary counters from the sync run, or a structured
+// error body when sync fails (instead of letting the error bubble up
+// to a 500-with-no-body that's impossible to debug client-side).
+//
+// Long-running — can take minutes for large libraries; admin should
+// expect a slow response.
+router.post('/admin/deals/refresh', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    // Lazy import keeps the cold-start of admin routes light when the
+    // deals service hasn't been touched yet.
+    const { syncAllDeals } = await import('../services/deals/syncDeals');
+    const result = await syncAllDeals();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[admin/deals/refresh] sync failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    res.status(500).json({ ok: false, error: message, stack });
+  }
+});
+
+// GET /api/admin/deals/status
+//
+// Cheap row counters for Deal + PriceSnapshot so we can see if an
+// in-flight refresh is actually making progress vs. stuck.
+router.get('/admin/deals/status', async (_req: Request, res: Response): Promise<void> => {
+  const [dealsTotal, snapshotsTotal, lastDeal, lastSnapshot] = await Promise.all([
+    prisma.deal.count(),
+    prisma.priceSnapshot.count(),
+    prisma.deal.findFirst({ orderBy: { fetchedAt: 'desc' }, select: { fetchedAt: true } }),
+    prisma.priceSnapshot.findFirst({ orderBy: { snapshotAt: 'desc' }, select: { snapshotAt: true } }),
+  ]);
+  res.json({
+    dealsTotal,
+    snapshotsTotal,
+    lastDealFetchedAt: lastDeal?.fetchedAt ?? null,
+    lastSnapshotAt: lastSnapshot?.snapshotAt ?? null,
+  });
+});
+
+// GET /api/admin/deals/probe?title=Cyberpunk%202077&market=AT
+//
+// Diagnostic probe — resolves one game to its ITAD id and dumps the raw
+// /games/prices/v3 response so we can see what shops + prices came back
+// before classification filters touch them. Used to diagnose 0-deals
+// outcomes (is ITAD silent? is the allow-list too narrow? wrong market?).
+router.get('/admin/deals/probe', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const title = typeof req.query['title'] === 'string' ? req.query['title'] : null;
+    const appIdStr = typeof req.query['appId'] === 'string' ? req.query['appId'] : null;
+    const market = (typeof req.query['market'] === 'string' ? req.query['market'] : null) ?? 'US';
+    if (!title && !appIdStr) {
+      res.status(400).json({ ok: false, error: 'pass ?title= or ?appId=' });
+      return;
+    }
+    const { lookupItadIdsByTitles, lookupItadIdsBySteamAppIds, getPricesForGames } = await import('../services/itad');
+    const { classifyShop } = await import('../services/deals/storefronts');
+    let itadId: string | null = null;
+    if (appIdStr) {
+      const map = await lookupItadIdsBySteamAppIds([Number(appIdStr)]);
+      itadId = map.get(Number(appIdStr)) ?? null;
+    } else if (title) {
+      const map = await lookupItadIdsByTitles([title]);
+      itadId = map.get(title) ?? null;
+    }
+    if (!itadId) {
+      res.json({ ok: true, found: false, market, query: { title, appId: appIdStr } });
+      return;
+    }
+    const prices = await getPricesForGames([itadId], market);
+    const annotated = prices.flatMap((g) => g.deals.map((d) => ({
+      shopName: d.shop.name,
+      shopId: d.shop.id,
+      classification: classifyShop(d.shop.name),
+      price: d.price.amount,
+      currency: d.price.currency,
+      regular: d.regular.amount,
+      cut: d.cut,
+      url: d.url,
+    })));
+    res.json({
+      ok: true,
+      found: true,
+      market,
+      itadId,
+      shopsReturned: annotated.length,
+      inScope: annotated.filter((d) => d.classification !== 'excluded').length,
+      onSale: annotated.filter((d) => d.cut > 0).length,
+      deals: annotated,
+    });
+  } catch (err) {
+    console.error('[admin/deals/probe] failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
 /* ── Events / Telemetry (TL1.3 of docs/TELEMETRY_PLAN.md) ────── */
 
 // GET /api/admin/events

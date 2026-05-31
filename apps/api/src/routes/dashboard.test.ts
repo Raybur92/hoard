@@ -10,6 +10,8 @@ jest.mock('@hoard/db', () => ({
     },
     platform: { findMany: jest.fn() },
     wishlistRelease: { findMany: jest.fn() },
+    // DEALS-PR1 — dashboard tallies wishlistDealsCount via prisma.deal.count
+    deal: { count: jest.fn() },
   },
 }));
 
@@ -139,6 +141,9 @@ function setupDashboard({
     .mockResolvedValueOnce(backlogTop);
   (prisma.wishlistRelease.findMany as jest.Mock).mockResolvedValue(wishlist);
   (prisma.platform.findMany as jest.Mock).mockResolvedValue(platforms);
+  // DEALS-PR1 — wishlistDealsCount via prisma.deal.count; default 0 for tests
+  // that don't care about the deals tally.
+  (prisma.deal.count as jest.Mock).mockResolvedValue(0);
 }
 
 describe('GET /api/dashboard', () => {
@@ -396,6 +401,10 @@ describe('GET /api/dashboard — achievements rollup (T6, M0 per-platform shape)
       lastPlayedAt: true,
       status: true,
       achievementsByPlatform: true,
+      // DEALS-PR1 added gameId + wishlistedPlatforms so the dashboard
+      // can tally wishlistDealsCount in the same pass.
+      gameId: true,
+      wishlistedPlatforms: true,
       // B-IGDB-3 added themes + playerPerspectives alongside genres so the
       // dashboard 3-tab breakdown can render all three series from a single
       // pass over aggUserGames. One row per UserGame, three light String[]

@@ -119,6 +119,14 @@ model User {
   coverDensity   String  @default("standard")
   terminalCursor Boolean @default(true)
 
+  // DEALS-PR1 — ISO 3166-1 alpha-2 market code (e.g. "AT" / "IT" / "US" / "DE").
+  // Drives both Amazon storefront selection (DEALS-PR3) AND locale currency
+  // display across `/deals` + GameDetail S1 price-offers card. Defaults to
+  // null; populated by Accept-Language-derived guess on first signup OR by
+  // the user via Settings → Account market picker. Pages that need a market
+  // gracefully fall back when null (omit non-localized fields).
+  marketCode String?
+
   platforms          Platform[]
   userGames          UserGame[]
   wishlists          WishlistRelease[]
@@ -267,8 +275,10 @@ model Game {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  userGames UserGame[]
-  hltbData  HltbData?
+  userGames      UserGame[]
+  hltbData       HltbData?
+  deals          Deal[]
+  priceSnapshots PriceSnapshot[]
 }
 
 model UserGame {
@@ -411,4 +421,71 @@ model UserEvent {
   @@index([createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@index([event, createdAt(sort: Desc)])
+}
+
+// DEALS-PR1 — current deal snapshot per (game, storefront) keyed by ITAD's
+// per-shop entry. One row per active deal; the nightly cron upserts these
+// based on ITAD's `/games/prices/v2` response. Rows with no current deal
+// (no discount or game not on sale at that shop) are NOT persisted —
+// the absence of a row means "no current deal here." Stale rows are
+// pruned when fetchedAt < (now - 48h).
+//
+// `isReseller` distinguishes Tier-1 first-party storefronts (always shown)
+// from Tier-2 trusted-reseller allow-list entries (gated by config). The
+// shopName + shopId tuple comes from ITAD's `/service/shops/v1` reference.
+//
+// `isHistoricalLow` is computed at write time from ITAD's per-shop
+// historical-low lookup; lets the `// historical low` chip render without
+// re-querying ITAD on every page-load.
+model Deal {
+  id              String    @id @default(cuid())
+  gameId          String
+  shopId          String    // ITAD shop ID (e.g. "61" for Steam)
+  shopName        String    // human-readable: "Steam" / "Humble" / "Instant Gaming"
+  isReseller      Boolean   // false for Tier-1 official storefronts, true for allow-list
+  currentPrice    Float     // shop's native currency (per user's marketCode at query time)
+  originalPrice   Float?
+  currency        String    // ISO 4217 (e.g. "EUR" / "USD")
+  discountPct     Int       // 0-100
+  dealUrl         String    // direct URL (affiliate routing happens at render time)
+  voucher         String?   // ITAD voucher code if applicable
+  expiresAt       DateTime?
+  storeLow        Float?    // historical low at this shop (for reference + chip)
+  isHistoricalLow Boolean   @default(false) // currentPrice == storeLow
+  // Computed at sync time from PriceSnapshot history: ≥2 distinct price
+  // drops within the trailing 30 days (OQ-DEALS-13 default threshold).
+  // Cached on the Deal row so /api/deals doesn't have to count drops
+  // per deal on every page-load.
+  isTrendingDown  Boolean   @default(false)
+  fetchedAt       DateTime  @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, shopId])
+  @@index([gameId])
+  @@index([shopId])
+  @@index([fetchedAt])
+}
+
+// DEALS-PR1 — per-game-per-shop price history. Written daily by the nightly
+// cron (one row per game per shop per day). Powers the `// trending down`
+// chip via "≥2 drops within sliding window N days" (OQ-DEALS-13 default:
+// N=30, threshold=2). Bounded growth via periodic prune (snapshots older
+// than 90 days dropped — only the chip query needs ~30 days history).
+//
+// Snapshots are TAKEN even when the game isn't on sale — captures the
+// baseline price for trend detection. ITAD's `/games/prices/v2` returns
+// the regular price even when no discount; we persist that.
+model PriceSnapshot {
+  id         String   @id @default(cuid())
+  gameId     String
+  shopId     String
+  price      Float
+  currency   String
+  snapshotAt DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, shopId, snapshotAt(sort: Desc)])
+  @@index([snapshotAt])
 }

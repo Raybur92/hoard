@@ -66,6 +66,7 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
       hypeThreshold: 5, libraryView: 'shelves', showHltb: true,
       coverDensity: 'standard', terminalCursor: true,
     },
+    marketCode: null,
     ...overrides,
   };
 }

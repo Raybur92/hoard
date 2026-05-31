@@ -626,7 +626,7 @@ select:focus-visible {
 
 .m-tabbar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border-top: 1px solid var(--rule);
   background: var(--ink);
   flex-shrink: 0;

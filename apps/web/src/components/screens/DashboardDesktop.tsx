@@ -148,7 +148,7 @@ export function DashboardDesktop() {
 
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
-  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] } } = resolvedData;
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] }, wishlistDealsCount = 0 } = resolvedData;
   // B-IGDB-3 — defensive fallback for the new IGDB-tag triple fields.
   // Old cached payloads (Service Worker / in-memory SWR) from before the
   // partial PR don't carry these; without the fallback, the breakdown card
@@ -274,7 +274,7 @@ export function DashboardDesktop() {
 
           {/* Slim alerts strip — span-12 at top. Returns null when no alerts
               are active; grid reflows naturally so row 1 starts immediately. */}
-          <AlertsStrip platforms={platforms} />
+          <AlertsStrip platforms={platforms} wishlistDealsCount={wishlistDealsCount} />
 
           {/* Row 1 — now playing (span-6) + next release countdown (span-3) +
               <empty 3-col tail for the next-event slot that EV-PR1 will fill> */}
