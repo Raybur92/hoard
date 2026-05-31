@@ -11,7 +11,8 @@ import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours } from '../../lib/utils';
-import { pickTopTags, filterByTag, type TagDimension } from '../../lib/pickTopTags';
+import { pickTopTagCounts, filterByTag, type TagDimension } from '../../lib/pickTopTags';
+import { FilterPopover } from '../library/FilterPopover';
 import { PullableScroll } from '../primitives/PullableScroll';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
@@ -343,11 +344,13 @@ export function LibraryMobile() {
           </Chip>
         </div>
 
-        {/* B-IGDB-3b1 — IGDB-tag triple chip rows. Each dimension scrolls
-            horizontally independently; only renders when the loaded games
-            actually carry that tag. Chip values are derived from the FULL
-            shelf (pre-filter) so the user sees all options even after
-            narrowing on another dimension. */}
+        {/* IGDB-tag triple secondary filters as inline single-select
+            dropdowns (replaces B-IGDB-3b1 chip strips after Andrea's
+            2026-05-31 call). One horizontal row holding three compact
+            triggers; only renders dimensions whose loaded shelf carries
+            at least one tag. Options are top-N from the FULL shelf
+            (pre-filter), with the active value threaded back in if it
+            falls outside the top-N. */}
         {(() => {
           const fullShelf = filteredData?.games ?? [];
           const dimensions: { id: TagDimension; label: string; active: string | null }[] = [
@@ -355,32 +358,32 @@ export function LibraryMobile() {
             { id: 'theme', label: 'theme', active: themeFilter },
             { id: 'perspective', label: 'persp', active: perspectiveFilter },
           ];
-          return dimensions.map((d) => {
-            const tags = pickTopTags(fullShelf, d.id);
-            if (d.active && !tags.includes(d.active)) tags.unshift(d.active);
-            if (tags.length === 0) return null;
+          const rendered = dimensions.map((d) => {
+            const opts = pickTopTagCounts(fullShelf, d.id);
+            if (d.active && !opts.some((o) => o.name === d.active)) {
+              opts.unshift({ name: d.active, count: 0 });
+            }
+            if (opts.length === 0) return null;
             return (
-              <div
-                key={d.id}
-                data-testid={`library-${d.id}-row`}
-                className="thin-scroll"
-                style={{ padding: '6px 16px 0', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, alignItems: 'center' }}
-              >
-                <span className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', minWidth: 36, flexShrink: 0 }}>{d.label}</span>
-                <Chip on={d.active === null} onClick={() => setTagFilter(d.id, null)}>all</Chip>
-                {tags.map((tag) => (
-                  <Chip
-                    key={tag}
-                    on={d.active === tag}
-                    onClick={() => setTagFilter(d.id, d.active === tag ? null : tag)}
-                    ariaLabel={`Filter by ${d.label} ${tag}`}
-                  >
-                    {tag.toLowerCase()}
-                  </Chip>
-                ))}
+              <div key={d.id} data-testid={`library-${d.id}-filter`} style={{ flexShrink: 0 }}>
+                <FilterPopover
+                  label={d.label}
+                  value={d.active}
+                  options={opts}
+                  onChange={(next) => setTagFilter(d.id, next)}
+                />
               </div>
             );
-          });
+          }).filter(Boolean);
+          if (rendered.length === 0) return null;
+          return (
+            <div
+              className="thin-scroll"
+              style={{ padding: '6px 16px 0', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, alignItems: 'center' }}
+            >
+              {rendered}
+            </div>
+          );
         })()}
         <PullableScroll onRefresh={refetch} ariaLabel={`${title} games`} style={{ padding: '12px 16px 20px' }}>
           {items.length === 0 ? (

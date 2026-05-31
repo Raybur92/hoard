@@ -29,6 +29,19 @@ export function pickTopTags(
   dimension: TagDimension,
   cap = 20,
 ): string[] {
+  return pickTopTagCounts(games, dimension, cap).map(({ name }) => name);
+}
+
+/**
+ * Same ordering as {@link pickTopTags} but returns occurrence counts.
+ * Used by the FilterPopover to show `RPG (31)` next to each option.
+ */
+export interface TagCount { name: string; count: number; }
+export function pickTopTagCounts(
+  games: UserGameDetail[],
+  dimension: TagDimension,
+  cap = 20,
+): TagCount[] {
   const counts = new Map<string, number>();
   for (const g of games) {
     const arr = dimension === 'genre'
@@ -46,7 +59,7 @@ export function pickTopTags(
       bCount - aCount || aName.localeCompare(bName),
     )
     .slice(0, cap)
-    .map(([name]) => name);
+    .map(([name, count]) => ({ name, count }));
 }
 
 /**

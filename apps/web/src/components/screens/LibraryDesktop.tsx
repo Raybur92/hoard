@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { TopBar } from '../layout/TopBar';
@@ -12,7 +12,8 @@ import { useGames } from '../../hooks/useGames';
 import { useShelves } from '../../hooks/useShelves';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { minutesToHours, formatRelative, shortYear } from '../../lib/utils';
-import { pickTopTags, filterByTag, type TagDimension } from '../../lib/pickTopTags';
+import { pickTopTagCounts, filterByTag, type TagDimension } from '../../lib/pickTopTags';
+import { FilterPopover } from '../library/FilterPopover';
 import { AddGameModal } from './AddGameModal';
 import type { UserGameDetail, GameStatus } from '@hoard/types';
 
@@ -82,7 +83,12 @@ interface ShelfItemProps {
   showHltb: boolean;
 }
 
-function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps) {
+// PERF-2 — memoized so chip-click / sort changes don't re-render every
+// card. Most filter operations change the FILTERED SET (which subset is
+// visible) without mutating any individual card's props, so memo prevents
+// ~500 re-renders per chip click on Andrea's library. The shallow-compare
+// cost is negligible vs. the saved render work.
+const ShelfItem = memo(function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps) {
   const navigate = useNavigate();
   const tone = g.progress === 100 ? 'var(--paper)' : g.progress > 0 ? 'var(--green)' : 'var(--paper-faint)';
   return (
@@ -115,7 +121,7 @@ function ShelfItem({ g, w = 130, h = 174, isBacklog, showHltb }: ShelfItemProps)
       </div>
     </button>
   );
-}
+});
 
 interface ShelfProps {
   idx: number;
@@ -438,7 +444,10 @@ export function LibraryDesktop() {
         {modalElement}
         <TopBar crumbs={['hoard', 'library', (cfg?.name ?? statusParam).toLowerCase()]} />
         <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* First row: shelves crumb · name · count · platform chips · sort · add */}
+          {/* Row 1: shelves crumb · name · count · (spacer) · sort · add.
+              Primary action [+ add game] is always anchored top-right on
+              its own row — never wraps below filter controls (Andrea
+              2026-05-31). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Btn sm onClick={() => navigate('/library')}>
               <Icon name="back" size={10} /> shelves
@@ -446,16 +455,6 @@ export function LibraryDesktop() {
             <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
             <span className="t-up" style={{ fontSize: "var(--text-2xs)", color: accent }}>{cfg?.name ?? statusParam}</span>
             <span className="t-mono t-faint" style={{ fontSize: "var(--text-2xs)" }}>· {displayCount} titles</span>
-            <div style={{ width: 1, height: 20, background: 'var(--rule)' }} />
-            <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
-            <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
-            <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')} ariaLabel="Filter by Steam"><Plat code="ST" /></Chip>
-            <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')} ariaLabel="Filter by PlayStation"><Plat code="PS" /></Chip>
-            <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')} ariaLabel="Filter by Xbox"><Plat code="XB" /></Chip>
-            <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')} ariaLabel="Filter by GOG"><Plat code="GG" /></Chip>
-            <Chip on={platFilter === 'IT'} onClick={() => setPlatFilter(platFilter === 'IT' ? 'all' : 'IT')} ariaLabel="Filter by itch.io"><Plat code="IT" /></Chip>
-            <Chip on={platFilter === 'EP'} onClick={() => setPlatFilter(platFilter === 'EP' ? 'all' : 'EP')} ariaLabel="Filter by Epic Games"><Plat code="EP" /></Chip>
-            <Chip on={platFilter === 'NT'} onClick={() => setPlatFilter(platFilter === 'NT' ? 'all' : 'NT')} ariaLabel="Filter by Nintendo"><Plat code="NT" /></Chip>
             <span style={{ flex: 1 }} />
             <button
               type="button"
@@ -470,42 +469,50 @@ export function LibraryDesktop() {
               <Icon name="plus" size={10} /> add game
             </Btn>
           </div>
-
-          {/* B-IGDB-3b1 — IGDB-tag triple chip rows. Each dimension renders
-              its own row, only if the loaded games carry that tag. Compute
-              chip values from the FULL shelf (pre-filter so the user sees
-              all available tags even after narrowing on another dimension). */}
-          {(() => {
-            const fullShelf = filteredData?.games ?? [];
-            const dimensions: { id: TagDimension; label: string; active: string | null }[] = [
-              { id: 'genre', label: 'genre', active: genreFilter },
-              { id: 'theme', label: 'theme', active: themeFilter },
-              { id: 'perspective', label: 'persp', active: perspectiveFilter },
-            ];
-            return dimensions.map((d) => {
-              const tags = pickTopTags(fullShelf, d.id);
-              // If the active filter is a tag NOT in the top-N, include it
-              // anyway so the user can see what's selected + un-toggle it.
-              if (d.active && !tags.includes(d.active)) tags.unshift(d.active);
-              if (tags.length === 0) return null;
-              return (
-                <div key={d.id} data-testid={`library-${d.id}-row`} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span className="t-up t-faint" style={{ fontSize: 'var(--text-3xs)', minWidth: 36 }}>{d.label}</span>
-                  <Chip on={d.active === null} onClick={() => setTagFilter(d.id, null)}>all</Chip>
-                  {tags.map((tag) => (
-                    <Chip
-                      key={tag}
-                      on={d.active === tag}
-                      onClick={() => setTagFilter(d.id, d.active === tag ? null : tag)}
-                      ariaLabel={`Filter by ${d.label} ${tag}`}
-                    >
-                      {tag.toLowerCase()}
-                    </Chip>
-                  ))}
-                </div>
-              );
-            });
-          })()}
+          {/* Row 2: plat label · platform chips · (spacer) · genre · theme
+              · persp dropdowns. Filters cluster together; if the row gets
+              too wide it wraps within this row only — [+ add game] above
+              stays anchored. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span className="t-up t-faint" style={{ fontSize: "var(--text-3xs)" }}>plat</span>
+            <Chip on={platFilter === 'all'} onClick={() => setPlatFilter('all')}>all</Chip>
+            <Chip on={platFilter === 'ST'} onClick={() => setPlatFilter(platFilter === 'ST' ? 'all' : 'ST')} ariaLabel="Filter by Steam"><Plat code="ST" /></Chip>
+            <Chip on={platFilter === 'PS'} onClick={() => setPlatFilter(platFilter === 'PS' ? 'all' : 'PS')} ariaLabel="Filter by PlayStation"><Plat code="PS" /></Chip>
+            <Chip on={platFilter === 'XB'} onClick={() => setPlatFilter(platFilter === 'XB' ? 'all' : 'XB')} ariaLabel="Filter by Xbox"><Plat code="XB" /></Chip>
+            <Chip on={platFilter === 'GG'} onClick={() => setPlatFilter(platFilter === 'GG' ? 'all' : 'GG')} ariaLabel="Filter by GOG"><Plat code="GG" /></Chip>
+            <Chip on={platFilter === 'IT'} onClick={() => setPlatFilter(platFilter === 'IT' ? 'all' : 'IT')} ariaLabel="Filter by itch.io"><Plat code="IT" /></Chip>
+            <Chip on={platFilter === 'EP'} onClick={() => setPlatFilter(platFilter === 'EP' ? 'all' : 'EP')} ariaLabel="Filter by Epic Games"><Plat code="EP" /></Chip>
+            <Chip on={platFilter === 'NT'} onClick={() => setPlatFilter(platFilter === 'NT' ? 'all' : 'NT')} ariaLabel="Filter by Nintendo"><Plat code="NT" /></Chip>
+            <span style={{ flex: 1 }} />
+            {(() => {
+              const fullShelf = filteredData?.games ?? [];
+              const dimensions: { id: TagDimension; label: string; active: string | null }[] = [
+                { id: 'genre', label: 'genre', active: genreFilter },
+                { id: 'theme', label: 'theme', active: themeFilter },
+                { id: 'perspective', label: 'persp', active: perspectiveFilter },
+              ];
+              return dimensions.map((d) => {
+                const opts = pickTopTagCounts(fullShelf, d.id);
+                if (d.active && !opts.some((o) => o.name === d.active)) {
+                  opts.unshift({ name: d.active, count: 0 });
+                }
+                if (opts.length === 0) return null;
+                return (
+                  // `minWidth: 0` lets this flex child shrink with the
+                  // FilterPopover's ellipsis instead of wrapping the row
+                  // (Andrea 2026-05-31).
+                  <div key={d.id} data-testid={`library-${d.id}-filter`} style={{ minWidth: 0 }}>
+                    <FilterPopover
+                      label={d.label}
+                      value={d.active}
+                      options={opts}
+                      onChange={(next) => setTagFilter(d.id, next)}
+                    />
+                  </div>
+                );
+              });
+            })()}
+          </div>
         </div>
         <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px' }}>
           {items.length === 0 ? (
