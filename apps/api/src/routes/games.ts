@@ -585,6 +585,65 @@ function minDate(a: Date, b: Date): Date {
   return a.getTime() <= b.getTime() ? a : b;
 }
 
+/**
+ * R2 — remap durability (post-GD-PR3, 2026-06-01).
+ *
+ * When the user remaps a UserGame from a "wrong" source Game to the
+ * "right" target Game, we also need to MOVE the platform-side IDs
+ * (steamAppId / psnConceptId / xboxTitleId / gogAppId / itchGameId /
+ * epicCatalogItemId / nintendoTitleId / psnNpCommunicationId) from
+ * source → target. Without this, the next platform sync re-resolves
+ * the same platform-side ID to the SOURCE Game (since that's where the
+ * mapping was) and creates a new UserGame pointing at the wrong Game,
+ * undoing the user's remap. Andrea hit this 10+ times before R2.
+ *
+ * Rule: move a field's value from source to target IFF source has a
+ * non-null value AND target has null. We never overwrite an existing
+ * target value — that implies the target legitimately has a different
+ * mapping for that platform (someone else's UserGame may already use
+ * it). The source's value in that case is left alone since we don't
+ * know if it's wrong globally; only that it was wrong for this user.
+ */
+const PLATFORM_ID_FIELDS = [
+  'steamAppId',
+  'xboxTitleId',
+  'psnConceptId',
+  'psnNpCommunicationId',
+  'itchGameId',
+  'epicCatalogItemId',
+  'nintendoTitleId',
+  'gogAppId',
+] as const;
+
+type PlatformIdField = (typeof PLATFORM_ID_FIELDS)[number];
+
+interface FoldablePlatformIds {
+  clearOnSource: Partial<Record<PlatformIdField, null>>;
+  setOnTarget: Partial<Record<PlatformIdField, number | string>>;
+  fields: PlatformIdField[];
+}
+
+function computeRemapFold(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+): FoldablePlatformIds {
+  const clearOnSource: Partial<Record<PlatformIdField, null>> = {};
+  const setOnTarget: Partial<Record<PlatformIdField, number | string>> = {};
+  const fields: PlatformIdField[] = [];
+  for (const f of PLATFORM_ID_FIELDS) {
+    const sourceVal = source[f];
+    const targetVal = target[f];
+    const sourceHas = sourceVal !== null && sourceVal !== undefined;
+    const targetMissing = targetVal === null || targetVal === undefined;
+    if (sourceHas && targetMissing) {
+      clearOnSource[f] = null;
+      setOnTarget[f] = sourceVal as number | string;
+      fields.push(f);
+    }
+  }
+  return { clearOnSource, setOnTarget, fields };
+}
+
 router.post('/games/:id/remap', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const userId = req.userId;
@@ -691,7 +750,29 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
       const sourceRating = existing.rating;
       const targetRating = collision.rating;
 
+      // R2 — fold source Game's platform-side IDs into the target Game so
+      // future syncs resolve directly to the (correct) target. Computed
+      // BEFORE the transaction so we know whether to do extra work; clear
+      // happens BEFORE set inside the transaction to release any @unique
+      // constraints cleanly.
+      const fold = computeRemapFold(existing.game, collision.game);
+
       const merged = await prisma.$transaction(async (tx) => {
+        if (fold.fields.length > 0) {
+          // The `data` casts here are safe — `clearOnSource` values are
+          // always null, `setOnTarget` values came from the source Game's
+          // own typed columns. Prisma's per-field discriminated union
+          // doesn't model our row-source-of-truth, so we narrow at the
+          // call boundary.
+          await tx.game.update({
+            where: { id: existing.game.id },
+            data: fold.clearOnSource as unknown as Parameters<typeof tx.game.update>[0]['data'],
+          });
+          await tx.game.update({
+            where: { id: collision.game.id },
+            data: fold.setOnTarget as unknown as Parameters<typeof tx.game.update>[0]['data'],
+          });
+        }
         const updated = await tx.userGame.update({
           where: { id: collision.id },
           data: {
@@ -728,15 +809,36 @@ router.post('/games/:id/remap', requireUser, requireActive, async (req: Request,
     return;
   }
 
-  const updated = await prisma.userGame.update({
-    where: { id },
-    data: { gameId: newGame.id },
-    include: { game: { include: { hltbData: true } } },
+  // R2 — fold source Game's platform-side IDs into the target so syncs
+  // respect the remap. See computeRemapFold + PLATFORM_ID_FIELDS for
+  // the truth table. The non-collision path becomes transactional too
+  // (was a single update before R2) so the fold + UserGame rebind
+  // happen atomically.
+  const fold = computeRemapFold(existing.game, newGame);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    if (fold.fields.length > 0) {
+      await tx.game.update({
+        where: { id: existing.game.id },
+        data: fold.clearOnSource as unknown as Parameters<typeof tx.game.update>[0]['data'],
+      });
+      await tx.game.update({
+        where: { id: newGame.id },
+        data: fold.setOnTarget as unknown as Parameters<typeof tx.game.update>[0]['data'],
+      });
+    }
+    return tx.userGame.update({
+      where: { id },
+      data: { gameId: newGame.id },
+      include: { game: { include: { hltbData: true } } },
+    });
   });
 
   // Trigger background HLTB fetch for the (possibly new) Game row if it
   // doesn't already have HLTB data. Same pattern used by the manual-add
-  // and runSync flows.
+  // and runSync flows. Reads steamAppId from `updated.game` (post-fold
+  // so if R2 just moved a steamAppId from source onto target, HLTB
+  // lookup picks up the now-populated value).
   if (!updated.game.hltbData) {
     triggerHltbBackground(updated.game.id, updated.game.title, updated.game.steamAppId, updated.game.igdbId);
   }

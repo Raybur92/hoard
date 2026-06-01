@@ -628,11 +628,19 @@ describe('POST /api/games/:id/remap', () => {
       .mockResolvedValueOnce(null);      // collision check (no other UserGame for new gameId)
     (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
     (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-new', igdbId: 5000, title: 'Slay the Spire', steamAppId: null, hltbData: null });
-    (prisma.userGame.update as jest.Mock).mockResolvedValue({
+
+    // R2 (2026-06-01) — non-collision remap is now wrapped in
+    // $transaction. The single userGame.update became tx.userGame.update;
+    // when source.game has platform-side IDs to fold, tx.game.update
+    // fires twice (clear source, set target) before the userGame update.
+    const txUserGameUpdate = jest.fn().mockResolvedValue({
       ...original,
       gameId: 'game-new',
       game: { id: 'game-new', igdbId: 5000, title: 'Slay the Spire', developer: 'Mega Crit', releaseYear: 2019, genres: ['Card Game'], coverUrl: 'https://example.com/cover.jpg', steamAppId: null, hltbData: null },
     });
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb) =>
+      cb({ userGame: { update: txUserGameUpdate }, game: { update: jest.fn() } }),
+    );
 
     const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
 
@@ -641,8 +649,8 @@ describe('POST /api/games/:id/remap', () => {
     expect(res.body.notes).toBe('best run yet');     // notes preserved
     expect(res.body.status).toBe('Playing');         // status preserved
 
-    // userGame.update only touches gameId — nothing else
-    const updateData = (prisma.userGame.update as jest.Mock).mock.calls[0][0].data;
+    // tx.userGame.update only touches gameId — nothing else
+    const updateData = txUserGameUpdate.mock.calls[0][0].data;
     expect(updateData).toEqual({ gameId: 'game-new' });
 
     expect(prisma.game.upsert).toHaveBeenCalledWith(
@@ -651,6 +659,132 @@ describe('POST /api/games/:id/remap', () => {
         create: expect.objectContaining({ igdbId: 5000, title: 'Slay the Spire' }),
       }),
     );
+  });
+
+  /* ── R2 — remap durability: fold platform-side IDs source → target ── */
+
+  describe('R2: platform-side ID fold (2026-06-01)', () => {
+    it('moves source.steamAppId onto target when target has null; clears source', async () => {
+      const source = {
+        ...makeUserGame({ igdbId: 9999 }),
+        game: { ...makeUserGame().game, id: 'game-source', steamAppId: 599140, psnConceptId: null, xboxTitleId: null, gogAppId: null, itchGameId: null, epicCatalogItemId: null, nintendoTitleId: null, psnNpCommunicationId: null },
+      };
+      (prisma.userGame.findFirst as jest.Mock)
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(null);
+      (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-target', igdbId: 5000, title: 'Graveyard Keeper', steamAppId: null, psnConceptId: null, xboxTitleId: null, gogAppId: null, itchGameId: null, epicCatalogItemId: null, nintendoTitleId: null, psnNpCommunicationId: null, hltbData: null });
+
+      const txGameUpdate = jest.fn();
+      const txUserGameUpdate = jest.fn().mockResolvedValue({
+        ...source,
+        gameId: 'game-target',
+        game: { id: 'game-target', igdbId: 5000, title: 'Graveyard Keeper', developer: 'Lazy Bear', releaseYear: 2018, genres: [], coverUrl: null, steamAppId: 599140, hltbData: null },
+      });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb) =>
+        cb({ userGame: { update: txUserGameUpdate }, game: { update: txGameUpdate } }),
+      );
+
+      const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
+      expect(res.status).toBe(200);
+
+      // tx.game.update fired twice: clear source then set target
+      expect(txGameUpdate).toHaveBeenCalledTimes(2);
+      expect(txGameUpdate.mock.calls[0][0]).toMatchObject({
+        where: { id: 'game-source' },
+        data: { steamAppId: null },
+      });
+      expect(txGameUpdate.mock.calls[1][0]).toMatchObject({
+        where: { id: 'game-target' },
+        data: { steamAppId: 599140 },
+      });
+    });
+
+    it('does NOT move source value when target already has a (different) value for that field', async () => {
+      const source = {
+        ...makeUserGame({ igdbId: 9999 }),
+        game: { ...makeUserGame().game, id: 'game-source', steamAppId: 100, psnConceptId: null, xboxTitleId: null, gogAppId: null, itchGameId: null, epicCatalogItemId: null, nintendoTitleId: null, psnNpCommunicationId: null },
+      };
+      (prisma.userGame.findFirst as jest.Mock)
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(null);
+      (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
+      // Target already has steamAppId=200 — we MUST NOT overwrite it.
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-target', igdbId: 5000, title: 'Other', steamAppId: 200, psnConceptId: null, xboxTitleId: null, gogAppId: null, itchGameId: null, epicCatalogItemId: null, nintendoTitleId: null, psnNpCommunicationId: null, hltbData: null });
+
+      const txGameUpdate = jest.fn();
+      const txUserGameUpdate = jest.fn().mockResolvedValue({
+        ...source,
+        gameId: 'game-target',
+        game: { id: 'game-target', igdbId: 5000, title: 'Other', developer: 'X', releaseYear: 2019, genres: [], coverUrl: null, steamAppId: 200, hltbData: null },
+      });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb) =>
+        cb({ userGame: { update: txUserGameUpdate }, game: { update: txGameUpdate } }),
+      );
+
+      const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
+      expect(res.status).toBe(200);
+
+      // No platform-id moves happened — only userGame update fired.
+      expect(txGameUpdate).not.toHaveBeenCalled();
+    });
+
+    it('moves multiple platform-side IDs in a single transaction', async () => {
+      const source = {
+        ...makeUserGame({ igdbId: 9999 }),
+        game: {
+          ...makeUserGame().game,
+          id: 'game-source',
+          steamAppId: 100,
+          psnConceptId: 200,
+          xboxTitleId: null,
+          gogAppId: 300,
+          itchGameId: null,
+          epicCatalogItemId: 'ep-xyz',
+          nintendoTitleId: null,
+          psnNpCommunicationId: 'NPWR12345',
+        },
+      };
+      (prisma.userGame.findFirst as jest.Mock)
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(null);
+      (getGame as jest.Mock).mockResolvedValueOnce(mockNewIgdb);
+      (prisma.game.upsert as jest.Mock).mockResolvedValue({ id: 'game-target', igdbId: 5000, title: 'Right', steamAppId: null, psnConceptId: null, xboxTitleId: null, gogAppId: null, itchGameId: null, epicCatalogItemId: null, nintendoTitleId: null, psnNpCommunicationId: null, hltbData: null });
+
+      const txGameUpdate = jest.fn();
+      const txUserGameUpdate = jest.fn().mockResolvedValue({
+        ...source,
+        gameId: 'game-target',
+        game: { id: 'game-target', igdbId: 5000, title: 'Right', developer: 'X', releaseYear: 2019, genres: [], coverUrl: null, steamAppId: 100, hltbData: null },
+      });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb) =>
+        cb({ userGame: { update: txUserGameUpdate }, game: { update: txGameUpdate } }),
+      );
+
+      const res = await request(app).post('/api/games/ug-1/remap').send({ igdbId: 5000 });
+      expect(res.status).toBe(200);
+
+      // clear source THEN set target — order matters for @unique releases
+      const clearData = txGameUpdate.mock.calls[0][0].data;
+      const setData = txGameUpdate.mock.calls[1][0].data;
+      expect(clearData).toMatchObject({
+        steamAppId: null,
+        psnConceptId: null,
+        gogAppId: null,
+        epicCatalogItemId: null,
+        psnNpCommunicationId: null,
+      });
+      expect(setData).toMatchObject({
+        steamAppId: 100,
+        psnConceptId: 200,
+        gogAppId: 300,
+        epicCatalogItemId: 'ep-xyz',
+        psnNpCommunicationId: 'NPWR12345',
+      });
+      // Fields that were null on source aren't in the payload at all
+      expect(clearData).not.toHaveProperty('xboxTitleId');
+      expect(setData).not.toHaveProperty('xboxTitleId');
+    });
   });
 
   it('returns 409 with conflictUserGameId + conflictTitle when the user already has a different UserGame for the target Game', async () => {
@@ -711,6 +845,10 @@ describe('POST /api/games/:id/remap', () => {
         }),
         delete: jest.fn().mockResolvedValue({}),
       },
+      // R2 (2026-06-01): merge transaction may also call tx.game.update
+      // twice when the source has platform-side IDs to fold into target.
+      // Default no-op here; specific R2 tests assert the call counts.
+      game: { update: jest.fn() },
     };
     (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => cb(txMock));
 
@@ -756,6 +894,8 @@ describe('POST /api/games/:id/remap', () => {
         update: txUpdate,
         delete: jest.fn().mockResolvedValue({}),
       },
+      // R2 — tx.game.update may fire when source has platform-side IDs.
+      game: { update: jest.fn() },
     };
     (prisma.$transaction as jest.Mock).mockImplementation(async (cb) => cb(txMock));
 
