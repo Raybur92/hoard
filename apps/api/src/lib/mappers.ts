@@ -27,6 +27,9 @@ export interface UserGameRow {
   condition: 'LOOSE' | 'CIB' | 'SEALED' | 'REPLICA' | 'GRADED' | null;
   region: 'NTSC_U' | 'NTSC_J' | 'PAL' | 'OTHER' | null;
   wishlistedPlatforms: string[];
+  // GD-PR3 — sub-status + times-beaten counter per OQ-GD-2 + OQ-GD-3.
+  subStatus: string | null;
+  completionsCount: number | null;
   addedAt: Date;
   updatedAt: Date;
   game: {
@@ -187,6 +190,8 @@ export function mapUserGame(ug: UserGameRow): UserGameDetail {
     condition: ug.condition,
     region: ug.region,
     wishlistedPlatforms: ug.wishlistedPlatforms,
+    subStatus: ug.subStatus,
+    completionsCount: ug.completionsCount,
     addedAt: ug.addedAt.toISOString(),
     updatedAt: ug.updatedAt.toISOString(),
     hltb: ug.game.hltbData

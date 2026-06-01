@@ -193,6 +193,22 @@ export interface UserGame {
   // wishlist a specific platform variant of an owned game writes into
   // this array. The Releases-page toggle does NOT auto-populate it.
   wishlistedPlatforms: string[];
+  /**
+   * GD-PR3 — sub-status per OQ-GD-2. Free-form String at the DB layer;
+   * validity is enforced server-side via `isValidSubStatus(status, subStatus)`
+   * so clients can't write e.g. `status: Playing + subStatus: '100%'`.
+   * Variants per status (locked GD-PR3 plan):
+   *   Playing   → 'infinite' | 'paused'
+   *   Completed → 'main' | '+side' | '100%'
+   *   Backlog / On Hold / Dropped / Wishlist → null (no variants)
+   */
+  subStatus: string | null;
+  /**
+   * GD-PR3 — times-beaten counter per OQ-GD-3. Cheap Int column now;
+   * future Session-entity refactor (CM2) will derive this from Session
+   * lifecycle events. Null = unset (rendered as 0); 0+ once tapped.
+   */
+  completionsCount: number | null;
   addedAt: string;
   updatedAt: string;
 }
@@ -567,6 +583,16 @@ export interface PatchGameBody {
   status?: GameStatus;
   notes?: string | null;
   rating?: number | null;
+  /**
+   * GD-PR3 — sub-status. Server validates against the current/incoming
+   * status via `isValidSubStatus(status, subStatus)`; mismatched values
+   * return 400 `INVALID_SUB_STATUS`. Null clears.
+   */
+  subStatus?: string | null;
+  /**
+   * GD-PR3 — times-beaten counter. Int ≥ 0. Null clears.
+   */
+  completionsCount?: number | null;
 }
 
 export interface StatsResponse {

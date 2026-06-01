@@ -14,6 +14,11 @@ import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, shortYear, generateReceipt, buildAchievementRows, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
+// GD-PR3 — sub-status / rating / times-beaten / HLTB pace enrichments
+import { SubStatusPicker } from './gameDetail/SubStatusPicker';
+import { CompletionsCounter } from './gameDetail/CompletionsCounter';
+import { RatingGrid } from './gameDetail/RatingGrid';
+import { HltbPaceRow } from './gameDetail/HltbPaceRow';
 
 const STATUS_COLOR: Record<string, string> = {
   Playing: 'var(--green)',
@@ -76,6 +81,29 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
     setEditingNotes(false);
     update({ notes: noteDraft || null });
     await api.patchGame(id, { notes: noteDraft || null }).catch(() => null);
+  }
+
+  // GD-PR3 handlers. On server failure we refetch so the UI reverts to
+  // the persisted state instead of holding a stale optimistic value
+  // forever. We also log the error so the next regression surfaces in
+  // the browser console (the prior `.catch(() => null)` swallowed it).
+  async function setRating(next: number | null) {
+    if (!id) return;
+    update({ rating: next });
+    try { await api.patchGame(id, { rating: next }); }
+    catch (e) { console.error('[GD-PR3] setRating failed:', e); refetch(); }
+  }
+  async function setSubStatus(next: string | null) {
+    if (!id) return;
+    update({ subStatus: next });
+    try { await api.patchGame(id, { subStatus: next }); }
+    catch (e) { console.error('[GD-PR3] setSubStatus failed:', e); refetch(); }
+  }
+  async function setCompletionsCount(next: number) {
+    if (!id) return;
+    update({ completionsCount: next });
+    try { await api.patchGame(id, { completionsCount: next }); }
+    catch (e) { console.error('[GD-PR3] setCompletionsCount failed:', e); refetch(); }
   }
 
   async function unwishlistPlatform(code: string) {
@@ -235,6 +263,19 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
                       </ul>
                     )}
                   </div>
+                  {/* GD-PR3 — sub-status (rendered when status has variants) */}
+                  <SubStatusPicker
+                    status={g.status}
+                    subStatus={g.subStatus}
+                    onChange={(next) => void setSubStatus(next)}
+                  />
+                  {/* GD-PR3 — times-beaten counter (visible on Completed; or
+                      on any status when value > 0) */}
+                  <CompletionsCounter
+                    status={g.status}
+                    value={g.completionsCount}
+                    onChange={(next) => void setCompletionsCount(next)}
+                  />
                   <span style={{ flex: 1 }} />
                   {g.status !== 'Playing' && (
                     <Btn variant="primary" onClick={() => void changeStatus('Playing')}>
@@ -357,6 +398,10 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
                         <span><span className="t-mono t-tnum" style={{ fontSize: "var(--text-base)", color: 'var(--paper)' }}>{stillOwed}</span>&nbsp;still owed</span>
                       </div>
                     </div>
+                    {/* GD-PR3 — HLTB user-vs-community pace row (OQ-GD-5). */}
+                    <div style={{ marginTop: 8 }}>
+                      <HltbPaceRow userMinutes={totalMin} hltbMainSeconds={g.hltb?.mainStory ?? null} />
+                    </div>
                   </div>
                 )}
 
@@ -429,6 +474,14 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
                       }
                     </button>
                   )}
+                </div>
+
+                {/* GD-PR3 — rating UI (OQ-GD-4) */}
+                <div style={{ marginTop: 22 }}>
+                  <Marker>// your rating</Marker>
+                  <div style={{ marginTop: 10 }}>
+                    <RatingGrid value={g.rating} onChange={(next) => void setRating(next)} />
+                  </div>
                 </div>
               </div>
             </div>

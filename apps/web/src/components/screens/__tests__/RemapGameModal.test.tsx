@@ -66,6 +66,9 @@ function makeUpdated(igdbId: number, title: string): UserGameDetail {
     condition: null,
     region: null,
     wishlistedPlatforms: [],
+    // GD-PR3 fields — null defaults match sync-imported row shape
+    subStatus: null,
+    completionsCount: null,
     addedAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
     hltb: null,

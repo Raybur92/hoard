@@ -8,9 +8,10 @@ import { requireActive } from '../middleware/active';
 import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
 import { fetchHltbWithFallback } from '../services/hltb';
 import { getGame, getReleaseDetails, getGameDetailExtras, getTimeToBeat } from '../services/igdb';
-import { mapUserGame } from '../lib/mappers';
+import { mapUserGame, fromPrismaStatus } from '../lib/mappers';
 import { logEvent } from '../services/userEvents';
 import { detectGameDetailState } from '../lib/gameDetailState';
+import { isValidSubStatus } from '../lib/subStatus';
 import { routeAffiliateUrl } from '../services/deals/affiliate';
 import type { GameDetailResponse, GameDetailGameInfo, GameDealsResponse, DealRow } from '@hoard/types';
 
@@ -477,6 +478,12 @@ const patchSchema = z.object({
   status: z.enum(['Playing', 'Backlog', 'Completed', 'On Hold', 'Dropped', 'Wishlist']).optional(),
   notes: z.string().nullable().optional(),
   rating: z.number().int().min(1).max(10).nullable().optional(),
+  // GD-PR3 — sub-status (length-capped; valid-against-status runtime guard
+  // runs after Zod parse since the valid set depends on the row's status).
+  subStatus: z.string().max(32).nullable().optional(),
+  // GD-PR3 — times-beaten counter. Capped at 999 — defensive against a
+  // double-click runaway; nobody legitimately beats a game 1000 times.
+  completionsCount: z.number().int().min(0).max(999).nullable().optional(),
 });
 
 // PATCH /api/games/:id
@@ -496,14 +503,41 @@ router.patch('/games/:id', requireUser, requireActive, async (req: Request, res:
     return;
   }
 
+  // GD-PR3 — sub-status validity is guarded against the *resulting* status
+  // (i.e. the incoming `status` if present, otherwise the existing row's
+  // status). Without this, a single PATCH could land an incoherent pair
+  // (e.g. set status=Playing + subStatus='100%').
+  if (parsed.data.subStatus !== undefined) {
+    const resultStatus = parsed.data.status ?? fromPrismaStatus(existing.status);
+    if (!isValidSubStatus(resultStatus, parsed.data.subStatus)) {
+      res.status(400).json({ error: 'INVALID_SUB_STATUS', status: resultStatus, subStatus: parsed.data.subStatus });
+      return;
+    }
+  }
+  // When status changes WITHOUT subStatus in the same PATCH, an existing
+  // sub-status may become incoherent (e.g. row has subStatus='paused'
+  // under Playing; user moves to Completed). Auto-clear in that case so
+  // we don't carry an invalid pair forward.
+  let autoClearSubStatus = false;
+  if (parsed.data.status !== undefined && parsed.data.subStatus === undefined && existing.subStatus !== null) {
+    if (!isValidSubStatus(parsed.data.status, existing.subStatus)) {
+      autoClearSubStatus = true;
+    }
+  }
+
   const updateData: {
     status?: PrismaGameStatus;
     notes?: string | null;
     rating?: number | null;
+    subStatus?: string | null;
+    completionsCount?: number | null;
   } = {};
   if (parsed.data.status !== undefined) updateData.status = toPrismaStatus(parsed.data.status);
   if (parsed.data.notes !== undefined) updateData.notes = parsed.data.notes;
   if (parsed.data.rating !== undefined) updateData.rating = parsed.data.rating;
+  if (parsed.data.subStatus !== undefined) updateData.subStatus = parsed.data.subStatus;
+  if (autoClearSubStatus) updateData.subStatus = null;
+  if (parsed.data.completionsCount !== undefined) updateData.completionsCount = parsed.data.completionsCount;
 
   const updated = await prisma.userGame.update({
     where: { id },

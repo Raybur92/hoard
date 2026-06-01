@@ -13,6 +13,11 @@ import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, generateReceipt, buildAchievementRows, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
+// GD-PR3 — sub-status / rating / times-beaten / HLTB pace enrichments
+import { SubStatusPicker } from './gameDetail/SubStatusPicker';
+import { CompletionsCounter } from './gameDetail/CompletionsCounter';
+import { RatingGrid } from './gameDetail/RatingGrid';
+import { HltbPaceRow } from './gameDetail/HltbPaceRow';
 
 const STATUS_COLOR: Record<string, string> = {
   Playing: 'var(--green)',
@@ -68,19 +73,44 @@ export function GameDetailMobile({ userGameId: propUserGameId }: { userGameId?: 
   }, []);
 
   async function changeStatus(s: GameStatus) {
+    if (!id) return;
     setStatusSheetOpen(false);
-    try { await update({ status: s }); }
-    catch { /* error surfaces via the data layer; no toast here */ }
+    update({ status: s });
+    // Pre-GD-PR3 the mobile handler was cache-only (no server PATCH);
+    // status + note edits never persisted. Fixed here while wiring the
+    // GD-PR3 enrichments — desktop pattern, optimistic + server.
+    await api.patchGame(id, { status: s }).catch(() => null);
   }
 
   async function saveNote() {
+    if (!id) return;
     setEditingNotes(false);
-    try {
-      await update({ notes: noteDraft });
-      setSavedFlash(true);
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-      savedTimerRef.current = setTimeout(() => setSavedFlash(false), 2000);
-    } catch { /* silent */ }
+    update({ notes: noteDraft || null });
+    await api.patchGame(id, { notes: noteDraft || null }).catch(() => null);
+    setSavedFlash(true);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSavedFlash(false), 2000);
+  }
+
+  // GD-PR3 handlers — mirror desktop. On failure log + refetch so the
+  // UI reverts cleanly instead of holding a stale optimistic value.
+  async function setRating(next: number | null) {
+    if (!id) return;
+    update({ rating: next });
+    try { await api.patchGame(id, { rating: next }); }
+    catch (e) { console.error('[GD-PR3] setRating failed:', e); refetch(); }
+  }
+  async function setSubStatus(next: string | null) {
+    if (!id) return;
+    update({ subStatus: next });
+    try { await api.patchGame(id, { subStatus: next }); }
+    catch (e) { console.error('[GD-PR3] setSubStatus failed:', e); refetch(); }
+  }
+  async function setCompletionsCount(next: number) {
+    if (!id) return;
+    update({ completionsCount: next });
+    try { await api.patchGame(id, { completionsCount: next }); }
+    catch (e) { console.error('[GD-PR3] setCompletionsCount failed:', e); refetch(); }
   }
 
   function startEditingNotes() {
@@ -211,7 +241,7 @@ export function GameDetailMobile({ userGameId: propUserGameId }: { userGameId?: 
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 18px 24px', background: 'var(--void)' }}>
         {/* status */}
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 14, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <Chip on>
             <span style={{ display: 'inline-block', width: 8, height: 8, background: statusColor, marginRight: 4 }} aria-hidden="true" />
             {g.status.toLowerCase()}
@@ -219,6 +249,18 @@ export function GameDetailMobile({ userGameId: propUserGameId }: { userGameId?: 
           <Chip onClick={() => setStatusSheetOpen(true)} pressed={false} ariaLabel="Change game status">
             change <Icon name="caret" size={10} />
           </Chip>
+          {/* GD-PR3 — sub-status picker (auto-hides when status has no variants) */}
+          <SubStatusPicker
+            status={g.status}
+            subStatus={g.subStatus}
+            onChange={(next) => void setSubStatus(next)}
+          />
+          {/* GD-PR3 — times-beaten counter */}
+          <CompletionsCounter
+            status={g.status}
+            value={g.completionsCount}
+            onChange={(next) => void setCompletionsCount(next)}
+          />
           {savedFlash && (
             <span role="status" aria-live="polite" className="t-mono t-green" style={{ fontSize: "var(--text-3xs)", marginLeft: 4 }}>// saved</span>
           )}
@@ -361,6 +403,19 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
           <Btn sm onClick={() => void handleSharePressed()}>
             <Icon name="arrowR" size={10} /> share
           </Btn>
+        </div>
+
+        {/* GD-PR3 — HLTB user-vs-community pace row (OQ-GD-5) */}
+        <div style={{ marginTop: 16 }}>
+          <HltbPaceRow userMinutes={totalMin} hltbMainSeconds={g.hltb?.mainStory ?? null} />
+        </div>
+
+        {/* GD-PR3 — rating UI (OQ-GD-4) */}
+        <div style={{ marginTop: 16 }}>
+          <Marker>// your rating</Marker>
+          <div style={{ marginTop: 8 }}>
+            <RatingGrid value={g.rating} onChange={(next) => void setRating(next)} />
+          </div>
         </div>
 
         {/* platforms (owned + wishlist-only) */}

@@ -58,6 +58,9 @@ const makeUserGame = (overrides: Partial<{ id: string; status: string; title: st
   lastPlayedAt: new Date('2025-01-01'),
   notes: null,
   rating: null,
+  // GD-PR3 fields
+  subStatus: null,
+  completionsCount: null,
   addedAt: new Date('2025-01-01'),
   updatedAt: new Date('2025-01-01'),
   game: {
@@ -71,6 +74,14 @@ const makeUserGame = (overrides: Partial<{ id: string; status: string; title: st
     steamAppId: null,
     hltbData: null,
   },
+});
+
+// GD-PR3 — helper for testing the auto-clear-stale-subStatus path. The
+// row's CURRENT state has a sub-status set; PATCH changes status WITHOUT
+// touching subStatus → server should null it.
+const makeUserGameWithSubStatus = (subStatus: string) => ({
+  ...makeUserGame({ status: 'Playing' }),
+  subStatus,
 });
 
 /* ── GET /api/games ── */
@@ -469,6 +480,99 @@ describe('PATCH /api/games/:id', () => {
     const res = await request(app).patch('/api/games/ug-1').send({ rating: 99 });
 
     expect(res.status).toBe(400);
+  });
+
+  /* ── GD-PR3 — sub-status + completionsCount ── */
+
+  describe('sub-status validity guard (GD-PR3 / OQ-GD-2)', () => {
+    it("accepts a valid sub-status for the current row's status (Playing → 'paused')", async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Playing' }));
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Playing' }));
+
+      const res = await request(app).patch('/api/games/ug-1').send({ subStatus: 'paused' });
+
+      expect(res.status).toBe(200);
+      expect((prisma.userGame.update as jest.Mock).mock.calls[0][0].data.subStatus).toBe('paused');
+    });
+
+    it("accepts a sub-status valid against an incoming status (Completed → '100%')", async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Playing' }));
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Completed' }));
+
+      const res = await request(app).patch('/api/games/ug-1').send({ status: 'Completed', subStatus: '100%' });
+
+      expect(res.status).toBe(200);
+      expect((prisma.userGame.update as jest.Mock).mock.calls[0][0].data.subStatus).toBe('100%');
+    });
+
+    it('rejects an INVALID combo with 400 INVALID_SUB_STATUS (Playing + 100%)', async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Playing' }));
+
+      const res = await request(app).patch('/api/games/ug-1').send({ subStatus: '100%' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('INVALID_SUB_STATUS');
+      expect(prisma.userGame.update).not.toHaveBeenCalled();
+    });
+
+    it('null subStatus is always accepted (clearing)', async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Playing' }));
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Playing' }));
+
+      const res = await request(app).patch('/api/games/ug-1').send({ subStatus: null });
+
+      expect(res.status).toBe(200);
+      expect((prisma.userGame.update as jest.Mock).mock.calls[0][0].data.subStatus).toBeNull();
+    });
+
+    it('auto-clears stale subStatus when status changes without an explicit subStatus arg', async () => {
+      // Row has subStatus='paused' under Playing; user moves to Completed without
+      // touching subStatus. Server clears it because it would be incoherent.
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(makeUserGameWithSubStatus('paused'));
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(makeUserGame({ status: 'Completed' }));
+
+      const res = await request(app).patch('/api/games/ug-1').send({ status: 'Completed' });
+
+      expect(res.status).toBe(200);
+      expect((prisma.userGame.update as jest.Mock).mock.calls[0][0].data.subStatus).toBeNull();
+    });
+
+    it('returns 400 when subStatus exceeds the length cap', async () => {
+      const res = await request(app).patch('/api/games/ug-1').send({ subStatus: 'a'.repeat(33) });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('completionsCount (GD-PR3 / OQ-GD-3)', () => {
+    it('round-trips a non-zero count', async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(makeUserGame());
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(makeUserGame());
+
+      const res = await request(app).patch('/api/games/ug-1').send({ completionsCount: 3 });
+
+      expect(res.status).toBe(200);
+      expect((prisma.userGame.update as jest.Mock).mock.calls[0][0].data.completionsCount).toBe(3);
+    });
+
+    it('rejects negative values', async () => {
+      const res = await request(app).patch('/api/games/ug-1').send({ completionsCount: -1 });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects values above 999', async () => {
+      const res = await request(app).patch('/api/games/ug-1').send({ completionsCount: 1000 });
+      expect(res.status).toBe(400);
+    });
+
+    it('null clears the counter', async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(makeUserGame());
+      (prisma.userGame.update as jest.Mock).mockResolvedValue(makeUserGame());
+
+      const res = await request(app).patch('/api/games/ug-1').send({ completionsCount: null });
+
+      expect(res.status).toBe(200);
+      expect((prisma.userGame.update as jest.Mock).mock.calls[0][0].data.completionsCount).toBeNull();
+    });
   });
 });
 

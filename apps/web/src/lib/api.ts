@@ -153,16 +153,33 @@ function buildQuery(params: Record<string, string | number | undefined>): string
 }
 
 /**
- * Invalidate every cache entry that depends on the user's library.
- * Called after mutations that change games, status, playtime, or platform sync.
+ * Invalidate cross-cutting library caches — games:, shelves:, gameCounts,
+ * dashboard. These power list-level UI (shelves, counts, dashboard
+ * tallies) that need to reflect any membership / status change.
+ *
+ * Does NOT drop the per-game detail caches (`game:igdb:`, `game:deals:`).
+ * GD-PR3: patchGame writes the server response THROUGH to those caches
+ * directly so the dispatcher doesn't flash a loading skeleton after an
+ * in-page action (status flip, sub-status, rating, notes, etc.).
+ *
+ * Use `invalidateLibrary` for membership-changing operations (add /
+ * remove / wishlist toggle) where the V2 cache state needs a full
+ * refetch from server (e.g. S1 → S3 transition on add-to-library).
  */
-function invalidateLibrary(): void {
+function invalidateLibraryCounts(): void {
   cache.invalidate('games:');
   cache.invalidate('shelves:');
   cache.invalidate('gameCounts');
   cache.invalidate('dashboard');
-  // GD-PR1 — the per-game detail caches need to flip too when library
-  // membership changes (S1 → S3 transition on add-to-library, etc.).
+}
+
+/**
+ * Full library invalidation — counts + per-game detail caches. Use when
+ * library membership actually changes (add / remove / wishlist toggle),
+ * NOT for in-page field edits.
+ */
+function invalidateLibrary(): void {
+  invalidateLibraryCounts();
   cache.invalidate('game:igdb:');
   cache.invalidate('game:deals:');
 }
@@ -217,7 +234,19 @@ export const api = {
   patchGame: async (id: string, body: PatchGameBody) => {
     const updated = await patch<UserGameDetail>(`/api/games/${id}`, body);
     cache.set(`game:${id}`, updated);
-    invalidateLibrary();
+    // GD-PR3 — write the patched UserGameDetail through to the V2
+    // dispatcher's cache entry too, by merging into the existing
+    // GameDetailResponse if one is loaded. The dispatcher then reads
+    // the optimistic value on next render without bouncing to a
+    // loading skeleton. The PATCH operations covered here don't
+    // change library membership, so the dispatcher's `state` doesn't
+    // need to flip — only the `userGame` field needs the new values.
+    const v2Key = `game:igdb:${updated.game.igdbId}`;
+    const existingV2 = cache.get<GameDetailResponse>(v2Key);
+    if (existingV2?.data) {
+      cache.set(v2Key, { ...existingV2.data, userGame: updated });
+    }
+    invalidateLibraryCounts();
     return updated;
   },
 

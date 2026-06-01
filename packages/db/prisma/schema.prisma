@@ -314,6 +314,19 @@ model UserGame {
   // collector use case (own GTA on PS5, also wishlist the PC version).
   // Postgres TEXT[]; mirrors Game.genres + WishlistRelease.platforms shape.
   wishlistedPlatforms   String[]   @default([])
+  // GD-PR3 — sub-status enrichment per OQ-GD-2 (docs/PAGES_PLAN.md §3.5).
+  // Free-form String at the DB layer; semantics + validity enforced at
+  // write-time by `apps/api/src/lib/subStatus.ts::isValidSubStatus(status,
+  // subStatus)` so we don't end up with e.g. `status: Playing + subStatus:
+  // '100%'`. Defined variants per status (locked GD-PR3 plan):
+  //   Playing   → 'infinite' | 'paused'
+  //   Completed → 'main' | '+side' | '100%'   (GD-PR4 ships the UI)
+  //   Backlog / On Hold / Dropped / Wishlist → no variants (column stays null)
+  subStatus             String?
+  // GD-PR3 — times-beaten counter per OQ-GD-3. Cheap Int column now;
+  // refactor to derived-from-Session when the CM2 Session entity lands.
+  // Null = unset (treated as 0 in UI); 0+ once user has tapped the counter.
+  completionsCount      Int?
   addedAt               DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 
