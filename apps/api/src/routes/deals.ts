@@ -153,6 +153,47 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     select: { marketCode: true },
   });
 
+  // DEALS-PR2 — bundles relevant to the user. Pull ITAD ids off the
+  // user's library + wishlist games (cached on Game.metadata.itadId
+  // during the DEALS-PR1 sync). Intersect against Bundle.itadGameIds
+  // (GIN-indexed). One Prisma query each: small + cheap.
+  const userGameRows = await prisma.game.findMany({
+    where: { id: { in: [...relevantGameIds] } },
+    select: { id: true, title: true, metadata: true },
+  });
+  const itadIdToTitle = new Map<string, string>();
+  for (const g of userGameRows) {
+    const meta = g.metadata as unknown;
+    if (typeof meta === 'object' && meta !== null) {
+      const m = meta as { itadId?: unknown };
+      if (typeof m.itadId === 'string') itadIdToTitle.set(m.itadId, g.title);
+    }
+  }
+  const userItadIds = [...itadIdToTitle.keys()];
+  let bundleRows: typeof body.bundles = [];
+  if (userItadIds.length > 0) {
+    const now = new Date();
+    const bundles = await prisma.bundle.findMany({
+      where: {
+        itadGameIds: { hasSome: userItadIds },
+        // Exclude bundles past their expiry (when ITAD supplied one).
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      orderBy: { expiresAt: 'asc' },
+    });
+    bundleRows = bundles.map((b) => ({
+      id: b.id,
+      shopName: b.shopName,
+      title: b.title,
+      url: b.url,
+      expiresAt: b.expiresAt?.toISOString() ?? null,
+      gameCount: b.gameCount,
+      matchingTitles: b.itadGameIds
+        .map((id) => itadIdToTitle.get(id))
+        .filter((t): t is string => Boolean(t)),
+    }));
+  }
+
   const latestSync = deals[0]?.fetchedAt ?? null;
   const body: DealsResponse = {
     topWishlistDeal,
@@ -160,6 +201,7 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     broaderFeed: broaderRows,
     marketCode: user?.marketCode ?? null,
     lastSyncedAt: latestSync?.toISOString() ?? null,
+    bundles: bundleRows,
   };
   res.set('Cache-Control', 'private, max-age=60');
   res.json(body);

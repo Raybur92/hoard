@@ -510,3 +510,30 @@ model PriceSnapshot {
   @@index([gameId, shopId, snapshotAt(sort: Desc)])
   @@index([snapshotAt])
 }
+
+// DEALS-PR2 — game bundles aggregated from ITAD's /bundles/v1 endpoint.
+// Each bundle ships a list of ITAD game UUIDs across its pay tiers; we
+// denormalize that into `itadGameIds[]` for fast intersection lookups
+// against the user's library/wishlist (filtering at /api/deals time).
+// `tiers` carries the full per-tier price+games payload as JSON so the UI
+// can show "Pay $4.99 to get 10 games / $14.99 for the extended bundle".
+model Bundle {
+  id            String   @id @default(cuid())
+  itadBundleId  Int      @unique
+  title         String
+  shopId        Int
+  shopName      String
+  url           String   // affiliate-routed buy link
+  detailsUrl    String?  // ITAD's bundle detail page
+  publishedAt   DateTime?
+  expiresAt     DateTime?
+  isMature      Boolean  @default(false)
+  gameCount     Int      @default(0)
+  mediaCount    Int      @default(0)
+  tiers         Json     @default("[]")
+  itadGameIds   String[] @default([])
+  fetchedAt     DateTime @default(now()) @updatedAt
+
+  @@index([expiresAt])
+  @@index([itadGameIds], type: Gin)
+}

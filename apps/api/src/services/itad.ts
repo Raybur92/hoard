@@ -185,3 +185,48 @@ export async function getPricesForGames(
 export async function getShops(): Promise<ItadShop[]> {
   return await itadFetch<ItadShop[]>('/shops/v1', {});
 }
+
+/* ── DEALS-PR2 — bundles ──────────────────────────────────────── */
+
+export interface ItadBundleGame {
+  id: string;       // ITAD uuid
+  slug: string;
+  title: string;
+  type: string;     // 'game' / 'media' / etc
+  mature: boolean;
+}
+
+export interface ItadBundleTier {
+  price: ItadPriceAmount;
+  addon: boolean;
+  games: ItadBundleGame[];
+}
+
+export interface ItadBundleShopPage {
+  id: number;
+  name: string;
+  shopId: number;
+}
+
+export interface ItadBundle {
+  id: number;
+  title: string;
+  page: ItadBundleShopPage;
+  url: string;
+  details?: string;
+  isMature: boolean;
+  publish?: string;     // ISO 8601
+  expiry?: string;      // ISO 8601
+  note?: string | null;
+  counts: { games: number; media: number };
+  tiers: ItadBundleTier[];
+}
+
+/**
+ * Fetch all currently-active bundles from ITAD. Single ungated call —
+ * returns ~20-50 active bundles globally. No pagination; the array IS
+ * the full set at request time.
+ */
+export async function getBundles(): Promise<ItadBundle[]> {
+  return await itadFetch<ItadBundle[]>('/bundles/v1', {});
+}

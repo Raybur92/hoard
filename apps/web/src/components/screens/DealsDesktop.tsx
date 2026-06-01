@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import type { DealRow } from '@hoard/types';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { TopBar } from '../layout/TopBar';
 import { Cover } from '../primitives/Cover';
@@ -8,7 +9,6 @@ import { Icon } from '../primitives/Icon';
 import { Marker } from '../primitives/Marker';
 import { useDeals } from '../../hooks/useDeals';
 import { useUser } from '../../contexts/UserContext';
-import type { DealRow } from '@hoard/types';
 
 /**
  * DEALS-PR1 — `/deals` page (desktop).
@@ -140,12 +140,53 @@ function DealCard({ deal, variant }: DealCardProps) {
   );
 }
 
+/**
+ * DEALS-PR2 — derive the sorted-by-count distinct shop list from the
+ * union of all rendered deal sets (top + wishlist + broader). Used to
+ * populate the [shop: …] filter chip. Top shop renders first.
+ */
+function deriveShopList(deals: DealRow[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const d of deals) counts.set(d.shopName, (counts.get(d.shopName) ?? 0) + 1);
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+function applyShopFilter<T extends { shopName: string }>(rows: T[], shop: string | null): T[] {
+  if (!shop) return rows;
+  return rows.filter((r) => r.shopName === shop);
+}
+
 export function DealsDesktop() {
   useDocumentTitle('Deals');
   const navigate = useNavigate();
   const { user } = useUser();
   const { data, loading, error, refetch } = useDeals();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const shopFilter = searchParams.get('shop');
   useEffect(() => { /* mount no-op — useDeals fetches via SWR */ }, []);
+
+  const allDeals: DealRow[] = useMemo(() => {
+    if (!data) return [];
+    const top = data.topWishlistDeal ? [data.topWishlistDeal] : [];
+    return [...top, ...data.wishlistDeals, ...data.broaderFeed];
+  }, [data]);
+  const shopList = useMemo(() => deriveShopList(allDeals), [allDeals]);
+
+  const setShop = (next: string | null): void => {
+    const params = new URLSearchParams(searchParams);
+    if (next) params.set('shop', next);
+    else params.delete('shop');
+    setSearchParams(params);
+  };
+
+  // Apply the filter to each section.
+  const topWishlistDeal = data && shopFilter && data.topWishlistDeal?.shopName !== shopFilter
+    ? null
+    : data?.topWishlistDeal ?? null;
+  const wishlistDeals = applyShopFilter(data?.wishlistDeals ?? [], shopFilter);
+  const broaderFeed = applyShopFilter(data?.broaderFeed ?? [], shopFilter);
 
   return (
     <>
@@ -170,6 +211,48 @@ export function DealsDesktop() {
           <Icon name="refresh" size={10} /> refresh
         </Btn>
       </div>
+
+      {/* DEALS-PR2 — per-shop filter chip strip. Only renders when 2+
+          distinct shops are present in the feed (no value at 0/1). */}
+      {shopList.length >= 2 && (
+        <div
+          className="thin-scroll"
+          role="group"
+          aria-label="Filter by shop"
+          style={{
+            padding: '8px 32px',
+            borderBottom: '1px solid var(--rule)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)', marginRight: 4 }}>shop:</span>
+          <button
+            type="button"
+            onClick={() => setShop(null)}
+            className={shopFilter === null ? 'chip on' : 'chip'}
+            style={{ cursor: 'pointer', flex: '0 0 auto' }}
+            aria-pressed={shopFilter === null}
+          >
+            all
+          </button>
+          {shopList.map((s) => (
+            <button
+              key={s.name}
+              type="button"
+              onClick={() => setShop(s.name)}
+              className={shopFilter === s.name ? 'chip on' : 'chip'}
+              style={{ cursor: 'pointer', flex: '0 0 auto' }}
+              aria-pressed={shopFilter === s.name}
+            >
+              {s.name} <span className="t-faint" style={{ marginLeft: 4 }}>{s.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {error && !loading && (
           <div className="panel" style={{ padding: 18 }}>
@@ -180,40 +263,101 @@ export function DealsDesktop() {
         {loading && !data && (
           <div className="skel" style={{ height: 160, width: '100%' }} />
         )}
-        {data && !data.topWishlistDeal && data.wishlistDeals.length === 0 && data.broaderFeed.length === 0 && (
+        {data && !topWishlistDeal && wishlistDeals.length === 0 && broaderFeed.length === 0 && (
           <div className="panel" style={{ padding: 24, textAlign: 'center' }}>
-            <Marker>// nothing on sale right now</Marker>
+            <Marker>{shopFilter ? `// no ${shopFilter} deals right now` : '// nothing on sale right now'}</Marker>
             <p style={{ marginTop: 12, fontSize: 'var(--text-sm)', color: 'var(--paper-dim)' }}>
-              hoard checks for new deals nightly. console pricing data is sparser than PC; check the platform store directly if you don't see what you expected.
+              {shopFilter
+                ? `nothing matched the ${shopFilter} filter. clear the filter or pick a different shop.`
+                : 'hoard checks for new deals nightly. console pricing data is sparser than PC; check the platform store directly if you don\'t see what you expected.'}
             </p>
-            {!user?.marketCode && (
+            {!user?.marketCode && !shopFilter && (
               <p style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--paper-faint)' }}>
                 tip: set your market in <a href="/settings" style={{ color: 'var(--amber)' }}>settings → account</a> to see localised prices.
               </p>
             )}
+            {shopFilter && (
+              <Btn sm onClick={() => setShop(null)} style={{ marginTop: 12 }}>clear filter</Btn>
+            )}
           </div>
         )}
-        {data?.topWishlistDeal && (
+        {topWishlistDeal && (
           <section data-testid="deals-hero-section">
             <Marker>// top wishlist deal</Marker>
             <div style={{ marginTop: 10 }}>
-              <DealCard deal={data.topWishlistDeal} variant="hero" />
+              <DealCard deal={topWishlistDeal} variant="hero" />
             </div>
           </section>
         )}
-        {data && data.wishlistDeals.length > 0 && (
+        {wishlistDeals.length > 0 && (
           <section data-testid="deals-wishlist-section">
-            <Marker>// wishlist deals · {data.wishlistDeals.length}</Marker>
+            <Marker>// wishlist deals · {wishlistDeals.length}</Marker>
             <div className="panel" style={{ marginTop: 10 }}>
-              {data.wishlistDeals.map((d) => <DealCard key={d.id} deal={d} variant="row" />)}
+              {wishlistDeals.map((d) => <DealCard key={d.id} deal={d} variant="row" />)}
             </div>
           </section>
         )}
-        {data && data.broaderFeed.length > 0 && (
+        {broaderFeed.length > 0 && (
           <section data-testid="deals-broader-section">
-            <Marker>// also on sale · {data.broaderFeed.length}</Marker>
+            <Marker>// also on sale · {broaderFeed.length}</Marker>
             <div className="panel" style={{ marginTop: 10 }}>
-              {data.broaderFeed.map((d) => <DealCard key={d.id} deal={d} variant="row" />)}
+              {broaderFeed.map((d) => <DealCard key={d.id} deal={d} variant="row" />)}
+            </div>
+          </section>
+        )}
+        {data && data.bundles.length > 0 && !shopFilter && (
+          <section data-testid="deals-bundles-section">
+            <Marker>// bundles touching your library · {data.bundles.length}</Marker>
+            <div className="panel" style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
+              {data.bundles.map((b) => (
+                <a
+                  key={b.id}
+                  href={b.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: 14,
+                    alignItems: 'center',
+                    padding: '12px 16px',
+                    borderBottom: '1px solid var(--rule)',
+                    color: 'var(--paper)',
+                    textDecoration: 'none',
+                  }}
+                  aria-label={`Open ${b.title} on ${b.shopName}`}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--paper)' }}>{b.title}</div>
+                    <div className="t-faint" style={{ fontSize: 'var(--text-2xs)', marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <span>{b.shopName}</span>
+                      <span>·</span>
+                      <span>{b.gameCount} games</span>
+                      {b.matchingTitles.length > 0 && (
+                        <>
+                          <span>·</span>
+                          <span style={{ color: 'var(--amber)' }}>
+                            includes {b.matchingTitles.length} in your library
+                          </span>
+                        </>
+                      )}
+                      {b.expiresAt && (
+                        <>
+                          <span>·</span>
+                          <span>ends {new Date(b.expiresAt).toLocaleDateString()}</span>
+                        </>
+                      )}
+                    </div>
+                    {b.matchingTitles.length > 0 && (
+                      <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', marginTop: 6, fontStyle: 'italic' }}>
+                        {b.matchingTitles.slice(0, 4).join(' · ')}
+                        {b.matchingTitles.length > 4 ? ` · +${b.matchingTitles.length - 4} more` : ''}
+                      </div>
+                    )}
+                  </div>
+                  <Btn sm variant="primary">view bundle →</Btn>
+                </a>
+              ))}
             </div>
           </section>
         )}

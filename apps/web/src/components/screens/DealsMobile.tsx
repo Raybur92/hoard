@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { MobileHeader } from '../layout/MobileHeader';
 import { Cover } from '../primitives/Cover';
@@ -66,11 +67,47 @@ function MobileDealRow({ deal }: { deal: DealRow }) {
   );
 }
 
+function deriveShopList(deals: DealRow[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const d of deals) counts.set(d.shopName, (counts.get(d.shopName) ?? 0) + 1);
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+function applyShopFilter<T extends { shopName: string }>(rows: T[], shop: string | null): T[] {
+  if (!shop) return rows;
+  return rows.filter((r) => r.shopName === shop);
+}
+
 export function DealsMobile() {
   useDocumentTitle('Deals');
   const navigate = useNavigate();
   const { user } = useUser();
   const { data, loading, error, refetch } = useDeals();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const shopFilter = searchParams.get('shop');
+
+  const allDeals: DealRow[] = useMemo(() => {
+    if (!data) return [];
+    const top = data.topWishlistDeal ? [data.topWishlistDeal] : [];
+    return [...top, ...data.wishlistDeals, ...data.broaderFeed];
+  }, [data]);
+  const shopList = useMemo(() => deriveShopList(allDeals), [allDeals]);
+
+  const setShop = (next: string | null): void => {
+    const params = new URLSearchParams(searchParams);
+    if (next) params.set('shop', next);
+    else params.delete('shop');
+    setSearchParams(params);
+  };
+
+  const topWishlistDeal = data && shopFilter && data.topWishlistDeal?.shopName !== shopFilter
+    ? null
+    : data?.topWishlistDeal ?? null;
+  const wishlistDeals = applyShopFilter(data?.wishlistDeals ?? [], shopFilter);
+  const broaderFeed = applyShopFilter(data?.broaderFeed ?? [], shopFilter);
+
   return (
     <>
       <MobileHeader
@@ -84,6 +121,45 @@ export function DealsMobile() {
           </Btn>
         }
       />
+      {shopList.length >= 2 && (
+        <div
+          className="thin-scroll"
+          role="group"
+          aria-label="Filter by shop"
+          style={{
+            padding: '8px 12px',
+            borderBottom: '1px solid var(--rule)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', marginRight: 2 }}>shop:</span>
+          <button
+            type="button"
+            onClick={() => setShop(null)}
+            className={shopFilter === null ? 'chip on' : 'chip'}
+            style={{ cursor: 'pointer', flex: '0 0 auto' }}
+            aria-pressed={shopFilter === null}
+          >
+            all
+          </button>
+          {shopList.map((s) => (
+            <button
+              key={s.name}
+              type="button"
+              onClick={() => setShop(s.name)}
+              className={shopFilter === s.name ? 'chip on' : 'chip'}
+              style={{ cursor: 'pointer', flex: '0 0 auto' }}
+              aria-pressed={shopFilter === s.name}
+            >
+              {s.name} <span className="t-faint" style={{ marginLeft: 4 }}>{s.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <PullableScroll onRefresh={() => { refetch(); }} ariaLabel="Deals">
         {error && !loading && (
           <div style={{ padding: 16 }}>
@@ -94,41 +170,79 @@ export function DealsMobile() {
         {loading && !data && (
           <div className="skel" style={{ height: 200, margin: 16 }} />
         )}
-        {data && !data.topWishlistDeal && data.wishlistDeals.length === 0 && data.broaderFeed.length === 0 && (
+        {data && !topWishlistDeal && wishlistDeals.length === 0 && broaderFeed.length === 0 && (
           <div style={{ padding: 20, textAlign: 'center' }}>
-            <Marker>// nothing on sale</Marker>
+            <Marker>{shopFilter ? `// no ${shopFilter} deals` : '// nothing on sale'}</Marker>
             <p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--paper-dim)' }}>
-              hoard checks nightly. {!user?.marketCode && 'set your market in settings → account.'}
+              {shopFilter
+                ? `nothing matched the ${shopFilter} filter.`
+                : `hoard checks nightly. ${!user?.marketCode ? 'set your market in settings → account.' : ''}`}
             </p>
-            <div style={{ marginTop: 12 }}>
-              <Btn sm onClick={() => navigate('/settings')}>
-                <Icon name="cog" size={10} /> settings
-              </Btn>
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8 }}>
+              {shopFilter && <Btn sm onClick={() => setShop(null)}>clear filter</Btn>}
+              {!shopFilter && (
+                <Btn sm onClick={() => navigate('/settings')}>
+                  <Icon name="cog" size={10} /> settings
+                </Btn>
+              )}
             </div>
           </div>
         )}
-        {data?.topWishlistDeal && (
+        {topWishlistDeal && (
           <section>
             <div style={{ padding: '14px 16px 6px' }}>
               <Marker>// top wishlist deal</Marker>
             </div>
-            <MobileDealRow deal={data.topWishlistDeal} />
+            <MobileDealRow deal={topWishlistDeal} />
           </section>
         )}
-        {data && data.wishlistDeals.length > 0 && (
+        {wishlistDeals.length > 0 && (
           <section>
             <div style={{ padding: '14px 16px 6px' }}>
-              <Marker>// wishlist deals · {data.wishlistDeals.length}</Marker>
+              <Marker>// wishlist deals · {wishlistDeals.length}</Marker>
             </div>
-            {data.wishlistDeals.map((d) => <MobileDealRow key={d.id} deal={d} />)}
+            {wishlistDeals.map((d) => <MobileDealRow key={d.id} deal={d} />)}
           </section>
         )}
-        {data && data.broaderFeed.length > 0 && (
+        {broaderFeed.length > 0 && (
           <section>
             <div style={{ padding: '14px 16px 6px' }}>
-              <Marker>// also on sale · {data.broaderFeed.length}</Marker>
+              <Marker>// also on sale · {broaderFeed.length}</Marker>
             </div>
-            {data.broaderFeed.map((d) => <MobileDealRow key={d.id} deal={d} />)}
+            {broaderFeed.map((d) => <MobileDealRow key={d.id} deal={d} />)}
+          </section>
+        )}
+        {data && data.bundles.length > 0 && !shopFilter && (
+          <section>
+            <div style={{ padding: '14px 16px 6px' }}>
+              <Marker>// bundles · {data.bundles.length}</Marker>
+            </div>
+            {data.bundles.map((b) => (
+              <a
+                key={b.id}
+                href={b.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  padding: '10px 16px',
+                  borderBottom: '1px solid var(--rule)',
+                  color: 'var(--paper)',
+                  textDecoration: 'none',
+                }}
+              >
+                <div style={{ fontSize: 'var(--text-xs)' }}>{b.title}</div>
+                <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <span>{b.shopName}</span>
+                  <span>· {b.gameCount} games</span>
+                  {b.matchingTitles.length > 0 && (
+                    <span style={{ color: 'var(--amber)' }}>· {b.matchingTitles.length} match</span>
+                  )}
+                </div>
+              </a>
+            ))}
           </section>
         )}
       </PullableScroll>

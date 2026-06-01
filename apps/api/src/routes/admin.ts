@@ -398,8 +398,12 @@ router.post('/admin/deals/refresh', async (_req: Request, res: Response): Promis
     // Lazy import keeps the cold-start of admin routes light when the
     // deals service hasn't been touched yet.
     const { syncAllDeals } = await import('../services/deals/syncDeals');
+    const { syncAllBundles } = await import('../services/deals/syncBundles');
     const result = await syncAllDeals();
-    res.json({ ok: true, ...result });
+    // DEALS-PR2 — also refresh bundles alongside deals. Single global
+    // pull from ITAD; bundles are not user-scoped.
+    const bundleResult = await syncAllBundles();
+    res.json({ ok: true, ...result, bundles: bundleResult });
   } catch (err) {
     console.error('[admin/deals/refresh] sync failed:', err);
     const message = err instanceof Error ? err.message : String(err);

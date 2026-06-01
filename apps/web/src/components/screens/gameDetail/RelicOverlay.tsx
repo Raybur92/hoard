@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */
 /**
  * GD-PR4b polish (2026-06-01) — full-screen relic overlay.
  *
@@ -71,6 +72,10 @@ export function RelicOverlay({ igdbId, userGame, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label={`Archivist relic${game ? ` for ${game.title}` : ''}`}
+      // Scrim click → close. Keyboard close is the explicit [×] button + Esc
+      // global handler; the scrim itself has no keyboard semantics (it's a
+      // backdrop, not a focusable element). File-level disable on the
+      // jsx-a11y interaction-on-dialog rules at the top covers this.
       onClick={handleScrimClick}
       data-testid="relic-overlay"
     >

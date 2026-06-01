@@ -49,7 +49,10 @@ const subs = new Map<string, Set<() => void>>();
 // + `sigils: SigilAssignment[]`. Stale v4 entries would crash the new
 // S4 surface on a Completed game with `Cannot read properties of
 // undefined (reading 'map')` when iterating sigils.
-const STORAGE_PREFIX = 'hoard:cache:v5:';
+// v5 → v6 (DEALS-PR2): DealsResponse gained a required `bundles: BundleRow[]`
+// field. Stale v5 entries would crash the new bundles section on
+// `data.bundles.length` (undefined).
+const STORAGE_PREFIX = 'hoard:cache:v6:';
 
 /**
  * Per-entry size cap when writing to localStorage (UTF-16 chars in the

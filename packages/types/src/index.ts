@@ -594,6 +594,32 @@ export interface DealsResponse {
   /** ISO timestamp of the most recent deal-sync run that affected any
    *  of the rows in this response; null when no deals exist yet. */
   lastSyncedAt: string | null;
+  /** DEALS-PR2 — active bundles that include at least one game in the
+   *  user's library or wishlist. Already affiliate-routed server-side. */
+  bundles: BundleRow[];
+}
+
+/**
+ * DEALS-PR2 — one current bundle relevant to the requesting user. Shipped
+ * as a flat row by `/api/deals`. Bundle game-membership is server-resolved
+ * against the user's library/wishlist; `matchingTitles` carries the subset
+ * of bundle game titles the user actually has (for the UI hint
+ * "// includes 3 games in your wishlist").
+ */
+export interface BundleRow {
+  id: string;
+  shopName: string;
+  title: string;
+  /** Affiliate-routed buy URL — server pre-rewrites; safe to use as-is. */
+  url: string;
+  /** ISO timestamp; null when ITAD didn't supply an end date. */
+  expiresAt: string | null;
+  /** Total games in the bundle (across all tiers) per ITAD's count field. */
+  gameCount: number;
+  /** Games the user has in library/wishlist that appear in this bundle.
+   *  Empty array when no overlap — but the bundle wouldn't be in the
+   *  response at all in that case (route filters before returning). */
+  matchingTitles: string[];
 }
 
 /**
