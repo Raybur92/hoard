@@ -295,9 +295,9 @@ the centerpiece card. The relic is the focal hero.
 
 | PR | Status | Notes |
 |---|---|---|
-| GD-PR4a | Pending | Backend foundation — schema + render service + classifier + GameDetail extension + backfill. |
-| GD-PR4b | Pending | Frontend S4 components + dispatcher routing. Depends on 4a shipped. |
-| GD-PR4c | Deferred | Polish — inline editor restyle, animation, mobile tweaks. Only if cohort signal demands. |
+| GD-PR4a | Done 2026-06-01 (`1727b84`) | Backend foundation — schema (Game.relicDitherSvg), render service (relicDither.ts with per-cell radial-wave animation-delay), classifier (relicSigils.ts), GameDetail response extension (relicDitherSvg + sigils), self-healing invalidation via embedded source-URL comment, backfill script. 25 new unit tests. 87/87 Completed games backfilled at ~775KB avg per SVG. |
+| GD-PR4b | Done 2026-06-01 (`9971b05` + polish `d01c490`) | Frontend S4 surface + 5-stage consecration animation. **Architectural reversal mid-PR per Andrea's eyeball:** the relic shipped as a button-triggered read-only OVERLAY (not the default Completed surface). Click `[★ see relic]` on the legacy GameDetail or flip status to Completed → auto-open once. Editing stays on the legacy view. RelicCard gained a `readonly` prop; new RelicOverlay full-screen component with focus trap + Esc + scrim close. Cache version bumped v4→v5 for the new fields. 20 frontend tests. |
+| GD-PR4c | Deferred | Polish — inline editor restyle (none needed since editors moved off the relic), print/share view, animation timing tuning, mobile layout tweaks. Only if cohort signal demands. |
 
 ## 6. Sticky properties (for future contributors)
 
