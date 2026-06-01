@@ -43,27 +43,32 @@ describe('GD-PR4a — renderRelicDither', () => {
     expect(svg).toMatch(/<\/svg>$/);
   });
 
-  it('embeds the source URL as an XML comment immediately after the opening svg tag', async () => {
+  it('embeds the source URL + format version stamp as an XML comment', async () => {
     stubFetchWithBuffer(await makeTestImageBuffer(120, 68));
     const url = 'https://images.igdb.com/igdb/image/upload/t_screenshot_big/abc123.jpg';
     const svg = await renderRelicDither(url);
-    expect(svg).toContain(`<!-- src=${url} -->`);
-    expect(extractRelicSource(svg)).toBe(url);
+    expect(svg).toContain(`<!-- src=${url};fmt=2 -->`);
+    expect(extractRelicSource(svg)).toBe(`${url};fmt=2`);
   });
 
-  it('emits per-cell animation-delay attributes spanning the full wave window (D7)', async () => {
+  it('emits per-cell animation-delay attributes spanning the full wave window offset by stage-3 start (D7)', async () => {
     stubFetchWithBuffer(await makeTestImageBuffer(120, 68));
     const svg = await renderRelicDither('https://images.example.test/hero.jpg');
     // Centroid sits at (59.5, 33.5) — between cells — so nearest cell
-    // gets a small but non-zero delay. Assert the full range:
-    //  - SOME cell has a near-zero delay (single-digit ms)
-    //  - SOME cell has a delay near MAX_WAVE_DELAY_MS (corner)
+    // gets a small but non-zero offset from STAGE3_OFFSET. Assert the
+    // full range fires from STAGE3_OFFSET to STAGE3_OFFSET + MAX_WAVE_DELAY.
     const delays = [...svg.matchAll(/animation-delay:(\d+)ms/g)].map((m) => Number(m[1]));
     expect(delays.length).toBeGreaterThan(1000);
     const min = Math.min(...delays);
     const max = Math.max(...delays);
-    expect(min).toBeLessThan(20);
-    expect(max).toBeGreaterThanOrEqual(RELIC_DITHER_CONSTANTS.MAX_WAVE_DELAY_MS - 5);
+    // Nearest cell ≈ STAGE3_OFFSET (600); allow small drift for the
+    // sub-cell centroid offset.
+    expect(min).toBeGreaterThanOrEqual(600);
+    expect(min).toBeLessThan(620);
+    // Corner cell ≈ STAGE3_OFFSET + MAX_WAVE_DELAY (1220); allow a tiny tolerance.
+    const expectedMax = 600 + RELIC_DITHER_CONSTANTS.MAX_WAVE_DELAY_MS;
+    expect(max).toBeGreaterThanOrEqual(expectedMax - 5);
+    expect(max).toBeLessThanOrEqual(expectedMax);
   });
 
   it('wraps every cell in a <g class="rd-cell"> so frontend animation targets them uniformly', async () => {

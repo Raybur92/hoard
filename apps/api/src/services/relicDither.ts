@@ -30,13 +30,31 @@ const ART_CELL = 6;
 const SHAPE_BUCKETS = 7;
 
 /**
- * D7 stage 3 — dither engrave fires from t=600ms to t=1500ms in the
- * 5-stage choreography. Each cell's individual animation lasts ~280ms
- * (opacity 0→1 + scale 0.6→1), so the delay window is 0–620ms within
- * the stage. We map cell distance from centroid linearly onto that
- * window: nearest cell → 0ms, farthest cell → MAX_WAVE_DELAY ms.
+ * D7 stage 3 — dither engrave fires from t=STAGE3_OFFSET to
+ * t=STAGE3_OFFSET+MAX_WAVE_DELAY+~280 in the 5-stage choreography.
+ * Each cell's individual animation lasts ~280ms (opacity 0→1 + scale
+ * 0.6→1). We map cell distance from centroid linearly onto the wave
+ * window: nearest cell fires at STAGE3_OFFSET, farthest cell fires at
+ * STAGE3_OFFSET + MAX_WAVE_DELAY.
+ *
+ * Baking the stage-3 absolute offset into the SVG (rather than adding
+ * it via CSS calc) lets the frontend keep a single CSS animation rule
+ * with no per-element variable indirection. Trade-off: the timing is
+ * hardcoded into the cached SVG, so retuning the choreography requires
+ * regenerating all dithers (bump RELIC_DITHER_FORMAT_VERSION below to
+ * force the self-healing invalidator to re-render on next read).
  */
+const STAGE3_OFFSET_MS = 600;
 const MAX_WAVE_DELAY_MS = 620;
+
+/**
+ * Source-comment format version. Stamped into the embedded source-URL
+ * comment so cached SVGs from a prior format don't match against the
+ * current heroImageUrl in relicCacheIsFresh — forces re-render. Bump
+ * whenever the SVG output shape changes (e.g. animation timing,
+ * cell shape vocabulary, sigil row, ...).
+ */
+const RELIC_DITHER_FORMAT_VERSION = 2;
 
 interface CellLuma { x: number; y: number; L: number }
 
@@ -113,7 +131,7 @@ function renderShapeDither(cells: CellLuma[], cols: number, rows: number, cell: 
     const dx = c.x - cxGrid;
     const dy = c.y - cyGrid;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const delayMs = Math.round((dist / maxDist) * MAX_WAVE_DELAY_MS);
+    const delayMs = STAGE3_OFFSET_MS + Math.round((dist / maxDist) * MAX_WAVE_DELAY_MS);
     // Wrapping each shape in a `<g>` lets the frontend target every cell
     // uniformly via `.relic-dither g { animation: ... }` while reading
     // the per-cell delay from the inline style.
@@ -165,10 +183,13 @@ export async function renderRelicDither(heroImageUrl: string): Promise<string> {
   // tag so `extractRelicSource` finds it without parsing the whole SVG.
   // Inject the source-URL comment after the closing `>` of the opening
   // `<svg ...>` tag so the XML stays valid. Comments are invalid inside
-  // a tag's attribute list.
+  // a tag's attribute list. Version-stamp the URL so SVGs from a prior
+  // format don't match against current heroImageUrl in
+  // `relicCacheIsFresh` — forces re-render via the route's lazy path.
+  const stamped = `${escapeForXmlComment(heroImageUrl)};fmt=${RELIC_DITHER_FORMAT_VERSION}`;
   return body.replace(
     'class="relic-dither">',
-    `class="relic-dither">${SOURCE_COMMENT_PREFIX}${escapeForXmlComment(heroImageUrl)}${SOURCE_COMMENT_SUFFIX}`,
+    `class="relic-dither">${SOURCE_COMMENT_PREFIX}${stamped}${SOURCE_COMMENT_SUFFIX}`,
   );
 }
 

@@ -1,0 +1,340 @@
+/* GD-PR4b — archivist relic card layout + 5-stage consecration animation.
+ *
+ * Layout is a single `.relic-card` article composed of 5 layers (top
+ * band, dithered centerpiece, title lockup, receipt, bottom cartouche).
+ * Layout rules + animation rules live together because they're tightly
+ * coupled — keyframes target the exact selectors the layout defines.
+ *
+ * Animation choreography per docs/GD_PR4_PLAN.md D7:
+ *   t=  0..300ms  card materialises (frame fade-in + slight lift)
+ *   t=300..600ms  label band imprints (cells stagger 70ms each)
+ *   t=600..1220+280ms  dither engraves outward from centroid
+ *   t=1500..1750ms title writes left-to-right (clip-path mask)
+ *   t=1900..2400ms receipt rows + bottom cartouche + sigil stamps
+ *
+ * The `.relic-animate` parent class gates the entire choreography. When
+ * absent the card renders in final state (already-consecrated visit or
+ * tests). When present (first visit) every animated element starts
+ * invisible and animates to final state.
+ */
+
+/* ── layout (always applied) ──────────────────────────────────── */
+
+.relic-card {
+  background: var(--ink);
+  border: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  max-width: 360px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.relic-band {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--rule);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+.relic-band-top { background: var(--ink-2); }
+.relic-band-cell {
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-right: 1px solid var(--rule);
+  min-width: 0;
+}
+.relic-band-cell:last-child { border-right: none; }
+.relic-barcode-cell {
+  flex: 0 0 auto;
+  padding: 8px;
+  background: var(--ink);
+  display: flex;
+  align-items: stretch;
+}
+.relic-barcode-cell svg {
+  display: block;
+  height: 100%;
+  width: 56px;
+}
+.relic-k {
+  color: var(--paper-faint);
+  font-size: 7px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.relic-v {
+  color: var(--paper);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.relic-artwork {
+  background: var(--void);
+  border-bottom: 1px solid var(--rule);
+  line-height: 0;
+}
+.relic-artwork svg { display: block; width: 100%; height: auto; }
+.relic-artwork img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.relic-artwork-empty {
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--paper-faint);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.relic-lockup {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--rule);
+  text-align: center;
+}
+.relic-title {
+  color: var(--paper);
+  font-family: var(--display, var(--mono));
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  display: inline-block; /* clip-path animation works on inline-block */
+}
+.relic-byline {
+  color: var(--paper-dim);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.relic-receipt {
+  padding: 12px 18px 16px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 10px;
+  color: var(--paper-dim);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.relic-rline {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.relic-rline .relic-k {
+  flex: 0 0 auto;
+}
+.relic-rline .relic-dots {
+  color: var(--rule-bright, #2d3439);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  letter-spacing: 0.15em;
+  font-size: 10px;
+  align-self: center;
+}
+.relic-rline .relic-v {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+.relic-rline-note {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-top: 8px;
+  margin-top: 6px;
+  border-top: 1px dashed var(--rule);
+  flex: 1;
+}
+.relic-note-display {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  padding: 6px 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: text;
+}
+.relic-note-display:hover { border-color: var(--rule); }
+.relic-note-text {
+  color: var(--paper-dim);
+  font-style: italic;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.relic-note-empty {
+  color: var(--paper-faint);
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-size: 10px;
+}
+.relic-note-edit { color: var(--paper-faint); flex: 0 0 auto; }
+.relic-note-input {
+  width: 100%;
+  background: var(--ink-2);
+  border: 1px solid var(--rule);
+  color: var(--paper);
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 8px 10px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.relic-band-bottom {
+  background: var(--ink-2);
+  padding: 10px 14px 12px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-bottom: none;
+  border-top: 1px solid var(--rule);
+}
+.relic-cart-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.relic-cart-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--rule-bright, #2d3439);
+}
+.relic-cart-text {
+  color: var(--paper);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.relic-cart-sub {
+  color: var(--paper-faint);
+  font-size: 7px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.relic-cart-sigils {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 2px;
+}
+.relic-sigil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── animation (only when .relic-animate is on the parent) ────── */
+
+.relic-animate .relic-card {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: relic-frame-in 300ms ease-out 0ms forwards;
+}
+
+.relic-animate .relic-band-top .relic-band-cell {
+  opacity: 0;
+  animation: relic-fade-in 200ms ease-out forwards;
+  animation-delay: calc(300ms + var(--cell-i, 0) * 70ms);
+}
+
+/* Stage 3 — dither cells. Each <g class="rd-cell"> in the server-rendered
+   SVG has an inline `style="animation-delay:Xms"` where X is the
+   absolute time (STAGE3_OFFSET 600ms + per-cell wave delay 0..620ms). */
+.relic-animate .rd-cell {
+  opacity: 0;
+  transform: scale(0.6);
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: relic-engrave 280ms ease-out forwards;
+}
+
+.relic-animate .relic-title {
+  clip-path: inset(0 100% 0 0);
+  animation: relic-write-x 250ms ease-out 1500ms forwards;
+}
+
+.relic-animate .relic-byline {
+  opacity: 0;
+  animation: relic-fade-in 250ms ease-out 1600ms forwards;
+}
+
+.relic-animate .relic-rline {
+  opacity: 0;
+  animation: relic-fade-in 200ms ease-out forwards;
+  animation-delay: calc(1900ms + var(--row-i, 0) * 80ms);
+}
+
+.relic-animate .relic-band-bottom {
+  opacity: 0;
+  animation: relic-fade-in 250ms ease-out 1900ms forwards;
+}
+
+.relic-animate .relic-sigil {
+  opacity: 0;
+  transform: scale(1.4);
+  animation: relic-stamp 200ms ease-out forwards;
+  animation-delay: calc(2150ms + var(--sigil-i, 0) * 120ms);
+}
+
+@keyframes relic-frame-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes relic-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes relic-engrave {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes relic-write-x {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+@keyframes relic-stamp {
+  from { opacity: 0; transform: scale(1.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* prefers-reduced-motion — collapse to a 200ms cross-fade per D7 */
+@media (prefers-reduced-motion: reduce) {
+  .relic-animate .relic-card,
+  .relic-animate .relic-band-top .relic-band-cell,
+  .relic-animate .rd-cell,
+  .relic-animate .relic-title,
+  .relic-animate .relic-byline,
+  .relic-animate .relic-rline,
+  .relic-animate .relic-band-bottom,
+  .relic-animate .relic-sigil {
+    opacity: 1;
+    animation: none;
+    transform: none;
+    clip-path: none;
+  }
+}

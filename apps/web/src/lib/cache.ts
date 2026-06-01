@@ -45,7 +45,11 @@ const subs = new Map<string, Set<() => void>>();
 // releaseDates / screenshotIds / videoIds. Stale v3 entries without
 // those fields would crash the S2 sub-components with "undefined is
 // not an object (evaluating 'entries.length')".
-const STORAGE_PREFIX = 'hoard:cache:v4:';
+// v4 → v5 (GD-PR4b): GameDetailGameInfo gained `relicDitherSvg: string | null`
+// + `sigils: SigilAssignment[]`. Stale v4 entries would crash the new
+// S4 surface on a Completed game with `Cannot read properties of
+// undefined (reading 'map')` when iterating sigils.
+const STORAGE_PREFIX = 'hoard:cache:v5:';
 
 /**
  * Per-entry size cap when writing to localStorage (UTF-16 chars in the

@@ -5,6 +5,7 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import './styles/tokens.css';
 import './styles/global.css';
+import './styles/relic.css';
 
 registerSW({ immediate: true });
 
