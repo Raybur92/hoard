@@ -352,7 +352,7 @@ describe('B-Art-1 — scoreHeroImage', () => {
   });
 });
 
-describe('B-Art-1 — pickBestHeroImage', () => {
+describe('B-Art-1 — pickBestHeroImage (two-stage: artworks-first, screenshots-fallback)', () => {
   it('returns null when both arrays are empty', () => {
     expect(pickBestHeroImage([], [], null)).toBeNull();
     expect(pickBestHeroImage(null, null, null)).toBeNull();
@@ -368,36 +368,38 @@ describe('B-Art-1 — pickBestHeroImage', () => {
     expect(url).toBe('https://images.igdb.com/igdb/image/upload/t_screenshot_big/abc.jpg');
   });
 
-  it('picks the higher-scoring artwork even when it sits later in the array', () => {
-    // First artwork is a portrait poster; second is a clean 16:9 banner.
-    // Old picker would have returned [0]; B-Art-1 must return [1].
+  it('Stage 1 — respects IGDB array order (no algorithmic tiebreak inside the artworks pool)', () => {
+    // First artwork is slightly off-16:9; second is a clean 16:9. Both
+    // are landscape and eligible for stage 1. Andrea 2026-06-01 lock:
+    // IGDB array order wins (editorial curation). No scoring inside.
     const url = pickBestHeroImage(
       [
-        { image_id: 'portrait', width: 600, height: 900 },
-        { image_id: 'banner', width: 1920, height: 1080 },
+        { image_id: 'first', width: 1200, height: 900 },
+        { image_id: 'second', width: 1920, height: 1080 },
       ],
       [],
       null,
     );
-    expect(url).toContain('banner');
-    expect(url).not.toContain('portrait');
+    expect(url).toContain('/first.jpg');
   });
 
-  it('picks a screenshot over an artwork when the screenshot scores higher', () => {
-    // Artwork is portrait (penalty); screenshot is clean 1080p.
-    const url = pickBestHeroImage(
-      [{ image_id: 'logoart', width: 800, height: 1200 }],
-      [{ image_id: 'screenshot', width: 1920, height: 1080 }],
-      null,
-    );
-    expect(url).toContain('screenshot');
-  });
-
-  it('skips the cover-duplicate artwork and picks the next-best candidate', () => {
+  it('Stage 1 — skips a portrait artwork (width < height) and tries the next', () => {
     const url = pickBestHeroImage(
       [
-        { image_id: 'cov123', width: 600, height: 800 }, // same as cover
-        { image_id: 'real', width: 1920, height: 1080 },
+        { image_id: 'portrait', width: 600, height: 900 },
+        { image_id: 'landscape', width: 1920, height: 1080 },
+      ],
+      [],
+      null,
+    );
+    expect(url).toContain('landscape');
+  });
+
+  it('Stage 1 — skips the cover-duplicate artwork and picks the next-best candidate', () => {
+    const url = pickBestHeroImage(
+      [
+        { image_id: 'cov123', width: 1920, height: 1080 }, // same as cover
+        { image_id: 'real', width: 1600, height: 900 },
       ],
       [],
       'cov123',
@@ -405,7 +407,42 @@ describe('B-Art-1 — pickBestHeroImage', () => {
     expect(url).toContain('real');
   });
 
-  it('returns null when every candidate is the cover duplicate', () => {
+  it('Stage 1 wins over Stage 2 when a usable artwork exists (artworks-first lock)', () => {
+    // The artwork is non-16:9 (1600×900 = 1.78 → actually 16:9, change for fair test)
+    // Use a 1600×1000 artwork (slightly off) vs a clean 1920×1080 screenshot.
+    // The v1 single-pool scorer would have picked the screenshot; v2 must
+    // pick the artwork.
+    const url = pickBestHeroImage(
+      [{ image_id: 'art', width: 1600, height: 1000 }],
+      [{ image_id: 'screen', width: 1920, height: 1080 }],
+      null,
+    );
+    expect(url).toContain('/art.jpg');
+    expect(url).not.toContain('/screen.jpg');
+  });
+
+  it('Stage 2 — falls back to screenshots when every artwork is portrait or cover-duplicate', () => {
+    const url = pickBestHeroImage(
+      [
+        { image_id: 'portrait', width: 800, height: 1200 },
+        { image_id: 'cov123', width: 1920, height: 1080 },
+      ],
+      [{ image_id: 'fallback', width: 1920, height: 1080 }],
+      'cov123',
+    );
+    expect(url).toContain('/fallback.jpg');
+  });
+
+  it('Stage 2 — falls back to screenshots when artworks array is empty', () => {
+    const url = pickBestHeroImage(
+      [],
+      [{ image_id: 'fallback', width: 1920, height: 1080 }],
+      null,
+    );
+    expect(url).toContain('/fallback.jpg');
+  });
+
+  it('returns null when every artwork is unusable AND every screenshot is the cover duplicate', () => {
     const url = pickBestHeroImage(
       [{ image_id: 'cov123', width: 600, height: 800 }],
       [{ image_id: 'cov123', width: 600, height: 800 }],
@@ -414,12 +451,14 @@ describe('B-Art-1 — pickBestHeroImage', () => {
     expect(url).toBeNull();
   });
 
-  it('uses a missing-dimension artwork as a low-but-positive baseline (better than nothing)', () => {
+  it('uses a missing-dimension artwork (treated as non-portrait by default) as stage 1', () => {
+    // Missing dimensions get benefit-of-the-doubt: NOT classified as
+    // portrait, eligible for stage 1.
     const url = pickBestHeroImage(
       [{ image_id: 'unknownDims' }],
-      [],
+      [{ image_id: 'screenshot', width: 1920, height: 1080 }],
       null,
     );
-    expect(url).toBe('https://images.igdb.com/igdb/image/upload/t_screenshot_big/unknownDims.jpg');
+    expect(url).toContain('unknownDims');
   });
 });

@@ -163,21 +163,51 @@ export function scoreHeroImage(
   return aspectScore + resScore;
 }
 
+function isPortrait(c: HeroImageCandidate): boolean {
+  // Hard-reject only when we KNOW the image is portrait. Missing
+  // dimensions get the benefit of the doubt (most curated key art on
+  // IGDB is landscape) and stay eligible for stage 1.
+  return c.width !== undefined && c.height !== undefined
+    && c.width > 0 && c.height > 0
+    && c.width < c.height;
+}
+
+/**
+ * Two-stage pick (v3). Andrea 2026-06-01 locked two preferences:
+ *
+ *   1. Artworks-first — screenshots are *"awful"* on average (random
+ *      in-game moments rarely make flattering hero images). Only fall
+ *      through to screenshots when no usable artwork exists.
+ *
+ *   2. IGDB array order wins inside the artworks pool — community
+ *      contributors curate the first artwork as the most representative
+ *      one. Algorithmic scoring "beats" that editorial order unreliably,
+ *      so we don't try; we just take the FIRST artwork that passes the
+ *      filter (not cover-duplicate, not portrait).
+ *
+ * Stage 1 — first artwork that's not a cover-duplicate and not portrait.
+ * Stage 2 — first screenshot that's not a cover-duplicate (screenshots
+ * are uniformly 16:9 landscape, so only cover-dup veto applies).
+ *
+ * `scoreHeroImage` is exported for documentation but not used inside
+ * `pickBestHeroImage` anymore (v1 used it for cross-pool comparison,
+ * v2 for in-pool tiebreaks — both regressed Andrea's eyeball test).
+ */
 export function pickBestHeroImage(
   artworks: HeroImageCandidate[] | null | undefined,
   screenshots: HeroImageCandidate[] | null | undefined,
   coverImageId: string | null = null,
 ): string | null {
-  const all = [...(artworks ?? []), ...(screenshots ?? [])];
-  if (all.length === 0) return null;
-  let best: HeroImageCandidate | null = null;
-  let bestScore = -Infinity;
-  for (const c of all) {
-    const s = scoreHeroImage(c, coverImageId);
-    if (s > bestScore) { bestScore = s; best = c; }
+  const stage1 = (artworks ?? []).find(
+    (a) => !isPortrait(a) && !(coverImageId && a.image_id === coverImageId),
+  );
+  if (stage1) {
+    return `https://images.igdb.com/igdb/image/upload/t_screenshot_big/${stage1.image_id}.jpg`;
   }
-  if (!best || bestScore < 0) return null;
-  return `https://images.igdb.com/igdb/image/upload/t_screenshot_big/${best.image_id}.jpg`;
+  const stage2 = (screenshots ?? []).find(
+    (s) => !(coverImageId && s.image_id === coverImageId),
+  );
+  return stage2 ? `https://images.igdb.com/igdb/image/upload/t_screenshot_big/${stage2.image_id}.jpg` : null;
 }
 
 function deriveHeroImageUrl(
