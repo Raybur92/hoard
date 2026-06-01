@@ -132,7 +132,6 @@ const SHAPE_BUCKETS = 7;
 // mark — same intent as our halftone, but with varied shapes per cell
 // (the visual signature of svg-dither-filter).
 function shapeForBucket(bucket: number, cx: number, cy: number, s: number, rotateDeg: number): string {
-  const half = s / 2;
   // Apply rotation per cell when requested (rotateDeg is 0 for the
   // no-rotation variant). All shapes rotate around (cx, cy) so the
   // SVG transform stays uniform.

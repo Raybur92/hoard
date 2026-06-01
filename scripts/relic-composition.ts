@@ -32,7 +32,6 @@ import { writeFile } from 'node:fs/promises';
 const ART_COLS = 120;
 const ART_ROWS = 68;
 const ART_CELL = 6;
-const HALFTONE_DENSITY = 0.50;
 
 interface CellLuma { x: number; y: number; L: number }
 
@@ -55,25 +54,6 @@ async function readCellLuminance(url: string, cols: number, rows: number): Promi
     }
   }
   return cells;
-}
-
-function renderHalftone(cells: CellLuma[], cols: number, rows: number, cell: number, density: number): string {
-  const w = cols * cell, h = rows * cell;
-  const maxR = cell * density;
-  const skip = cell * 0.05;
-  let dots = '';
-  for (const c of cells) {
-    const t = c.L / 255;
-    const r = maxR * t;
-    if (r < skip) continue;
-    const cx = c.x * cell + cell / 2;
-    const cy = c.y * cell + cell / 2;
-    dots += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(2)}"/>`;
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
-    <rect x="0" y="0" width="${w}" height="${h}" fill="#07090a"/>
-    <g fill="#ece8de">${dots}</g>
-  </svg>`;
 }
 
 /* ── shape-dither (full svg-dither-filter method) ── */
@@ -504,7 +484,6 @@ function renderPunchCard(refCode: string): string {
 
 function renderBottomBand(r: BuiltRelic, variant: BottomVariant): string {
   const m = r.meta;
-  const year = m.releaseYear; // year-of-release for cartouche subtitle; could swap to completedAt year
   const completedYear = parseInt(m.completedAt.slice(0, 4), 10);
   if (variant === 'barcode') {
     return `

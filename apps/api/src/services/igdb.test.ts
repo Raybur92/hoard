@@ -7,6 +7,8 @@ import {
   getGameByXboxTitleId,
   getGameByGogAppId,
   clearCaches,
+  scoreHeroImage,
+  pickBestHeroImage,
 } from './igdb';
 
 // Mock environment variables
@@ -314,5 +316,110 @@ describe('N-series external_games helpers', () => {
       .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
 
     expect(await getGameByPsnConceptId(123)).toBeNull();
+  });
+});
+
+describe('B-Art-1 — scoreHeroImage', () => {
+  it('returns -1000 when image_id matches the cover (duplicate veto)', () => {
+    const score = scoreHeroImage({ image_id: 'cov123', width: 1920, height: 1080 }, 'cov123');
+    expect(score).toBe(-1000);
+  });
+
+  it('returns positive baseline (1) when dimensions are missing', () => {
+    expect(scoreHeroImage({ image_id: 'x' }, null)).toBe(1);
+    expect(scoreHeroImage({ image_id: 'x', width: 0, height: 0 }, null)).toBe(1);
+  });
+
+  it('scores a perfect 16:9 image with high resolution higher than a portrait of the same area', () => {
+    const landscape = scoreHeroImage({ image_id: 'l', width: 1920, height: 1080 }, null);
+    const portrait = scoreHeroImage({ image_id: 'p', width: 1080, height: 1920 }, null);
+    expect(landscape).toBeGreaterThan(portrait);
+  });
+
+  it('aspect-score decays linearly with distance from 16:9', () => {
+    // 16:9 ≈ 1.778. A 1:1 image (aspect=1) is 0.778 away → aspect penalty 0.778 * 60 ≈ 46.7
+    const square = scoreHeroImage({ image_id: 's', width: 1000, height: 1000 }, null);
+    const landscape = scoreHeroImage({ image_id: 'l', width: 1778, height: 1000 }, null);
+    expect(landscape).toBeGreaterThan(square);
+  });
+
+  it('resolution score is log-scaled (4K beats 1080p but not by 4×)', () => {
+    const hd = scoreHeroImage({ image_id: 'hd', width: 1920, height: 1080 }, null);
+    const fourK = scoreHeroImage({ image_id: '4k', width: 3840, height: 2160 }, null);
+    expect(fourK).toBeGreaterThan(hd);
+    // log-scaled — 4× the pixels should not double the score
+    expect(fourK).toBeLessThan(hd * 2);
+  });
+});
+
+describe('B-Art-1 — pickBestHeroImage', () => {
+  it('returns null when both arrays are empty', () => {
+    expect(pickBestHeroImage([], [], null)).toBeNull();
+    expect(pickBestHeroImage(null, null, null)).toBeNull();
+    expect(pickBestHeroImage(undefined, undefined, null)).toBeNull();
+  });
+
+  it('returns the screenshot URL pattern (t_screenshot_big)', () => {
+    const url = pickBestHeroImage(
+      [{ image_id: 'abc', width: 1920, height: 1080 }],
+      [],
+      null,
+    );
+    expect(url).toBe('https://images.igdb.com/igdb/image/upload/t_screenshot_big/abc.jpg');
+  });
+
+  it('picks the higher-scoring artwork even when it sits later in the array', () => {
+    // First artwork is a portrait poster; second is a clean 16:9 banner.
+    // Old picker would have returned [0]; B-Art-1 must return [1].
+    const url = pickBestHeroImage(
+      [
+        { image_id: 'portrait', width: 600, height: 900 },
+        { image_id: 'banner', width: 1920, height: 1080 },
+      ],
+      [],
+      null,
+    );
+    expect(url).toContain('banner');
+    expect(url).not.toContain('portrait');
+  });
+
+  it('picks a screenshot over an artwork when the screenshot scores higher', () => {
+    // Artwork is portrait (penalty); screenshot is clean 1080p.
+    const url = pickBestHeroImage(
+      [{ image_id: 'logoart', width: 800, height: 1200 }],
+      [{ image_id: 'screenshot', width: 1920, height: 1080 }],
+      null,
+    );
+    expect(url).toContain('screenshot');
+  });
+
+  it('skips the cover-duplicate artwork and picks the next-best candidate', () => {
+    const url = pickBestHeroImage(
+      [
+        { image_id: 'cov123', width: 600, height: 800 }, // same as cover
+        { image_id: 'real', width: 1920, height: 1080 },
+      ],
+      [],
+      'cov123',
+    );
+    expect(url).toContain('real');
+  });
+
+  it('returns null when every candidate is the cover duplicate', () => {
+    const url = pickBestHeroImage(
+      [{ image_id: 'cov123', width: 600, height: 800 }],
+      [{ image_id: 'cov123', width: 600, height: 800 }],
+      'cov123',
+    );
+    expect(url).toBeNull();
+  });
+
+  it('uses a missing-dimension artwork as a low-but-positive baseline (better than nothing)', () => {
+    const url = pickBestHeroImage(
+      [{ image_id: 'unknownDims' }],
+      [],
+      null,
+    );
+    expect(url).toBe('https://images.igdb.com/igdb/image/upload/t_screenshot_big/unknownDims.jpg');
   });
 });
