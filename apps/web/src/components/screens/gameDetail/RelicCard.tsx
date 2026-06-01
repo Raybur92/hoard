@@ -137,7 +137,13 @@ export function RelicCard({ game, userGame, onMutated, focusNotes }: Props) {
   const totalPlaytime = userGame.playtimeByPlatform
     ? Object.values(userGame.playtimeByPlatform).reduce((s: number, v) => s + (v ?? 0), 0)
     : 0;
-  const primaryGenreCluster = game.sigils.find((s) => s.dimension === 'GENRE')?.value ?? '—';
+  // Defensive `?? []` against stale persisted-cache entries from before
+  // GD-PR4a added `sigils` to the response. The cache version bump (v4 → v5)
+  // should already invalidate, but a half-loaded session or unreloaded API
+  // dev server can still produce a sigil-less game. Degrade gracefully —
+  // no fallback sigils, just an empty cartouche row.
+  const sigils = game.sigils ?? [];
+  const primaryGenreCluster = sigils.find((s) => s.dimension === 'GENRE')?.value ?? '—';
 
   /* ── inline editor state ── */
   const [noteDraft, setNoteDraft] = useState(userGame.notes ?? '');
@@ -292,7 +298,7 @@ export function RelicCard({ game, userGame, onMutated, focusNotes }: Props) {
         </div>
         <div className="relic-cart-sub">· IN AETERNVM · {toRoman(completedYear)} ·</div>
         <div className="relic-cart-sigils" aria-label="Sigil stack">
-          {game.sigils.map((a: SigilAssignment, i) => {
+          {sigils.map((a: SigilAssignment, i) => {
             const body = SIGIL_BY_NAME[a.sigilName] ?? '';
             return (
               <span
