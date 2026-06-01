@@ -327,6 +327,50 @@ export interface GameDetailGameInfo {
    * iframe embed is deferred to a polish PR (CSP carve-out required).
    */
   videoIds: string[];
+  /**
+   * GD-PR4a — pre-rendered shape-dither SVG for the OQ-GD-13 archivist
+   * relic centerpiece. Server-side render via sharp, cached on
+   * `Game.relicDitherSvg` and lazily generated on first read. Null when:
+   *   - `heroImageUrl` is null (no source image to dither)
+   *   - First request for a Game (background generation kicked off; next
+   *     request gets the cached SVG)
+   *   - sharp render failed (graceful — S4 falls back to coverUrl in img tag)
+   *
+   * Each cell `<g>` inside the SVG carries an inline `style="animation-delay: Xms"`
+   * computed from the cell's Euclidean distance to the artwork centroid;
+   * the GD-PR4b frontend animation (D7) uses these directly. Read-only
+   * for the frontend.
+   */
+  relicDitherSvg: string | null;
+  /**
+   * GD-PR4a — 3 sigil assignments (GENRE / THEME / PERSPECTIVE) for the
+   * relic surface. Computed on each request via `assignSigils()` over the
+   * Game's `genres / themes / playerPerspectives` arrays. Always 3
+   * entries; fallback values fire when classifiers can't place a tag.
+   *
+   * Frontend renders the actual SVG glyphs by name (look up in
+   * `apps/web/src/components/screens/gameDetail/relicSigils.ts`).
+   */
+  sigils: SigilAssignment[];
+}
+
+/**
+ * GD-PR4a — one sigil mark assigned to one of the three relic dimensions.
+ *
+ * - `dimension` — 'GENRE' | 'THEME' | 'PERSPECTIVE' (the relic surface
+ *   shows exactly three, in this order)
+ * - `value` — the cluster name (e.g. 'COMBAT' / 'CHAOS' / 'First person')
+ *   or the SHROUD / APOCRYPHA / ASYLUM fallback
+ * - `sigilName` — the lookup key into the frontend's SIGIL_BY_NAME map
+ *   (e.g. 'cross', 'flame', 'ring-dot')
+ *
+ * 1 sigil = 1 value globally (the consecrated-symbol interpretation
+ * locked 2026-06-01). Reader builds vocabulary over time.
+ */
+export interface SigilAssignment {
+  dimension: 'GENRE' | 'THEME' | 'PERSPECTIVE';
+  value: string;
+  sigilName: string;
 }
 
 /**

@@ -8,6 +8,41 @@ import { requireActive } from '../middleware/active';
 import type { GameListResponse, PatchGameBody, ShelvesResponse, GameStatus } from '@hoard/types';
 import { fetchHltbWithFallback } from '../services/hltb';
 import { getGame, getReleaseDetails, getGameDetailExtras, getTimeToBeat } from '../services/igdb';
+import { renderRelicDither, extractRelicSource } from '../services/relicDither';
+import { assignSigils } from '../lib/relicSigils';
+
+/**
+ * GD-PR4a — in-flight relic-dither render guard. Prevents parallel
+ * requests for the same Game from triggering N concurrent sharp renders
+ * of the same image. First request claims the slot; sibling requests
+ * skip the kick-off and pick up the cached value on their next read.
+ */
+const relicDitherInFlight = new Set<string>();
+
+function relicCacheIsFresh(cachedSvg: string | null, currentHeroUrl: string | null): boolean {
+  if (!cachedSvg || !currentHeroUrl) return false;
+  const cachedSrc = extractRelicSource(cachedSvg);
+  return cachedSrc === currentHeroUrl;
+}
+
+function kickOffRelicDitherGeneration(gameId: string, heroImageUrl: string): void {
+  if (relicDitherInFlight.has(gameId)) return;
+  relicDitherInFlight.add(gameId);
+  // Fire-and-forget. Caught locally so any failure doesn't leak.
+  void (async () => {
+    try {
+      const svg = await renderRelicDither(heroImageUrl);
+      await prisma.game.update({ where: { id: gameId }, data: { relicDitherSvg: svg } });
+    } catch {
+      // Swallow — frontend gracefully falls back to coverUrl on null
+      // relicDitherSvg. Next request retries after the in-flight slot
+      // clears (5 min cooldown via the timeout below).
+    } finally {
+      // Cooldown — don't immediately re-trigger if the render kept failing.
+      setTimeout(() => relicDitherInFlight.delete(gameId), 5 * 60 * 1000);
+    }
+  })();
+}
 import { mapUserGame, fromPrismaStatus } from '../lib/mappers';
 import { logEvent } from '../services/userEvents';
 import { detectGameDetailState } from '../lib/gameDetailState';
@@ -352,7 +387,22 @@ router.get('/games/by-igdb/:igdbId', requireUser, requireActive, async (req: Req
     releaseDates: extras?.releaseDates ?? [],
     screenshotIds: extras?.screenshotIds ?? [],
     videoIds: extras?.videoIds ?? [],
+    // GD-PR4a — relic centerpiece: serve cached SVG only when its
+    // embedded `<!-- src=... -->` source comment matches the current
+    // heroImageUrl. On mismatch we treat the cache as stale + kick off
+    // a re-render. Self-healing invalidation — no per-writer cache-bust
+    // when heroImageUrl changes via sync / rescore / wishlist add.
+    relicDitherSvg: relicCacheIsFresh(game.relicDitherSvg, game.heroImageUrl)
+      ? game.relicDitherSvg
+      : null,
+    sigils: assignSigils(game.genres, game.themes, game.playerPerspectives),
   };
+  if (
+    game.heroImageUrl
+    && !relicCacheIsFresh(game.relicDitherSvg, game.heroImageUrl)
+  ) {
+    kickOffRelicDitherGeneration(game.id, game.heroImageUrl);
+  }
 
   const body: GameDetailResponse = {
     state,

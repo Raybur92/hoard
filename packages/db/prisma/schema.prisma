@@ -271,6 +271,14 @@ model Game {
   // portrait coverUrl shown elsewhere. Nullable because not every game has
   // artworks/screenshots in IGDB; renderer falls back to coverUrl.
   heroImageUrl         String?
+  // GD-PR4a — pre-rendered shape-dither SVG for the OQ-GD-13 archivist
+  // relic centerpiece. Computed via `apps/api/src/services/relicDither.ts`
+  // from the heroImageUrl (sharp downsample → 120×68 cell grid → bucketed
+  // tonal shapes). ~15-30 KB per row. Lazily generated on first GameDetail
+  // read; cleared (set to null) whenever heroImageUrl changes so the next
+  // read re-renders against the new source image. Frontend GD-PR4b consumes
+  // it directly via dangerouslySetInnerHTML.
+  relicDitherSvg       String?
   metadata             Json?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
