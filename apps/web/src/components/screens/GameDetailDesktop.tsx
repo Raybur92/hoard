@@ -14,6 +14,7 @@ import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, shortYear, generateReceipt, buildAchievementRows, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
+import { RelicOverlay } from './gameDetail/RelicOverlay';
 // GD-PR3 — sub-status / rating / times-beaten / HLTB pace enrichments
 import { SubStatusPicker } from './gameDetail/SubStatusPicker';
 import { CompletionsCounter } from './gameDetail/CompletionsCounter';
@@ -47,6 +48,9 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
   const [editingNotes, setEditingNotes] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [remapOpen, setRemapOpen] = useState(false);
+  // GD-PR4b polish — [see relic] button + auto-open on status flip
+  // to Completed (consecration moment).
+  const [relicOpen, setRelicOpen] = useState(false);
   const statusRef = useRef<HTMLDivElement>(null);
 
   // PR A — A9b: Dashboard "+ note" button navigates here with ?focus=notes
@@ -72,8 +76,18 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
   async function changeStatus(s: GameStatus) {
     if (!id) return;
     setStatusOpen(false);
+    const wasCompleted = ug?.status === 'Completed';
     update({ status: s });
     await api.patchGame(id, { status: s }).catch(() => null);
+    // GD-PR4b polish — consecration moment. When the user flips a game
+    // from any other status to Completed, auto-open the relic overlay
+    // once. Returning to Completed (Completed → Playing → Completed
+    // again) does NOT re-trigger because the localStorage flag from
+    // the first visit is already set inside RelicOverlay's animation
+    // gate; the overlay still opens but renders in final state.
+    if (s === 'Completed' && !wasCompleted) {
+      setRelicOpen(true);
+    }
   }
 
   async function saveNote() {
@@ -191,6 +205,14 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
         </Btn>
       </div>
 
+      {relicOpen && (
+        <RelicOverlay
+          igdbId={g.game.igdbId}
+          userGame={g}
+          onClose={() => setRelicOpen(false)}
+        />
+      )}
+
       {remapOpen && (
         <RemapGameModal
           userGameId={g.id}
@@ -277,6 +299,11 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
                     onChange={(next) => void setCompletionsCount(next)}
                   />
                   <span style={{ flex: 1 }} />
+                  {g.status === 'Completed' && (
+                    <Btn variant="amber" onClick={() => setRelicOpen(true)}>
+                      <Icon name="star" size={11} fill={true} /> see relic
+                    </Btn>
+                  )}
                   {g.status !== 'Playing' && (
                     <Btn variant="primary" onClick={() => void changeStatus('Playing')}>
                       <Icon name="play" size={11} fill={true} /> start playing

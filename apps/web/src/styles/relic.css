@@ -190,6 +190,67 @@
   font-size: 10px;
 }
 .relic-note-edit { color: var(--paper-faint); flex: 0 0 auto; }
+
+/* Full-screen overlay — the relic-as-artifact view */
+.relic-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 9, 10, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+.relic-overlay-inner {
+  width: 100%;
+  max-width: 360px;
+  margin: auto;
+}
+.relic-overlay-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--paper);
+  cursor: pointer;
+  border-radius: 2px;
+  z-index: 1001;
+}
+.relic-overlay-close:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.relic-overlay-close:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+.relic-overlay-loading {
+  color: var(--paper-faint);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 60px 20px;
+}
+
+/* Readonly receipt values — inscribed text instead of inline editors */
+.relic-readonly-value {
+  color: var(--paper);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.relic-readonly-rating { color: var(--amber); }
 .relic-note-input {
   width: 100%;
   background: var(--ink-2);

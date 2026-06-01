@@ -13,6 +13,7 @@ import { api } from '../../lib/api';
 import { minutesToHours, formatRelative, generateReceipt, buildAchievementRows, buildPlatformRows } from '../../lib/utils';
 import type { GameStatus } from '@hoard/types';
 import { RemapGameModal } from './RemapGameModal';
+import { RelicOverlay } from './gameDetail/RelicOverlay';
 // GD-PR3 — sub-status / rating / times-beaten / HLTB pace enrichments
 import { SubStatusPicker } from './gameDetail/SubStatusPicker';
 import { CompletionsCounter } from './gameDetail/CompletionsCounter';
@@ -45,6 +46,7 @@ export function GameDetailMobile({ userGameId: propUserGameId }: { userGameId?: 
   const [noteDraft, setNoteDraft] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
   const [remapOpen, setRemapOpen] = useState(false);
+  const [relicOpen, setRelicOpen] = useState(false);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const sheetTrapRef = useFocusTrap<HTMLDivElement>(statusSheetOpen);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,11 +77,16 @@ export function GameDetailMobile({ userGameId: propUserGameId }: { userGameId?: 
   async function changeStatus(s: GameStatus) {
     if (!id) return;
     setStatusSheetOpen(false);
+    const wasCompleted = ug?.status === 'Completed';
     update({ status: s });
     // Pre-GD-PR3 the mobile handler was cache-only (no server PATCH);
     // status + note edits never persisted. Fixed here while wiring the
     // GD-PR3 enrichments — desktop pattern, optimistic + server.
     await api.patchGame(id, { status: s }).catch(() => null);
+    // GD-PR4b polish — consecration moment, mirrors desktop.
+    if (s === 'Completed' && !wasCompleted) {
+      setRelicOpen(true);
+    }
   }
 
   async function saveNote() {
@@ -239,6 +246,14 @@ export function GameDetailMobile({ userGameId: propUserGameId }: { userGameId?: 
         />
       )}
 
+      {relicOpen && (
+        <RelicOverlay
+          igdbId={g.game.igdbId}
+          userGame={g}
+          onClose={() => setRelicOpen(false)}
+        />
+      )}
+
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '16px 18px 24px', background: 'var(--void)' }}>
         {/* status */}
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -393,7 +408,12 @@ last played .. ${g.lastPlayedAt ? formatRelative(g.lastPlayedAt) : 'never'}`}
         </div>
 
         {/* action buttons */}
-        <div style={{ marginTop: 18, display: 'flex', gap: 8, justifyContent: 'center' }}>
+        <div style={{ marginTop: 18, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {g.status === 'Completed' && (
+            <Btn variant="amber" sm onClick={() => setRelicOpen(true)}>
+              <Icon name="star" size={10} fill={true} /> see relic
+            </Btn>
+          )}
           {g.status !== 'Playing' && (
             <Btn variant="primary" sm onClick={() => void handleStartPressed()}>
               <Icon name="play" size={10} fill={true} /> start

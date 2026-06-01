@@ -12,7 +12,6 @@ import { useGameByIgdb } from '../../hooks/useGameByIgdb';
 import { api } from '../../lib/api';
 import { S1Mobile } from './gameDetail/S1Mobile';
 import { S2Mobile } from './gameDetail/S2Mobile';
-import { S4Mobile } from './gameDetail/S4Mobile';
 import { GameDetailMobile } from './GameDetailMobile';
 
 export function GameDetailV2Mobile() {
@@ -95,11 +94,9 @@ export function GameDetailV2Mobile() {
 
   // Same dispatch as GameDetailV2Desktop — see that file for the full
   // rationale. GD-PR2 adds the S2 surface for upcoming (future-release)
-  // games whether wishlisted or not. GD-PR4b adds S4 for completed.
-  if (data.state === 'S4' && data.userGame) {
-    return <S4Mobile game={data.game} userGame={data.userGame} onMutated={refetch} />;
-  }
-
+  // games whether wishlisted or not. GD-PR4b polish: Completed games
+  // stay on the legacy surface; the relic lives as a button-triggered
+  // overlay inside it.
   if (data.userGame && data.userGame.status !== 'Wishlist') {
     return <GameDetailMobile userGameId={data.userGame.id} />;
   }

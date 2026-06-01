@@ -32,10 +32,34 @@ import { api } from '../../../lib/api';
 interface Props {
   game: GameDetailGameInfo;
   userGame: UserGameDetail;
-  /** Called after any successful PATCH so the parent dispatcher refetches. */
-  onMutated: () => void;
-  /** Focus the notes editor on mount — used by ?focus=notes deep-link. */
+  /** Called after any successful PATCH so the parent dispatcher refetches.
+   *  Unused when `readonly` is true. */
+  onMutated?: () => void;
+  /** Focus the notes editor on mount — used by ?focus=notes deep-link.
+   *  Unused when `readonly` is true. */
   focusNotes?: boolean;
+  /**
+   * GD-PR4b polish (2026-06-01) — when true, the receipt renders the
+   * editable fields as inscribed text (rating as `8/10`, sub-status as
+   * a static value, etc) instead of mounting the GD-PR3 inline editors.
+   * Used by the `[see relic]` overlay surface; editing happens on the
+   * legacy GameDetail view, not here.
+   */
+  readonly?: boolean;
+}
+
+function fmtSubStatus(s: string | null): string {
+  return s ?? '—';
+}
+
+function fmtRating(r: number | null | undefined): string {
+  if (r === null || r === undefined) return '—';
+  return `${r}/10`;
+}
+
+function fmtCompletions(n: number | null | undefined): string {
+  if (!n || n === 0) return '—';
+  return n === 1 ? '× 1' : `× ${n}`;
 }
 
 /* ── helpers (port of prototype's fmt + ref + roman) ─────────────── */
@@ -128,7 +152,7 @@ function microBarcode(refCode: string, totalWidth: number, height: number): stri
 
 const DOT_FILL = '·'.repeat(200);
 
-export function RelicCard({ game, userGame, onMutated, focusNotes }: Props) {
+export function RelicCard({ game, userGame, onMutated, focusNotes, readonly = false }: Props) {
   const id = userGame.id;
   const sealedIso = userGame.lastPlayedAt ?? userGame.addedAt;
   const completedYear = sealedIso ? new Date(sealedIso).getFullYear() : new Date().getFullYear();
@@ -165,10 +189,15 @@ export function RelicCard({ game, userGame, onMutated, focusNotes }: Props) {
   async function patch<K extends keyof typeof userGame>(field: K, value: typeof userGame[K]) {
     try {
       await api.patchGame(id, { [field]: value } as Parameters<typeof api.patchGame>[1]);
-      onMutated();
+      // GD-PR4b polish: don't refetch on success — api.patchGame already
+      // writes the updated UserGameDetail through to the V2 dispatcher's
+      // cache key (`game:igdb:...`), so SWR subscribers see the new value
+      // immediately. Calling onMutated()/refetch() here would re-bounce
+      // the request to the server + flash a loading state Andrea reported
+      // as ugly.
     } catch (e) {
       console.error('[GD-PR4b] patch failed:', e);
-      onMutated(); // refetch reverts the optimistic UI
+      onMutated?.(); // refetch reverts the optimistic UI ONLY on failure
     }
   }
 
@@ -230,37 +259,53 @@ export function RelicCard({ game, userGame, onMutated, focusNotes }: Props) {
           <span className="relic-k">SUB-STATUS</span>
           <span className="relic-dots">{DOT_FILL}</span>
           <span className="relic-v">
-            <SubStatusPicker
-              status={userGame.status as GameStatus}
-              subStatus={userGame.subStatus ?? null}
-              onChange={(next) => void patch('subStatus', next)}
-            />
+            {readonly ? (
+              <span className="relic-readonly-value">{fmtSubStatus(userGame.subStatus ?? null)}</span>
+            ) : (
+              <SubStatusPicker
+                status={userGame.status as GameStatus}
+                subStatus={userGame.subStatus ?? null}
+                onChange={(next) => void patch('subStatus', next)}
+              />
+            )}
           </span>
         </div>
         <div className="relic-rline" style={{ ['--row-i' as string]: 2 }}>
           <span className="relic-k">COMPLETIONS</span>
           <span className="relic-dots">{DOT_FILL}</span>
           <span className="relic-v">
-            <CompletionsCounter
-              status={userGame.status as GameStatus}
-              value={userGame.completionsCount ?? 0}
-              onChange={(next) => void patch('completionsCount', next)}
-            />
+            {readonly ? (
+              <span className="relic-readonly-value">{fmtCompletions(userGame.completionsCount)}</span>
+            ) : (
+              <CompletionsCounter
+                status={userGame.status as GameStatus}
+                value={userGame.completionsCount ?? 0}
+                onChange={(next) => void patch('completionsCount', next)}
+              />
+            )}
           </span>
         </div>
         <div className="relic-rline" style={{ ['--row-i' as string]: 3 }}>
           <span className="relic-k">RATING</span>
           <span className="relic-dots">{DOT_FILL}</span>
           <span className="relic-v">
-            <RatingGrid
-              value={userGame.rating ?? null}
-              onChange={(next) => void patch('rating', next)}
-            />
+            {readonly ? (
+              <span className="relic-readonly-value relic-readonly-rating">{fmtRating(userGame.rating)}</span>
+            ) : (
+              <RatingGrid
+                value={userGame.rating ?? null}
+                onChange={(next) => void patch('rating', next)}
+              />
+            )}
           </span>
         </div>
         <div className="relic-rline relic-rline-note" style={{ ['--row-i' as string]: 4 }}>
           <span className="relic-k">NOTE</span>
-          {editingNotes ? (
+          {readonly ? (
+            userGame.notes
+              ? <span className="relic-note-text">{userGame.notes}</span>
+              : <span className="relic-note-empty">// no inscription</span>
+          ) : editingNotes ? (
             <>
               <textarea
                 ref={noteRef}

@@ -182,4 +182,41 @@ describe('GD-PR4b — RelicCard', () => {
     expect(radiogroup).not.toBeNull();
     expect(radiogroup?.querySelectorAll('[role="radio"]').length).toBe(10);
   });
+
+  describe('readonly mode (GD-PR4b polish)', () => {
+    it('hides all inline editors when readonly is true', () => {
+      const { container } = wrap(<RelicCard game={sampleGame} userGame={sampleUserGame} readonly />);
+      expect(container.querySelector('[role="radiogroup"]')).toBeNull();
+      expect(container.querySelector('textarea')).toBeNull();
+      expect(container.querySelector('button[aria-label="Edit note"]')).toBeNull();
+    });
+
+    it('renders rating as inscribed `8/10` text in amber', () => {
+      const { container } = wrap(<RelicCard game={sampleGame} userGame={sampleUserGame} readonly />);
+      const rating = container.querySelector('.relic-readonly-rating');
+      expect(rating?.textContent).toBe('8/10');
+    });
+
+    it('renders sub-status / completions / notes as plain text', () => {
+      const { container } = wrap(<RelicCard game={sampleGame} userGame={sampleUserGame} readonly />);
+      expect(container.textContent).toContain('main');         // sub-status
+      expect(container.textContent).toContain('× 1');          // completions
+      expect(container.textContent).toContain('phantom liberty fixed it.'); // note
+    });
+
+    it('shows `// no inscription` when notes are empty in readonly mode', () => {
+      const ug = { ...sampleUserGame, notes: null };
+      wrap(<RelicCard game={sampleGame} userGame={ug} readonly />);
+      expect(screen.getByText('// no inscription')).toBeInTheDocument();
+    });
+
+    it('renders `—` for missing sub-status / completions / rating in readonly mode', () => {
+      const ug = { ...sampleUserGame, subStatus: null, completionsCount: null, rating: null };
+      const { container } = wrap(<RelicCard game={sampleGame} userGame={ug} readonly />);
+      // 3 `—` dashes in the receipt — one per missing field.
+      const dashes = container.querySelectorAll('.relic-readonly-value');
+      const dashTexts = Array.from(dashes).map((el) => el.textContent);
+      expect(dashTexts.filter((t) => t === '—').length).toBeGreaterThanOrEqual(3);
+    });
+  });
 });

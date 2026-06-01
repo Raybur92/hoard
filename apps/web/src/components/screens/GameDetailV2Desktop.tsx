@@ -26,7 +26,6 @@ import { useGameByIgdb } from '../../hooks/useGameByIgdb';
 import { api } from '../../lib/api';
 import { S1Desktop } from './gameDetail/S1Desktop';
 import { S2Desktop } from './gameDetail/S2Desktop';
-import { S4Desktop } from './gameDetail/S4Desktop';
 import { GameDetailDesktop } from './GameDetailDesktop';
 
 export function GameDetailV2Desktop() {
@@ -133,15 +132,11 @@ export function GameDetailV2Desktop() {
   // gets the S1 surface — already shown in GD-PR1 to be the right call
   // since "mark complete / start playing / + note" CTAs don't fit
   // wishlist games.
-  // S4 (Completed) — archivist relic surface per OQ-GD-13. Wired in
-  // GD-PR4b. The dispatcher routes by server-computed `state` for this
-  // branch (more authoritative than the local status check below since
-  // future S4 enrichments may depend on per-state extras).
-  if (data.state === 'S4' && data.userGame) {
-    return <S4Desktop game={data.game} userGame={data.userGame} onMutated={refetch} />;
-  }
-
-  // S3 (in-progress) — legacy GameDetailDesktop with GD-PR3 enrichments.
+  // S3 / S4 (in-progress + completed) — legacy GameDetailDesktop with
+  // GD-PR3 enrichments. Per Andrea 2026-06-01 GD-PR4b polish: the
+  // archivist relic is no longer the DEFAULT view for Completed games;
+  // it lives as a button-triggered overlay (`[see relic]`) inside the
+  // legacy view + auto-opens on the status flip → Completed moment.
   if (data.userGame && data.userGame.status !== 'Wishlist') {
     return <GameDetailDesktop userGameId={data.userGame.id} />;
   }
