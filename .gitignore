@@ -53,3 +53,13 @@ packages/db/prisma/migrations/*.sql.bak
 # rollback references). Frequently contain bcrypt hashes, OAuth IDs, and
 # other sensitive data that must never enter git history.
 docs/runbooks/
+
+# OQ-GD-13 archivist-relic design prototypes — regeneratable via
+# `npx tsx scripts/relic-*.ts`. HTML outputs are large (dither SVGs) and
+# the iterations/ folder is a working snapshot history, not source.
+relic-prototype.html
+relic-halftone.html
+relic-composition.html
+relic-vocabulary.html
+relic-bottom-variants.html
+iterations/
