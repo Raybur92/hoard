@@ -535,6 +535,26 @@ router.get('/admin/deals/probe-psn', async (req: Request, res: Response): Promis
     }
     walk(data, '$', 0);
 
+    // Find the FIRST Product node and dump its full content (not just key list)
+    // so we can see what `price` actually looks like — __typename, basePrice
+    // shape, whether it's an inline object or an Apollo __ref, etc.
+    let fullFirstProduct: unknown = null;
+    function findFirst(o: unknown, depth: number): boolean {
+      if (depth > 14 || !o || typeof o !== 'object') return false;
+      if (Array.isArray(o)) {
+        for (const v of o) if (findFirst(v, depth + 1)) return true;
+        return false;
+      }
+      const obj = o as Record<string, unknown>;
+      if (obj['__typename'] === 'Product') {
+        fullFirstProduct = obj;
+        return true;
+      }
+      for (const k of Object.keys(obj)) if (findFirst(obj[k], depth + 1)) return true;
+      return false;
+    }
+    findFirst(data, 0);
+
     res.json({
       ok: true,
       url,
@@ -542,6 +562,7 @@ router.get('/admin/deals/probe-psn', async (req: Request, res: Response): Promis
       locale,
       totalProductsFound: products.length,
       first3: products.slice(0, 3),
+      fullFirstProduct,
     });
   } catch (err) {
     console.error('[admin/deals/probe-psn] failed:', err);
