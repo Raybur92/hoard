@@ -10,7 +10,7 @@ Source spec: `docs/PAGES_PLAN.md` §6 (PAGES v2 functional analysis). This doc c
 
 | PR | Scope | Status | Notes |
 |---|---|---|---|
-| EV-PR1 | Foundation: schema + IGDB sync + `/events` list + `/events/:slug` detail + sidebar nav + `.ics` export | Drafting plan | This doc |
+| EV-PR1 | Foundation: schema + IGDB sync + `/events` list + `/events/:slug` detail + sidebar nav + `.ics` export | **Done 2026-06-02 (this branch)** | See §14 |
 | EV-PR2 | Filter chips + search + year-jump + game-grid filter (my-platforms / wishlisted / all) | Not started | Picked up after EV-PR1 lands |
 | EV-PR3 | Live-stream embedding + Dashboard "you missed" widget + `EventGame.announcementType` derivation + GameDetail back-link wiring (closes OQ-GD-7) | Not started | Depends on GD-PR5 placeholder for back-link |
 | EV-PR4 | Polish: mobile layout pass + axe-core a11y verification + per-vendor calendar deep-links (Google / Apple / Outlook) | Not started | EV-PR1 already ships `.ics` per OQ-EV-10 |
@@ -383,6 +383,58 @@ Andrea-led decisions during plan review land here. Each entry: ID · date · dec
 - **EV-D16 (OQ-EV1-9):** Detail-view 404 attempts one on-demand IGDB lookup by slug before responding 404; new events shared minutes after IGDB posting resolve without waiting for nightly sync.
 - **EV-D17 (OQ-EV1-10):** Migration timestamp picked at apply time, strictly after `20260531180000_deals_foundation`.
 - **EV-D18 (OQ-EV1-A):** HeroCountdown — wrap (event-specific `EventHeroCountdown` component using `useNow` directly) rather than lift the Releases primitive. Revisit promotion when a third surface needs the chrome.
+
+---
+
+## 14. EV-PR1 landing notes (2026-06-02)
+
+Branch: `ev-pr1-foundation` (worktree `../Hoard-events`). Six commits:
+
+1. `4ee239f` — plan + locked decisions
+2. `2caac4a` — backend: schema + types + service + routes + admin sync
+3. `6b576df` — chore: revert unintended root `@prisma/client` dep
+4. (tests commit) — backend: 19 new tests (6 getEventState + 13 routes)
+5. (frontend commit) — frontend: list + detail + nav chrome + routes
+6. (frontend tests commit) — frontend: 10 vitest cases for list + detail
+
+### What shipped
+
+- **Schema** — `Event` + `EventGame` Prisma models, migration `20260602120000_events_foundation`, Game gains reverse relation `events: EventGame[]`, RLS enabled.
+- **Types** — `IgdbEvent`, `EventState`, `EventListRow`, `EventDetailRow`, `EventGameRow`, `EventsListResponse`, `EventDetailResponse`, `EventsSyncSummary`.
+- **Service** (`apps/api/src/services/events.ts`, ~330 lines) — `getEventsBatch` / `getEventBySlug` (24h cache), `getEventState` (EV-D12 4h window), `syncAllEvents` (batched game-id resolution + replace-all join transactionally per event), `syncSingleEventBySlug` (EV-D16 fallback).
+- **Routes** (`apps/api/src/routes/events.ts`, ~340 lines) — `GET /api/events` sectioned payload, `GET /api/events/:slug` with on-demand IGDB fallback, `GET /api/events/:slug/ics` RFC 5545 calendar export (UTC encoding per EV-D15).
+- **Admin sync** — `POST /api/admin/events/sync` added to `admin.ts`. Sibling to the existing `GET /api/admin/events` telemetry feed (different method, no path collision).
+- **Backend tests** — 19 new (6 `getEventState` boundary + 13 route tests). Total: **49 suites / 769 tests pass** (+2 suites +19 tests vs DEALS-PR2.5 baseline).
+- **API client** — `api.events()` + `api.eventBySlug()` added to `apps/web/src/lib/api.ts`.
+- **Hooks** — `useEvents()` + `useEventDetail(slug)` in `apps/web/src/hooks/useEvents.ts`. PERF-1 localStorage persistence inherited.
+- **Components** — `EventHeroCountdown`, `EventListRow`, `EventGameGrid` under `apps/web/src/components/screens/events/`. State-aware visual treatment (amber upcoming / red live / dim past).
+- **Screens** — `EventsDesktop` / `EventsMobile` (list, sectioned hero + upcoming + recent + archive-by-year) + `EventDetailDesktop` / `EventDetailMobile` (state-branching hero, game grid with personalisation chips, deep-link to YouTube videos pending EV-PR3 embed). Lazy-loaded per existing pattern; chunks shipped (`EventsDesktop-*.js`, etc.).
+- **Routes** — `/events` + `/events/:slug` wired in `App.tsx`. `screens/index.ts` updated.
+- **Sidebar** — Events entry between Releases and Deals (`play` icon).
+- **MobileTabBar restructure (EV-D14)** — Settings dropped from the bottom tab bar; Events takes its place. Settings reachable via new cog button in MobileHeader's right slot (preserves global discoverability with zero shell-component restructure).
+- **Frontend tests** — 10 vitest cases under `apps/web/src/components/screens/__tests__/Events.test.tsx`. List: empty state, hero rendering, sectioned rows, error retry. Detail: upcoming/live/past state branching, personalisation chip, video deep-link, error retry.
+
+### What's deferred (per plan)
+
+- **EV-PR2** — filter chips + search + year-jump nav + per-game-grid filter.
+- **EV-PR3** — live-stream embed (CSP `frame-src` carve-out per EV-D2), video recap embeds, Dashboard "you missed" widget, `EventGame.announcementType` derivation, GameDetail back-link (consumes OQ-GD-7 placeholder).
+- **EV-PR4** — full mobile polish pass, axe-core a11y, per-vendor calendar deep-links.
+
+### Pre-deploy operational checklist
+
+1. **Apply migration** via the documented `prisma db execute` + `migrate resolve --applied 20260602120000_events_foundation` recipe. Node `$executeRaw` fallback if `migrate resolve` hangs on pgbouncer (CLAUDE.md operational gotchas).
+2. **Verify RLS** enabled on `Event` + `EventGame` (matches I1 precedent).
+3. **Bump SWR cache** version `v5 → v6` in `apps/web/src/lib/cache.ts` if any future shipping commit extends `GameDetailGameInfo` with event-back-link data (EV-PR1 doesn't; deferred until GD-PR5 wires it).
+4. **Set up Railway cron** — daily 03:00 UTC `POST /api/admin/events/sync` (admin auth). One-shot manual run via the `[refresh events]` admin button to seed initial data.
+5. **CSP** — no `frame-src` carve-out needed yet (EV-PR1 doesn't embed). Deferred to EV-PR3.
+
+### Sticky properties for next contributors
+
+- **HeroCountdown wrap pattern (EV-D18)** held as planned. If a third surface needs the chrome (e.g. EV-PR3 live-stream banner card), revisit lifting the Releases primitive to a shared location.
+- **`syncAllEvents` is idempotent** — replace-all on EventGame join means re-runs are safe.
+- **EV-D16 404-fallback path** (`GET /api/events/:slug` → on-miss IGDB lookup → upsert + return) is wired and tested. A fresh share link resolves without waiting for nightly sync.
+- **MobileHeader's right slot** now defaults to `[search, cog]`. Any screen that passes a custom `right` prop bypasses both — coordinate when adding per-screen affordances.
+- **No `AGENT.md` entry** — EV-PR1's decisions constrain the EV-series specifically (sync cadence, .ics encoding, replace-all join strategy), not future architectural shape.
 
 ---
 
