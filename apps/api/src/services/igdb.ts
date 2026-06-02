@@ -380,7 +380,7 @@ export async function getGame(igdbId: number): Promise<IgdbSearchResult | null> 
 
   const results = await igdbPost(
     'games',
-    `fields id, name, first_release_date, cover.url, cover.image_id, genres.name, themes.name, player_perspectives.name, artworks.image_id, artworks.width, artworks.height, screenshots.image_id, screenshots.width, screenshots.height, involved_companies.company.name, involved_companies.developer;
+    `fields id, name, first_release_date, cover.url, cover.image_id, genres.name, themes.name, player_perspectives.name, artworks.image_id, artworks.width, artworks.height, screenshots.image_id, screenshots.width, screenshots.height, involved_companies.company.name, involved_companies.developer, platforms.name, total_rating_count;
 where id = ${igdbId};
 limit 1;`,
   );

@@ -106,14 +106,22 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     }
   }
 
-  // Fetch all current deals for the user's wishlist + owned-platforms
-  // universe. For DEALS-PR1, "broader feed" = deals on games the user
-  // doesn't yet own (across all platforms). Later refinements can
-  // narrow to "on user's owned platforms" once platform-tagging on
-  // ITAD shops is wired through.
-  const relevantGameIds = new Set<string>([...wishlistGameIds, ...ownedGameIds]);
+  // Fetch every current deal in the DB. CM12 below filters per-user.
+  //
+  // DEALS-PR2.5 — previously this query was scoped to `gameId IN
+  // (user's library + wishlist)` which prevented deals on games the
+  // user had no UserGame for from EVER surfacing. Result: broader
+  // feed was always empty (every Deal in the DB is for a game in
+  // SOME user's library because the sync orchestrators scope to
+  // `userGames: { some: {} }`, but Andrea's library overlaps with
+  // them differently). Dropping the scope makes the route return:
+  //   - deals on games the user has wishlisted → wishlistDeals
+  //   - deals on games no user has on radar yet → broaderFeed
+  //     (rare in practice — sync only writes deals for catalogue
+  //     games, and the catalogue IS the global radar)
+  //   - deals on games the user owns (status != Wishlist) → suppressed
+  //     via CM12 below.
   const deals = await prisma.deal.findMany({
-    where: { gameId: { in: [...relevantGameIds] } },
     include: {
       game: { select: { id: true, igdbId: true, title: true, coverUrl: true, heroImageUrl: true } },
     },
@@ -121,9 +129,10 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
   });
 
   // Apply CM12 rule:
-  //   owned → skip unless wishlisted
-  //   wishlisted → keep
-  //   neither → keep (broader feed)
+  //   owned → skip (you have it; deal noise)
+  //   wishlisted → keep (you want it)
+  //   neither → keep (broader discovery; you might want it)
+  // Wishlist ≠ ownership.
   const wishlistRows: DealRow[] = [];
   const broaderRows: DealRow[] = [];
   for (const d of deals) {
@@ -156,7 +165,10 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
   // DEALS-PR2 — bundles relevant to the user. Pull ITAD ids off the
   // user's library + wishlist games (cached on Game.metadata.itadId
   // during the DEALS-PR1 sync). Intersect against Bundle.itadGameIds
-  // (GIN-indexed). One Prisma query each: small + cheap.
+  // (GIN-indexed). One Prisma query each: small + cheap. Bundles
+  // stay scoped to the user's radar — a bundle's relevance signal
+  // IS "it contains a game you have/want", unlike standalone deals.
+  const relevantGameIds = new Set<string>([...wishlistGameIds, ...ownedGameIds]);
   const userGameRows = await prisma.game.findMany({
     where: { id: { in: [...relevantGameIds] } },
     select: { id: true, title: true, metadata: true },
