@@ -446,6 +446,25 @@ router.get('/admin/deals/status', async (_req: Request, res: Response): Promise<
   });
 });
 
+// GET /api/admin/deals/shops
+//
+// Per-shop row count over the entire Deal table. Diagnostic — answers
+// "are GMG / Kinguin / CDKeys / PlayStation Store deals actually
+// landing in the DB after the orchestrators run, or are they being
+// excluded upstream by the storefront classifier / not finding any
+// active discounts?"
+router.get('/admin/deals/shops', async (_req: Request, res: Response): Promise<void> => {
+  const rows = await prisma.deal.groupBy({
+    by: ['shopName'],
+    _count: { _all: true },
+    orderBy: { _count: { shopName: 'desc' } },
+  });
+  res.json({
+    total: rows.reduce((sum, r) => sum + r._count._all, 0),
+    shops: rows.map((r) => ({ shopName: r.shopName, count: r._count._all })),
+  });
+});
+
 // GET /api/admin/deals/probe?title=Cyberpunk%202077&market=AT
 //
 // Diagnostic probe — resolves one game to its ITAD id and dumps the raw
