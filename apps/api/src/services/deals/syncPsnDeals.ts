@@ -51,9 +51,27 @@ export async function syncAllPsnDeals(): Promise<SyncPsnResult> {
     return result;
   }
 
+  // DEALS-PR2.5+ — broader scope: every Game tagged as PS4 or PS5 by IGDB
+  // that is in any user's library OR wishlist. Mirror of the Nintendo
+  // broadening earlier today; same rationale — surface PSN deals on
+  // every PS-available game on the user's radar, regardless of which
+  // platform they own it on. The `/api/deals` route's CM12 filter then
+  // hides games the user already owns (on any platform), so PSN deals
+  // surface for cross-platform-ownership cases (own on Steam, PS deal
+  // is interesting).
+  //
+  // Previously this query required `psnConceptId: { not: null }`, which
+  // restricted to games the user had already synced from their actual
+  // PSN library. Those games are all "owned" by definition (status !=
+  // Wishlist), so CM12 hid every PSN deal — the surface was effectively
+  // dead from a discovery standpoint.
+  //
+  // Title-based scraping handles the lookup either way: getPsnPrice
+  // searches PSN's store by title and picks the closest match. No
+  // exact-ID fast path (Sony's concept page doesn't embed prices).
   const games = await prisma.game.findMany({
     where: {
-      psnConceptId: { not: null },
+      platforms: { hasSome: ['PlayStation 4', 'PlayStation 5'] },
       userGames: { some: {} },
     },
     select: { id: true, title: true, psnConceptId: true },
