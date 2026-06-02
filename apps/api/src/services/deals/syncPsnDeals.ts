@@ -89,7 +89,17 @@ export async function syncAllPsnDeals(): Promise<SyncPsnResult> {
       // to pick the right product from the results.
       const price = await getPsnPrice(titleQuery, locale);
       await sleep(REQ_DELAY_MS);
-      if (!price) continue;
+      if (!price) {
+        // Picker returned null (no candidate passed the Jaccard threshold).
+        // Clear any stale Deal row left over from a previous looser-picker
+        // run so the UI doesn't keep showing a wrong-game match for this
+        // gameId. Pre-2026-06-02 this was `continue` — which let stale
+        // bad-match rows haunt the DB forever.
+        await prisma.deal.deleteMany({
+          where: { gameId: g.id, shopId: String(PSN_SHOP_ID) },
+        });
+        continue;
+      }
       result.fetched++;
 
       if (price.hasDiscount) {
