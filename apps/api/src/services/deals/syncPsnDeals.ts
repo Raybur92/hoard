@@ -63,9 +63,13 @@ export async function syncAllPsnDeals(): Promise<SyncPsnResult> {
   console.log(`[psn-deals] scanning ${games.length} games (locale=${locale})`);
 
   for (const g of games) {
-    const conceptId = g.psnConceptId!;
+    const titleQuery = g.title;
     try {
-      const price = await getPsnPrice(conceptId, locale);
+      // Sony's /concept/<id> pages don't embed prices (load via client-
+      // side API calls); the /search/<title> page does. We use Game.title
+      // as the search query + title-similarity matching in getPsnPrice
+      // to pick the right product from the results.
+      const price = await getPsnPrice(titleQuery, locale);
       await sleep(REQ_DELAY_MS);
       if (!price) continue;
       result.fetched++;
@@ -112,7 +116,7 @@ export async function syncAllPsnDeals(): Promise<SyncPsnResult> {
     } catch (err) {
       result.failed++;
       const msg = err instanceof PsnScrapeError ? err.message : err instanceof Error ? err.message : String(err);
-      console.error(`[psn-deals] ${g.title} (conceptId=${conceptId}): ${msg}`);
+      console.error(`[psn-deals] ${g.title}: ${msg}`);
       await sleep(REQ_DELAY_MS);
     }
   }

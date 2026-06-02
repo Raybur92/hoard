@@ -131,39 +131,71 @@ describe('DEALS-PR2.5 — extractPsnPriceFromHtml', () => {
   });
 });
 
-describe('DEALS-PR2.5 — getPsnPrice', () => {
-  it('returns the highest-basePrice non-free SKU when multiple exist (picks base game over add-ons)', async () => {
+describe('DEALS-PR2.5 — getPsnPrice (title-based search)', () => {
+  it('matches the Product whose name equals the query (normalised)', async () => {
     (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
       ok: true,
       text: async () => htmlWith(NEXT_DATA_FIXTURE),
     });
-    const p = await getPsnPrice(10003925, 'en-us');
+    const p = await getPsnPrice('Astro Bot', 'en-us');
     expect(p).not.toBeNull();
-    // Digital Deluxe has the higher basePrice ($69.99) so it should win
-    // the highest-base picker. (Real deployment may benefit from a
-    // smarter "Standard Edition" preference, but base SKU = most expensive
-    // non-free is a reasonable heuristic for v1.)
-    expect(p!.regular).toBe(69.99);
+    expect(p!.title).toBe('Astro Bot');
+    expect(p!.regular).toBe(59.99);
+    expect(p!.current).toBe(39.59);
+    expect(p!.discountPct).toBe(34);
+    expect(p!.hasDiscount).toBe(true);
     expect(p!.currency).toBe('USD');
+  });
+
+  it('normalises punctuation when matching (e.g. "Marvel\'s Spider-Man" vs "Marvels Spider Man")', async () => {
+    const fixture = {
+      data: {
+        results: [{
+          __typename: 'Product',
+          name: "Marvel's Spider-Man",
+          price: { __typename: 'SkuPrice', basePrice: '$39.99', discountedPrice: '$19.99', discountText: '-50%', isFree: false },
+        }],
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice("Marvel's Spider-Man", 'en-us');
+    expect(p).not.toBeNull();
+    expect(p!.title).toBe("Marvel's Spider-Man");
+  });
+
+  it('falls back to first non-free product when no exact match', async () => {
+    const fixture = {
+      data: {
+        results: [
+          { __typename: 'Product', name: 'Some Free Demo', price: { __typename: 'SkuPrice', basePrice: 'Free', discountedPrice: 'Free', isFree: true } },
+          { __typename: 'Product', name: 'Astro Playroom Deluxe', price: { __typename: 'SkuPrice', basePrice: '$29.99', discountedPrice: '$29.99', discountText: null, isFree: false } },
+        ],
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice('Some other title that does not match', 'en-us');
+    expect(p).not.toBeNull();
+    expect(p!.title).toBe('Astro Playroom Deluxe');
   });
 
   it('returns null on 404', async () => {
     (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-      text: async () => '',
+      ok: false, status: 404, text: async () => '',
     });
-    const p = await getPsnPrice(99999, 'en-us');
-    expect(p).toBeNull();
+    expect(await getPsnPrice('Astro Bot', 'en-us')).toBeNull();
   });
 
   it('throws PsnScrapeError on 5xx', async () => {
     (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-      text: async () => '',
+      ok: false, status: 503, text: async () => '',
     });
-    await expect(getPsnPrice(123, 'en-us')).rejects.toThrow(PsnScrapeError);
+    await expect(getPsnPrice('Astro Bot', 'en-us')).rejects.toThrow(PsnScrapeError);
   });
 
   it('parses European comma-decimal prices like €59,99', async () => {
@@ -186,14 +218,14 @@ describe('DEALS-PR2.5 — getPsnPrice', () => {
       ok: true,
       text: async () => htmlWith(euroFixture),
     });
-    const p = await getPsnPrice(123, 'de-de');
+    const p = await getPsnPrice('Test Game', 'de-de');
     expect(p!.regular).toBeCloseTo(59.99, 2);
     expect(p!.current).toBeCloseTo(29.99, 2);
     expect(p!.discountPct).toBe(50);
     expect(p!.currency).toBe('EUR');
   });
 
-  it('returns null when all SKUs are free or malformed', async () => {
+  it('returns null when all SKUs are free', async () => {
     const freeOnly = {
       data: {
         product: {
@@ -213,7 +245,14 @@ describe('DEALS-PR2.5 — getPsnPrice', () => {
       ok: true,
       text: async () => htmlWith(freeOnly),
     });
-    const p = await getPsnPrice(123, 'en-us');
-    expect(p).toBeNull();
+    expect(await getPsnPrice('Free Game', 'en-us')).toBeNull();
+  });
+
+  it('returns null when no __NEXT_DATA__ script found', async () => {
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '<html><body>nothing here</body></html>',
+    });
+    expect(await getPsnPrice('Anything', 'en-us')).toBeNull();
   });
 });

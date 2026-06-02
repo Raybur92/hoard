@@ -187,50 +187,56 @@ export function extractPsnPriceFromHtml(html: string): {
 }
 
 /**
- * Reduce a list of SkuPriceNode candidates to the canonical pick for
- * the "base game" deal. Sony's concept page returns prices for every
- * SKU (base game, deluxe edition, season pass, bundle variants, etc).
- *
- * Heuristic: pick the SkuPrice with the highest `basePrice` that is
- * NOT free and has a non-null discountedPrice. If multiple ties, prefer
- * the one with a discount over one without. This finds the most
- * expensive non-free SKU which is typically the "complete edition" or
- * base game.
- *
- * Returns null when no usable SKU is found (e.g. only free or invalid
- * entries).
+ * Normalise a title for fuzzy matching. Lowercase, strip non-alphanumeric
+ * (except spaces), collapse multi-spaces.
  */
-function pickBaseSkuPrice(skus: SkuPriceNode[]): SkuPriceNode | null {
-  const usable = skus.filter((s) => {
-    if (s.isFree) return false;
-    const base = parsePriceString(s.basePrice);
-    return Number.isFinite(base) && base > 0;
-  });
-  if (usable.length === 0) return null;
-  // Sort by basePrice descending; if equal, prefer ones with discount.
-  usable.sort((a, b) => {
-    const ba = parsePriceString(a.basePrice);
-    const bb = parsePriceString(b.basePrice);
-    if (ba !== bb) return bb - ba;
-    const hasA = a.discountText ? 1 : 0;
-    const hasB = b.discountText ? 1 : 0;
-    return hasB - hasA;
-  });
-  return usable[0] ?? null;
+function normaliseTitle(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /**
- * Fetch the PSN concept page for a given conceptId in the given locale
- * and extract the base-SKU price. Returns null when the game isn't
- * listed in that locale, no usable SKU is found, or scraping fails.
+ * Walk __NEXT_DATA__ collecting Product objects (with name + nested
+ * SkuPrice). Used by getPsnPrice on search-page responses to find the
+ * matching product by title.
+ */
+interface ProductWithPrice { name: string; price: SkuPriceNode }
+function collectProducts(obj: unknown, sink: ProductWithPrice[] = [], depth = 0): ProductWithPrice[] {
+  if (depth > 12 || !obj || typeof obj !== 'object') return sink;
+  if (Array.isArray(obj)) {
+    for (const v of obj) collectProducts(v, sink, depth + 1);
+    return sink;
+  }
+  const o = obj as Record<string, unknown>;
+  const isProduct = o['__typename'] === 'Product' || o['__typename'] === 'Concept';
+  const hasName = typeof o['name'] === 'string' && (o['name'] as string).length > 0;
+  if (isProduct && hasName) {
+    const priceNode = o['price'] as SkuPriceNode | undefined;
+    if (priceNode && priceNode.__typename === 'SkuPrice' && (priceNode.basePrice !== undefined || priceNode.discountedPrice !== undefined)) {
+      sink.push({ name: o['name'] as string, price: priceNode });
+    }
+  }
+  for (const k of Object.keys(o)) collectProducts(o[k], sink, depth + 1);
+  return sink;
+}
+
+/**
+ * Fetch the PSN search page for a title in the given locale and extract
+ * the matching product's SKU price. Sony's `/concept/<id>` pages don't
+ * embed pricing data (prices load via client-side API calls). The
+ * `/search/<query>` page DOES embed pricing in `__NEXT_DATA__`, so we
+ * search by title + match by name similarity.
  *
- * Caller catches `PsnScrapeError` on transport failure.
+ * Per-title overhead: one HTTP fetch + ~300-600KB HTML response.
+ *
+ * Returns null when no Product matches the title with reasonable
+ * similarity, or when the page has no usable SKU. Caller catches
+ * `PsnScrapeError` on transport failure.
  */
 export async function getPsnPrice(
-  conceptId: number,
+  title: string,
   locale: string,
 ): Promise<PsnPrice | null> {
-  const url = `${PSN_BASE}/${locale}/concept/${conceptId}`;
+  const url = `${PSN_BASE}/${locale}/search/${encodeURIComponent(title)}`;
   const res = await fetch(url, {
     headers: {
       'User-Agent': UA,
@@ -243,23 +249,78 @@ export async function getPsnPrice(
     throw new PsnScrapeError(`PSN ${url} → ${res.status}`, res.status);
   }
   const html = await res.text();
-  const { prices, title } = extractPsnPriceFromHtml(html);
-  if (prices.length === 0) {
-    // No SkuPrice nodes found — either game not in locale OR Sony
-    // changed the page structure. The latter is a recoverable failure
-    // (caller logs + skips); the next sync run picks up if our parser
-    // is updated.
+  const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!match) return null;
+
+  let products: ProductWithPrice[];
+  try {
+    const data = JSON.parse(match[1]!) as unknown;
+    products = collectProducts(data);
+  } catch {
     return null;
   }
-  const pick = pickBaseSkuPrice(prices);
+  if (products.length === 0) return null;
+
+  // Find the product matching the query title most usefully. Sony's
+  // catalog has structural differences from PC stores:
+  //   - Many games are sold ONLY as editions (Super Deluxe / Ultimate
+  //     / Definitive / GOTY) — no plain-base-game SKU exists at all
+  //   - Search results mix DLC + skin packs + currency packs + season
+  //     passes + cosmetic add-ons with the actual game listings
+  //   - Sony's relevance ordering puts DLC ahead of the game itself
+  //     surprisingly often
+  //
+  // Multi-tier picker prioritising USER-USEFUL deal information:
+  //   1. Filter out DLC/microtransaction noise via name keywords
+  //   2. Among remaining candidates, prefer the highest discount %
+  //      (we're on the /deals page — show the user the best deal we
+  //      can find for this game, even if it's a Super Deluxe Edition
+  //      rather than the bare base game)
+  //   3. Within ties on discount, prefer EXACT normalised-name match,
+  //      then SHORTEST name (closer to base game)
+  //   4. If filters left nothing, fall back to any non-free product
+  //      (last-resort — game catalog is unusual)
+  const DLC_KEYWORDS = [
+    'pack', 'kosmetik', 'punkte', 'currency', 'boost', 'season pass',
+    'wäh', 'coin', 'gold', 'silver', 'skin', 'character', 'multiverse-finale',
+    'mods-pack', 'cosmetic', 'addon', 'add-on', 'bonus content',
+  ];
+  const isDlc = (p: ProductWithPrice): boolean => {
+    const n = normaliseTitle(p.name);
+    return DLC_KEYWORDS.some((kw) => n.includes(kw));
+  };
+  const normQuery = normaliseTitle(title);
+  const nonFree = products.filter((p) => !p.price.isFree);
+  const eligible = nonFree.filter((p) => !isDlc(p));
+  const pool = eligible.length > 0 ? eligible : nonFree;
+
+  // Sort by: discountPct DESC, then exact-match-bonus, then shortest name.
+  const scored = pool.map((p) => {
+    const pct = p.price.discountText
+      ? Math.abs(parseInt(p.price.discountText.replace(/[^0-9]/g, ''), 10))
+      : 0;
+    const normName = normaliseTitle(p.name);
+    const exactBonus = normName === normQuery ? 1 : 0;
+    return { p, pct, exactBonus, len: normName.length };
+  });
+  scored.sort((a, b) => {
+    if (a.pct !== b.pct) return b.pct - a.pct;
+    if (a.exactBonus !== b.exactBonus) return b.exactBonus - a.exactBonus;
+    return a.len - b.len;
+  });
+  const pick = scored[0]?.p ?? null;
   if (!pick) return null;
 
-  const regular = parsePriceString(pick.basePrice);
-  const current = pick.discountedPrice ? parsePriceString(pick.discountedPrice) : regular;
-  const discountPct = pick.discountText
-    ? Math.abs(parseInt(pick.discountText.replace(/[^0-9]/g, ''), 10))
+  const regular = parsePriceString(pick.price.basePrice);
+  if (!Number.isFinite(regular) || regular <= 0) {
+    // "Free" or unparseable — not a usable deal.
+    return null;
+  }
+  const current = pick.price.discountedPrice ? parsePriceString(pick.price.discountedPrice) : regular;
+  const discountPct = pick.price.discountText
+    ? Math.abs(parseInt(pick.price.discountText.replace(/[^0-9]/g, ''), 10))
     : 0;
-  const hasDiscount = Boolean(pick.discountText) && discountPct > 0;
+  const hasDiscount = Boolean(pick.price.discountText) && discountPct > 0;
   const currency = LOCALE_CURRENCY[locale] ?? 'EUR';
 
   return {
@@ -269,6 +330,6 @@ export async function getPsnPrice(
     discountPct,
     hasDiscount,
     url,
-    title,
+    title: pick.name,
   };
 }
