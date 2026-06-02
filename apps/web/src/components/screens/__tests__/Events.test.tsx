@@ -2,7 +2,7 @@
 // Pattern mirrors Dashboard.bento.test.tsx + EpicGuidedFlow.test.tsx:
 // hooks mocked at module level, react-router wrapping each render.
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { EventsListResponse, EventDetailResponse } from '@hoard/types';
@@ -12,7 +12,13 @@ vi.mock('../../../hooks/useEvents', () => ({
   useEventDetail: vi.fn(),
 }));
 
+vi.mock('../../../lib/api', async () => {
+  const actual = await vi.importActual('../../../lib/api') as Record<string, unknown>;
+  return { ...actual, api: { resolveEventGames: vi.fn() } };
+});
+
 import { useEvents, useEventDetail } from '../../../hooks/useEvents';
+import { api } from '../../../lib/api';
 import { EventsDesktop } from '../EventsDesktop';
 import { EventDetailDesktop } from '../EventDetailDesktop';
 
@@ -26,6 +32,7 @@ function makeListRow(over: Partial<EventsListResponse['hero']> & { slug: string 
     logoUrl: over.logoUrl ?? null,
     networks: over.networks ?? [{ name: 'Sony', type: 'YouTube', url: null }],
     gameCount: over.gameCount ?? 12,
+    gamesResolvedAt: over.gamesResolvedAt ?? '2026-06-01T00:00:00.000Z',
     state: over.state ?? 'upcoming',
   };
 }
@@ -119,6 +126,7 @@ function makeDetail(state: 'upcoming' | 'live' | 'past'): EventDetailResponse {
       logoUrl: null,
       networks: [{ name: 'Sony', type: 'YouTube', url: null }],
       gameCount: 8,
+      gamesResolvedAt: '2026-06-01T00:00:00.000Z',
       state,
       description: 'Quarterly Sony showcase',
       timeZone: 'America/Los_Angeles',
@@ -203,5 +211,38 @@ describe('EventDetailDesktop', () => {
     renderDetail();
     expect(screen.getByText(/event not found/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("shows the [load games] button when gamesResolvedAt is null and triggers resolve on click", async () => {
+    const refetch = vi.fn();
+    const unresolved = makeDetail('upcoming');
+    unresolved.event.gamesResolvedAt = null;
+    unresolved.games = [];
+    (useEventDetail as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: unresolved, loading: false, error: null, refetch,
+    });
+    (api.resolveEventGames as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    renderDetail();
+    expect(screen.getByText(/IGDB hasn't been queried yet/i)).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: /load games/i });
+    fireEvent.click(btn);
+    await waitFor(() =>
+      expect(api.resolveEventGames).toHaveBeenCalledWith('state-of-play-2026-06'),
+    );
+    await waitFor(() => expect(refetch).toHaveBeenCalled());
+  });
+
+  it("hides the game count in the section header when gamesResolvedAt is null", () => {
+    const unresolved = makeDetail('upcoming');
+    unresolved.event.gamesResolvedAt = null;
+    unresolved.games = [];
+    (useEventDetail as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: unresolved, loading: false, error: null, refetch: vi.fn(),
+    });
+    renderDetail();
+    // Section header should render "// games" with NO count appended.
+    expect(screen.queryByText(/\/\/ games · \d+/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^\/\/ games$/)).toBeInTheDocument();
   });
 });

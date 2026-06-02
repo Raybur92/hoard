@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS "Event" (
   "logoUrl"       TEXT,
   "networks"      JSONB NOT NULL DEFAULT '[]'::jsonb,
   "videos"        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  -- Lazy per-event game resolution: null = not yet resolved (frontend
+  -- shows [load games] button); non-null = last resolved at this time.
+  "gamesResolvedAt" TIMESTAMP(3),
   "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt"     TIMESTAMP(3) NOT NULL,
   CONSTRAINT "Event_pkey" PRIMARY KEY ("id")

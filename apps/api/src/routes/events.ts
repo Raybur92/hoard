@@ -18,7 +18,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
 import { requireActive } from '../middleware/active';
-import { getEventState, syncSingleEventBySlug } from '../services/events';
+import { getEventState, syncSingleEventBySlug, resolveEventGames } from '../services/events';
 import type {
   EventListRow,
   EventDetailResponse,
@@ -42,6 +42,7 @@ interface EventRow {
   description: string | null;
   timeZone: string | null;
   videos: unknown;
+  gamesResolvedAt: Date | null;
 }
 
 interface EventRowWithCount extends EventRow {
@@ -65,6 +66,7 @@ function toListRow(row: EventRowWithCount): EventListRow {
     logoUrl: row.logoUrl,
     networks: isNetworkArray(row.networks) ? row.networks : [],
     gameCount: row._count.games,
+    gamesResolvedAt: row.gamesResolvedAt?.toISOString() ?? null,
     state: getEventState({
       startTime: row.startTime.toISOString(),
       endTime: row.endTime?.toISOString() ?? null,
@@ -112,6 +114,7 @@ router.get('/events', requireUser, requireActive, async (_req: Request, res: Res
         slug: true, name: true, startTime: true, endTime: true,
         liveStreamUrl: true, logoUrl: true, networks: true,
         description: true, timeZone: true, videos: true,
+        gamesResolvedAt: true,
         _count: { select: { games: true } },
       },
     }),
@@ -131,6 +134,7 @@ router.get('/events', requireUser, requireActive, async (_req: Request, res: Res
         slug: true, name: true, startTime: true, endTime: true,
         liveStreamUrl: true, logoUrl: true, networks: true,
         description: true, timeZone: true, videos: true,
+        gamesResolvedAt: true,
         _count: { select: { games: true } },
       },
     }),
@@ -193,6 +197,7 @@ router.get('/events/:slug', requireUser, requireActive, async (req: Request, res
       slug: true, name: true, startTime: true, endTime: true,
       liveStreamUrl: true, logoUrl: true, networks: true,
       description: true, timeZone: true, videos: true,
+      gamesResolvedAt: true,
       _count: { select: { games: true } },
     },
   });
@@ -210,6 +215,7 @@ router.get('/events/:slug', requireUser, requireActive, async (req: Request, res
             slug: true, name: true, startTime: true, endTime: true,
             liveStreamUrl: true, logoUrl: true, networks: true,
             description: true, timeZone: true, videos: true,
+            gamesResolvedAt: true,
             _count: { select: { games: true } },
           },
         });
@@ -278,6 +284,41 @@ router.get('/events/:slug', requireUser, requireActive, async (req: Request, res
     personalisation: { onWishlistCount, onLibraryCount },
   };
   res.json(payload);
+});
+
+/* ── POST /api/events/:slug/resolve-games ──────────────────────────────── */
+
+/**
+ * Lazy per-event game resolution (Andrea 2026-06-02). Triggered by the
+ * detail view's `[load games]` button. Fetches the event from IGDB to get
+ * its current `games[]`, batches the IGDB lookups for any games not yet
+ * in Hoard's catalogue, writes the EventGame join rows, stamps
+ * `gamesResolvedAt = NOW()`.
+ *
+ * Idempotent: re-clicking the button after resolution refreshes the
+ * resolution (useful when IGDB community-curates new games into an event).
+ *
+ * Returns the summary counters; the client re-fetches GET /api/events/:slug
+ * to pick up the populated game grid.
+ */
+router.post('/events/:slug/resolve-games', requireUser, requireActive, async (req: Request, res: Response): Promise<void> => {
+  const { slug } = req.params as { slug: string };
+  if (!slug) {
+    res.status(400).json({ error: 'Slug required' });
+    return;
+  }
+  try {
+    const result = await resolveEventGames(prisma, slug);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not found/i.test(message)) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    console.error('[events/resolve-games] failed:', err);
+    res.status(500).json({ ok: false, error: message });
+  }
 });
 
 /* ── GET /api/events/:slug/ics ─────────────────────────────────────────── */

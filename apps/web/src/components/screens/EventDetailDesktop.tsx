@@ -61,12 +61,18 @@ export function EventDetailDesktop() {
 
       <section style={{ marginTop: 32 }}>
         <Marker style={{ marginBottom: 12 }}>
-          // games · {data.games.length}
+          // games{data.event.gamesResolvedAt !== null && ` · ${data.games.length}`}
           {data.personalisation.onWishlistCount > 0 && (
             <span style={{ color: 'var(--amber)' }}> · {data.personalisation.onWishlistCount} on your wishlist</span>
           )}
         </Marker>
-        <EventGameGrid games={data.games} showSparseDisclaimer={data.event.state !== 'upcoming'} />
+        <EventGameGrid
+          games={data.games}
+          eventSlug={data.event.slug}
+          gamesResolvedAt={data.event.gamesResolvedAt}
+          showSparseDisclaimer={data.event.state !== 'upcoming'}
+          onResolved={refetch}
+        />
       </section>
 
       {data.event.videos.length > 0 && (

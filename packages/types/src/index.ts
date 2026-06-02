@@ -1052,7 +1052,13 @@ export interface EventListRow {
   liveStreamUrl: string | null;
   logoUrl: string | null;
   networks: Array<{ name: string; type: string; url: string | null }>;
+  /** Number of EventGame join rows. Only meaningful when
+   *  `gamesResolvedAt` is non-null; otherwise treat as unknown. */
   gameCount: number;
+  /** EV-PR1 polish — when this event's games were last resolved against
+   *  IGDB. Null = not yet resolved (frontend hides `gameCount` and shows
+   *  a `[load games]` affordance on the detail view). */
+  gamesResolvedAt: string | null;
   state: EventState;
 }
 

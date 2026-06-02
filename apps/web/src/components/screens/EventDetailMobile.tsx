@@ -61,12 +61,19 @@ export function EventDetailMobile() {
 
         <section style={{ marginTop: 24 }}>
           <Marker style={{ marginBottom: 8 }}>
-            // games · {data.games.length}
+            // games{data.event.gamesResolvedAt !== null && ` · ${data.games.length}`}
             {data.personalisation.onWishlistCount > 0 && (
               <span style={{ color: 'var(--amber)' }}> · {data.personalisation.onWishlistCount} wished</span>
             )}
           </Marker>
-          <EventGameGrid games={data.games} showSparseDisclaimer={data.event.state !== 'upcoming'} mobile />
+          <EventGameGrid
+            games={data.games}
+            eventSlug={data.event.slug}
+            gamesResolvedAt={data.event.gamesResolvedAt}
+            showSparseDisclaimer={data.event.state !== 'upcoming'}
+            onResolved={refetch}
+            mobile
+          />
         </section>
       </div>
     </>

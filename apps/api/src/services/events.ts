@@ -391,29 +391,25 @@ async function writeEvent(
 }
 
 /**
- * Full sync — fetch IGDB events batch, resolve all referenced game ids,
- * upsert events + replace join rows. Returns a summary suitable for the
- * admin sync route's response. Per-event failures don't fail the whole
- * sync (mirrors syncRunner's pattern).
+ * Full sync — fetch IGDB events batch + upsert event rows only. Game-id
+ * resolution is intentionally skipped (Andrea 2026-06-02): pre-resolving
+ * thousands of games across 500 events takes 30+ min on cold IGDB cache
+ * and blocks every event from appearing in the list. Instead, events are
+ * written with `gamesResolvedAt: null` and game lists are filled in
+ * lazily via `resolveEventGames(slug)` triggered by the detail view's
+ * `[load games]` button.
+ *
+ * Per-event failures don't fail the whole sync.
  */
 export async function syncAllEvents(prisma: PrismaClient): Promise<EventsSyncSummary> {
   const events = await getEventsBatch({ limit: 500 });
 
-  // Pool every referenced IGDB game id across all events for one batched
-  // resolution pass (cheaper than resolving per-event).
-  const allGameIds = events.flatMap((e) => e.gameIgdbIds);
-  const { resolved, upserted: gamesUpserted } = await resolveGameIdsToHoard(prisma, allGameIds);
-
   let eventsUpserted = 0;
-  let gameLinksUpserted = 0;
   for (const evt of events) {
     try {
-      const { linksWritten } = await writeEvent(prisma, evt, resolved);
+      await writeEventRowOnly(prisma, evt);
       eventsUpserted += 1;
-      gameLinksUpserted += linksWritten;
     } catch {
-      // Skip — same per-row resilience as syncRunner. A single bad event
-      // shouldn't fail the nightly job.
       continue;
     }
   }
@@ -421,15 +417,16 @@ export async function syncAllEvents(prisma: PrismaClient): Promise<EventsSyncSum
   return {
     scanned: events.length,
     eventsUpserted,
-    gamesUpserted,
-    gameLinksUpserted,
+    gamesUpserted: 0,         // lazy now — see resolveEventGames
+    gameLinksUpserted: 0,
   };
 }
 
 /**
  * Single-event sync — used by the EV-D16 404 fallback path. Fetches the
- * event from IGDB by slug, upserts it + its join rows, returns the new
- * Event row's id (or null when IGDB has no event with that slug).
+ * event from IGDB by slug, upserts the Event row (games left unresolved
+ * for the same reason as syncAllEvents), returns the new Event row's id
+ * (or null when IGDB has no event with that slug).
  */
 export async function syncSingleEventBySlug(
   prisma: PrismaClient,
@@ -437,10 +434,66 @@ export async function syncSingleEventBySlug(
 ): Promise<string | null> {
   const igdbEvent = await getEventBySlug(slug);
   if (!igdbEvent) return null;
+  const event = await writeEventRowOnly(prisma, igdbEvent);
+  return event.id;
+}
 
-  const { resolved } = await resolveGameIdsToHoard(prisma, igdbEvent.gameIgdbIds);
-  const { eventId } = await writeEvent(prisma, igdbEvent, resolved);
-  return eventId;
+/**
+ * Write/refresh a single Event row WITHOUT touching its EventGame join.
+ * Mirrors writeEvent but skips the game-link replacement transaction.
+ */
+async function writeEventRowOnly(
+  prisma: PrismaClient,
+  raw: IgdbEvent,
+): Promise<{ id: string }> {
+  const startTime = new Date(raw.startTime);
+  const endTime = raw.endTime ? new Date(raw.endTime) : null;
+  return prisma.event.upsert({
+    where: { igdbId: raw.igdbId },
+    update: {
+      slug: raw.slug, name: raw.name, description: raw.description,
+      startTime, endTime,
+      liveStreamUrl: raw.liveStreamUrl, timeZone: raw.timeZone,
+      logoUrl: raw.logoUrl, networks: raw.networks, videos: raw.videos,
+    },
+    create: {
+      igdbId: raw.igdbId, slug: raw.slug, name: raw.name, description: raw.description,
+      startTime, endTime,
+      liveStreamUrl: raw.liveStreamUrl, timeZone: raw.timeZone,
+      logoUrl: raw.logoUrl, networks: raw.networks, videos: raw.videos,
+    },
+    select: { id: true },
+  });
+}
+
+/**
+ * Per-event lazy game resolution. Fetches the event from IGDB by slug
+ * (to get the current `games` array — IGDB's community curation can add
+ * games at any time), resolves each IGDB game id to a Hoard `Game` row
+ * (upserting missing rows), replaces the EventGame join, and stamps
+ * `gamesResolvedAt = NOW()`.
+ *
+ * Returns the resolved count + the updated Event id. Caller refetches the
+ * detail payload to render the grid. Throws if the event slug isn't in
+ * IGDB (caller should 404).
+ */
+export async function resolveEventGames(
+  prisma: PrismaClient,
+  slug: string,
+): Promise<{ eventId: string; linksWritten: number; gamesUpserted: number }> {
+  const igdbEvent = await getEventBySlug(slug);
+  if (!igdbEvent) throw new Error(`Event ${slug} not found on IGDB`);
+
+  const { resolved, upserted } = await resolveGameIdsToHoard(prisma, igdbEvent.gameIgdbIds);
+
+  // writeEvent already replaces-all the join rows transactionally; reuse it
+  // and then stamp gamesResolvedAt as a separate update.
+  const { eventId, linksWritten } = await writeEvent(prisma, igdbEvent, resolved);
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { gamesResolvedAt: new Date() },
+  });
+  return { eventId, linksWritten, gamesUpserted: upserted };
 }
 
 /* ── Test hooks ───────────────────────────────────────────────────────── */

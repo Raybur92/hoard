@@ -312,6 +312,14 @@ model Event {
   networks      Json      @default("[]")
   // [{youtubeId, name}, ...] derived from IGDB's `videos`.
   videos        Json      @default("[]")
+  // EV-PR1 polish — when this event's games were last resolved against
+  // IGDB. Null = never resolved yet (sync writes the Event row but skips
+  // the per-event game-id resolution; the detail view shows a `[load
+  // games]` button). Non-null = resolved at the timestamp (renders the
+  // grid honestly; an empty grid means "no games linked," not "not yet
+  // checked"). Lazy resolution per Andrea 2026-06-02 — avoids the
+  // 30+ min cold-cache pre-resolution that blocked the initial seed.
+  gamesResolvedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

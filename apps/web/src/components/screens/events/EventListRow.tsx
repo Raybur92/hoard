@@ -47,7 +47,10 @@ export function EventListRow({ event }: EventListRowProps) {
           {event.name}
         </div>
         <div className="t-mono t-dim" style={{ fontSize: 'var(--text-2xs)', marginTop: 2 }}>
-          {network} · {dateLabel} · {event.gameCount} {event.gameCount === 1 ? 'game' : 'games'}
+          {network} · {dateLabel}
+          {event.gamesResolvedAt !== null && (
+            <> · {event.gameCount} {event.gameCount === 1 ? 'game' : 'games'}</>
+          )}
         </div>
       </div>
 

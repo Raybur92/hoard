@@ -217,6 +217,18 @@ export const api = {
   eventBySlug: (slug: string) =>
     get<EventDetailResponse>(`/api/events/${encodeURIComponent(slug)}`),
 
+  /** EV-PR1 polish — lazy per-event game resolution (Andrea 2026-06-02).
+   *  Triggered by the detail view's `[load games]` button. Returns the
+   *  resolution summary; client should `cache.invalidate('event:${slug}')`
+   *  and refetch to render the populated grid. */
+  resolveEventGames: async (slug: string): Promise<void> => {
+    await fetch(`${API_BASE}/api/events/${encodeURIComponent(slug)}/resolve-games`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    cache.invalidate(`event:${slug}`);
+  },
+
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),
 

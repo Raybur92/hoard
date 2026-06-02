@@ -54,12 +54,13 @@ jest.mock('../services/events', () => {
     ...actual,
     syncSingleEventBySlug: jest.fn(),
     syncAllEvents: jest.fn(),
+    resolveEventGames: jest.fn(),
   };
 });
 
 import { app } from '../index';
 import { prisma } from '@hoard/db';
-import { syncSingleEventBySlug, syncAllEvents } from '../services/events';
+import { syncSingleEventBySlug, syncAllEvents, resolveEventGames } from '../services/events';
 
 beforeEach(() => {
   jest.resetAllMocks();
@@ -81,6 +82,7 @@ function fakeEventRow(overrides: Record<string, unknown> = {}) {
     logoUrl: 'https://images.igdb.com/igdb/image/upload/t_logo_med/sop.jpg',
     networks: [{ name: 'YouTube', type: 'YouTube', url: 'https://youtube.com' }],
     videos: [],
+    gamesResolvedAt: new Date('2026-06-01T00:00:00Z'),
     _count: { games: 5 },
     ...overrides,
   };
@@ -319,6 +321,35 @@ describe('GET /api/events/:slug/ics', () => {
 });
 
 /* ── POST /api/admin/events/sync ──────────────────────────────────────── */
+
+describe('POST /api/events/:slug/resolve-games', () => {
+  it('returns summary on success', async () => {
+    (resolveEventGames as jest.Mock).mockResolvedValue({
+      eventId: 'event-id-1', linksWritten: 12, gamesUpserted: 5,
+    });
+    const res = await request(app).post('/api/events/state-of-play-2026-06/resolve-games');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true, eventId: 'event-id-1', linksWritten: 12, gamesUpserted: 5,
+    });
+    expect(resolveEventGames).toHaveBeenCalledWith(expect.anything(), 'state-of-play-2026-06');
+  });
+
+  it('returns 404 when event not found on IGDB', async () => {
+    (resolveEventGames as jest.Mock).mockRejectedValue(new Error('Event state-of-play-missing not found on IGDB'));
+    const res = await request(app).post('/api/events/state-of-play-missing/resolve-games');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 500 with error message on unexpected throw', async () => {
+    (resolveEventGames as jest.Mock).mockRejectedValue(new Error('IGDB outage'));
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await request(app).post('/api/events/any/resolve-games');
+    expect(res.status).toBe(500);
+    expect(res.body.ok).toBe(false);
+    spy.mockRestore();
+  });
+});
 
 describe('POST /api/admin/events/sync', () => {
   it('returns summary on success', async () => {
