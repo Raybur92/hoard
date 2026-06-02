@@ -212,12 +212,12 @@ export function DealsMobile() {
             {broaderFeed.map((d) => <MobileDealRow key={d.id} deal={d} />)}
           </section>
         )}
-        {data && data.bundles.length > 0 && !shopFilter && (
+        {data && (data.bundles ?? []).length > 0 && !shopFilter && (
           <section>
             <div style={{ padding: '14px 16px 6px' }}>
-              <Marker>// bundles · {data.bundles.length}</Marker>
+              <Marker>// bundles · {(data.bundles ?? []).length}</Marker>
             </div>
-            {data.bundles.map((b) => (
+            {(data.bundles ?? []).map((b) => (
               <a
                 key={b.id}
                 href={b.url}

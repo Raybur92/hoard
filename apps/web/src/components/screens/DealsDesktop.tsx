@@ -305,11 +305,11 @@ export function DealsDesktop() {
             </div>
           </section>
         )}
-        {data && data.bundles.length > 0 && !shopFilter && (
+        {data && (data.bundles ?? []).length > 0 && !shopFilter && (
           <section data-testid="deals-bundles-section">
-            <Marker>// bundles touching your library · {data.bundles.length}</Marker>
+            <Marker>// bundles touching your library · {(data.bundles ?? []).length}</Marker>
             <div className="panel" style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
-              {data.bundles.map((b) => (
+              {(data.bundles ?? []).map((b) => (
                 <a
                   key={b.id}
                   href={b.url}
