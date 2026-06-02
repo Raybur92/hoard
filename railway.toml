@@ -1,3 +1,8 @@
+# touch 2026-06-02 DEALS-PR2.5 — deals route library-scope fix.
+# Previous build (ac1ab02) was manually cancelled mid-flight; empty
+# commit retry was skipped by Watch Paths. Manual railway.toml touch
+# forces the webhook so commit ac1ab02 actually deploys.
+#
 # touch 2026-05-28 M0 — per-platform achievement model. Railway Watch
 # Paths didn't fire on the M0 commit (apps/api/** glob); manual touch
 # forces the webhook so the new code deploys against the freshly-
