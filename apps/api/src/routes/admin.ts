@@ -465,6 +465,90 @@ router.get('/admin/deals/shops', async (_req: Request, res: Response): Promise<v
   });
 });
 
+// GET /api/admin/deals/probe-psn?title=Astro%20Bot&market=AT
+//
+// Diagnostic — fetches PSN's anonymous search page for a title, parses
+// __NEXT_DATA__, and dumps the structure of the first few Product /
+// Concept nodes so we can see where Sony actually stores the SKU id
+// (the test fixture has `id` at the Product node level, but production
+// data appears to differ — every deal URL falls back to /search/).
+router.get('/admin/deals/probe-psn', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const title = typeof req.query['title'] === 'string' ? req.query['title'] : 'Astro Bot';
+    const market = typeof req.query['market'] === 'string' ? req.query['market'] : 'AT';
+    const { marketToLocale } = await import('../services/psnPrices');
+    const locale = marketToLocale(market) ?? 'en-us';
+
+    const url = `https://store.playstation.com/${locale}/search/${encodeURIComponent(title)}`;
+    const fetchRes = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    if (!fetchRes.ok) {
+      res.status(502).json({ ok: false, error: `PSN ${url} → ${fetchRes.status}` });
+      return;
+    }
+    const html = await fetchRes.text();
+    const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    if (!match) {
+      res.status(502).json({ ok: false, error: 'no __NEXT_DATA__ in response' });
+      return;
+    }
+    const data = JSON.parse(match[1]!);
+
+    // Walk recursively, collect Product/Concept nodes with their full key shape.
+    interface ProductSample { path: string; __typename: string; allKeys: string[]; name?: unknown; id?: unknown; idFieldCandidates: Record<string, unknown> }
+    const products: ProductSample[] = [];
+    function walk(o: unknown, path: string, depth: number): void {
+      if (depth > 14 || !o || typeof o !== 'object') return;
+      if (Array.isArray(o)) {
+        for (let i = 0; i < o.length; i++) walk(o[i], `${path}[${i}]`, depth + 1);
+        return;
+      }
+      const obj = o as Record<string, unknown>;
+      const tn = obj['__typename'];
+      if (typeof tn === 'string' && (tn === 'Product' || tn === 'Concept')) {
+        const allKeys = Object.keys(obj);
+        // Collect every key whose value looks like an id (string with hyphens, ALL CAPS / digits).
+        const idFieldCandidates: Record<string, unknown> = {};
+        for (const k of allKeys) {
+          const v = obj[k];
+          if (typeof v === 'string' && /^[A-Z]{2}\d{4}-/.test(v)) idFieldCandidates[k] = v;
+          else if (typeof k === 'string' && /id|sku|cid|concept|np/i.test(k) && (typeof v === 'string' || typeof v === 'number')) {
+            idFieldCandidates[k] = v;
+          }
+        }
+        // Also peek inside `price` for skuId-like fields.
+        const price = obj['price'];
+        if (price && typeof price === 'object' && !Array.isArray(price)) {
+          const p = price as Record<string, unknown>;
+          for (const k of Object.keys(p)) {
+            if (/id|sku/i.test(k)) idFieldCandidates[`price.${k}`] = p[k];
+          }
+        }
+        products.push({ path, __typename: tn, allKeys, name: obj['name'], id: obj['id'], idFieldCandidates });
+      }
+      for (const k of Object.keys(obj)) walk(obj[k], `${path}.${k}`, depth + 1);
+    }
+    walk(data, '$', 0);
+
+    res.json({
+      ok: true,
+      url,
+      market,
+      locale,
+      totalProductsFound: products.length,
+      first3: products.slice(0, 3),
+    });
+  } catch (err) {
+    console.error('[admin/deals/probe-psn] failed:', err);
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // GET /api/admin/deals/probe?title=Cyberpunk%202077&market=AT
 //
 // Diagnostic probe — resolves one game to its ITAD id and dumps the raw
