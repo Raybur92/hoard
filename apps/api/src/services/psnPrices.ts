@@ -199,7 +199,14 @@ function normaliseTitle(s: string): string {
  * SkuPrice). Used by getPsnPrice on search-page responses to find the
  * matching product by title.
  */
-interface ProductWithPrice { name: string; price: SkuPriceNode }
+interface ProductWithPrice {
+  name: string;
+  price: SkuPriceNode;
+  /** SKU-style product id like 'EP4389-PPSA09827_00-GOTHIC1REMAKE000'. Used to build the per-product URL. */
+  id: string | null;
+  /** True when __typename is 'Concept' (multi-SKU group); affects the URL path (/concept/ vs /product/). */
+  isConcept: boolean;
+}
 function collectProducts(obj: unknown, sink: ProductWithPrice[] = [], depth = 0): ProductWithPrice[] {
   if (depth > 12 || !obj || typeof obj !== 'object') return sink;
   if (Array.isArray(obj)) {
@@ -212,11 +219,32 @@ function collectProducts(obj: unknown, sink: ProductWithPrice[] = [], depth = 0)
   if (isProduct && hasName) {
     const priceNode = o['price'] as SkuPriceNode | undefined;
     if (priceNode && priceNode.__typename === 'SkuPrice' && (priceNode.basePrice !== undefined || priceNode.discountedPrice !== undefined)) {
-      sink.push({ name: o['name'] as string, price: priceNode });
+      sink.push({
+        name: o['name'] as string,
+        price: priceNode,
+        id: typeof o['id'] === 'string' ? o['id'] : null,
+        isConcept: o['__typename'] === 'Concept',
+      });
     }
   }
   for (const k of Object.keys(o)) collectProducts(o[k], sink, depth + 1);
   return sink;
+}
+
+/** Split a normalised title into tokens, dropping common stop words that vary
+ * between storefronts ("The Last of Us Part II" vs "Last of Us Part II"). */
+const STOP_WORDS = new Set(['the', 'a', 'an', 'of', 'and']);
+function titleTokens(normalised: string): Set<string> {
+  return new Set(normalised.split(/\s+/).filter((t) => t.length > 0 && !STOP_WORDS.has(t)));
+}
+
+/** Jaccard similarity over two token sets. Range [0, 1]; 1 = identical sets. */
+function jaccardSim(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  let intersection = 0;
+  for (const t of a) if (b.has(t)) intersection++;
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
 }
 
 /**
@@ -269,17 +297,22 @@ export async function getPsnPrice(
   //     passes + cosmetic add-ons with the actual game listings
   //   - Sony's relevance ordering puts DLC ahead of the game itself
   //     surprisingly often
+  //   - PSN's search returns franchise neighbours (e.g. "Gothic 1 Remake"
+  //     query → "Gothic 1 Classic" in results)
   //
-  // Multi-tier picker prioritising USER-USEFUL deal information:
+  // Picker priorities (post-2026-06-02 fix — Andrea's Gothic 1 Remake
+  // case showed prior policy picked the wrong franchise entry):
   //   1. Filter out DLC/microtransaction noise via name keywords
-  //   2. Among remaining candidates, prefer the highest discount %
-  //      (we're on the /deals page — show the user the best deal we
-  //      can find for this game, even if it's a Super Deluxe Edition
-  //      rather than the bare base game)
-  //   3. Within ties on discount, prefer EXACT normalised-name match,
-  //      then SHORTEST name (closer to base game)
-  //   4. If filters left nothing, fall back to any non-free product
-  //      (last-resort — game catalog is unusual)
+  //   2. Reject candidates below a Jaccard-similarity threshold so we
+  //      don't return a wrong-game deal when no real match exists
+  //      (Gothic 1 Classic for a "Gothic 1 Remake" query → rejected)
+  //   3. Sort: exact normalised-name match wins, then highest token-
+  //      overlap similarity, then highest discount %, then shortest name
+  //   4. Returns null when no candidate passes the similarity floor —
+  //      a missing PSN deal is far better UX than a wrong one.
+  //
+  // Previous policy sorted by discount % FIRST which let a deeply-
+  // discounted franchise sibling beat the exact-named full-price item.
   const DLC_KEYWORDS = [
     'pack', 'kosmetik', 'punkte', 'currency', 'boost', 'season pass',
     'wäh', 'coin', 'gold', 'silver', 'skin', 'character', 'multiverse-finale',
@@ -290,25 +323,35 @@ export async function getPsnPrice(
     return DLC_KEYWORDS.some((kw) => n.includes(kw));
   };
   const normQuery = normaliseTitle(title);
+  const queryTokens = titleTokens(normQuery);
   const nonFree = products.filter((p) => !p.price.isFree);
   const eligible = nonFree.filter((p) => !isDlc(p));
   const pool = eligible.length > 0 ? eligible : nonFree;
 
-  // Sort by: discountPct DESC, then exact-match-bonus, then shortest name.
+  // Threshold rationale: 0.5 lets "Hollow Knight" match "Hollow Knight:
+  // Voidheart Edition" (2 shared tokens / 4 total = 0.5) but rejects
+  // "Gothic 1 Classic" for "Gothic 1 Remake" (2 / 4 = 0.5 — boundary;
+  // exact-match bonus saves the day when both Remake and Classic are
+  // in the results). Adjust if franchise pollution gets through.
+  const SIM_THRESHOLD = 0.5;
   const scored = pool.map((p) => {
+    const normName = normaliseTitle(p.name);
+    const sim = jaccardSim(queryTokens, titleTokens(normName));
+    const exactMatch = normName === normQuery;
     const pct = p.price.discountText
       ? Math.abs(parseInt(p.price.discountText.replace(/[^0-9]/g, ''), 10))
       : 0;
-    const normName = normaliseTitle(p.name);
-    const exactBonus = normName === normQuery ? 1 : 0;
-    return { p, pct, exactBonus, len: normName.length };
+    return { p, exactMatch, sim, pct, len: normName.length };
   });
-  scored.sort((a, b) => {
+  const filtered = scored.filter((s) => s.exactMatch || s.sim >= SIM_THRESHOLD);
+  if (filtered.length === 0) return null;
+  filtered.sort((a, b) => {
+    if (a.exactMatch !== b.exactMatch) return a.exactMatch ? -1 : 1;
+    if (a.sim !== b.sim) return b.sim - a.sim;
     if (a.pct !== b.pct) return b.pct - a.pct;
-    if (a.exactBonus !== b.exactBonus) return b.exactBonus - a.exactBonus;
     return a.len - b.len;
   });
-  const pick = scored[0]?.p ?? null;
+  const pick = filtered[0]?.p ?? null;
   if (!pick) return null;
 
   const regular = parsePriceString(pick.price.basePrice);
@@ -323,13 +366,21 @@ export async function getPsnPrice(
   const hasDiscount = Boolean(pick.price.discountText) && discountPct > 0;
   const currency = LOCALE_CURRENCY[locale] ?? 'EUR';
 
+  // Build the per-product URL when we have the SKU id. Falls back to the
+  // search URL if Sony's __NEXT_DATA__ shape ever omits the id (defensive;
+  // the fixture always carries it). Concept vs Product is the URL path
+  // discriminator: /<locale>/concept/<id> vs /<locale>/product/<id>.
+  const productUrl = pick.id
+    ? `${PSN_BASE}/${locale}/${pick.isConcept ? 'concept' : 'product'}/${pick.id}`
+    : url;
+
   return {
     regular,
     current: Number.isFinite(current) ? current : regular,
     currency,
     discountPct,
     hasDiscount,
-    url,
+    url: productUrl,
     title: pick.name,
   };
 }

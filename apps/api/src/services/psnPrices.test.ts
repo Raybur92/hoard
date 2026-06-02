@@ -166,7 +166,11 @@ describe('DEALS-PR2.5 — getPsnPrice (title-based search)', () => {
     expect(p!.title).toBe("Marvel's Spider-Man");
   });
 
-  it('falls back to first non-free product when no exact match', async () => {
+  it('returns null when no candidate meets the title-similarity threshold', async () => {
+    // Pre-2026-06-02 the picker fell back to the first non-free product when no
+    // exact match existed — surfacing wrong-game deals on the /deals page.
+    // Post-fix: candidates below the Jaccard threshold are rejected, returning
+    // null so the route can simply not show a deal for that game.
     const fixture = {
       data: {
         results: [
@@ -180,8 +184,88 @@ describe('DEALS-PR2.5 — getPsnPrice (title-based search)', () => {
       text: async () => htmlWith(fixture),
     });
     const p = await getPsnPrice('Some other title that does not match', 'en-us');
+    expect(p).toBeNull();
+  });
+
+  it('prefers exact-name match over higher-discount franchise sibling (Gothic 1 Remake regression)', async () => {
+    // Andrea reported 2026-06-02: a "Gothic 1 Remake" query was returning the
+    // 50%-off Gothic 1 Classic SKU instead of the full-price Remake. Cause:
+    // the previous picker sorted by discount % first, exact-match-bonus second.
+    // The fix inverts the priority — exact name match wins outright.
+    const fixture = {
+      data: {
+        results: [
+          {
+            __typename: 'Product',
+            id: 'EP4389-PPSA09827_00-GOTHIC1REMAKE000',
+            name: 'Gothic 1 Remake',
+            price: { __typename: 'SkuPrice', basePrice: '€59,99', discountedPrice: '€59,99', discountText: null, isFree: false },
+          },
+          {
+            __typename: 'Product',
+            id: 'EP4389-PPSA01234_00-GOTHIC1CLASSIC00',
+            name: 'Gothic 1 Classic',
+            price: { __typename: 'SkuPrice', basePrice: '€18,99', discountedPrice: '€9,49', discountText: '-50%', isFree: false },
+          },
+        ],
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice('Gothic 1 Remake', 'it-it');
     expect(p).not.toBeNull();
-    expect(p!.title).toBe('Astro Playroom Deluxe');
+    expect(p!.title).toBe('Gothic 1 Remake');
+    expect(p!.regular).toBeCloseTo(59.99, 2);
+    expect(p!.hasDiscount).toBe(false);
+  });
+
+  it('returns the per-product URL using the matched Product id', async () => {
+    // Previously the deal URL was the search results page (/<locale>/search/<query>);
+    // post-fix it's the specific product page (/<locale>/product/<id>) so the
+    // user lands on the matched game's actual store listing.
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(NEXT_DATA_FIXTURE),
+    });
+    const p = await getPsnPrice('Astro Bot', 'en-us');
+    expect(p!.url).toBe('https://store.playstation.com/en-us/product/UP9000-PPSA21564_00-0000000000000000');
+  });
+
+  it('falls back to the search URL when the matched product has no id', async () => {
+    const fixture = {
+      data: {
+        results: [
+          { __typename: 'Product', name: 'Mystery Title', price: { __typename: 'SkuPrice', basePrice: '$19.99', discountedPrice: '$19.99', discountText: null, isFree: false } },
+        ],
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice('Mystery Title', 'en-us');
+    expect(p!.url).toBe('https://store.playstation.com/en-us/search/Mystery%20Title');
+  });
+
+  it('uses the /concept/ path for Concept-typed entries instead of /product/', async () => {
+    const fixture = {
+      data: {
+        product: {
+          __typename: 'Concept',
+          id: 'EP9000-CONCEPT0123_00-XXXXXX',
+          name: 'Concept Game',
+          price: { __typename: 'SkuPrice', basePrice: '$39.99', discountedPrice: '$39.99', discountText: null, isFree: false },
+        },
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice('Concept Game', 'en-us');
+    expect(p!.url).toBe('https://store.playstation.com/en-us/concept/EP9000-CONCEPT0123_00-XXXXXX');
   });
 
   it('returns null on 404', async () => {
