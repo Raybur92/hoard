@@ -30,6 +30,10 @@ const ReleasesRecentDesktop = lazyNamed(() => import('./components/screens/Relea
 const ReleasesRecentMobile  = lazyNamed(() => import('./components/screens/ReleasesRecentMobile'),  'ReleasesRecentMobile');
 const DealsDesktop          = lazyNamed(() => import('./components/screens/DealsDesktop'),          'DealsDesktop');
 const DealsMobile           = lazyNamed(() => import('./components/screens/DealsMobile'),           'DealsMobile');
+const EventsDesktop         = lazyNamed(() => import('./components/screens/EventsDesktop'),         'EventsDesktop');
+const EventsMobile          = lazyNamed(() => import('./components/screens/EventsMobile'),          'EventsMobile');
+const EventDetailDesktop    = lazyNamed(() => import('./components/screens/EventDetailDesktop'),    'EventDetailDesktop');
+const EventDetailMobile     = lazyNamed(() => import('./components/screens/EventDetailMobile'),     'EventDetailMobile');
 // GD-PR1 — the v2 dispatchers replace direct GameDetailDesktop / GameDetailMobile
 // mounting at `/game/:id`. They classify the URL param (numeric IGDB id vs.
 // legacy cuid) and dispatch to S1 (new), S2 (S1 fallback for GD-PR1), or the
@@ -112,6 +116,9 @@ export default function App() {
                 <Route path="/upcoming"                         element={<Navigate to="/releases" replace />} />
                 {/* DEALS-PR1 — `/deals` top-level surface. */}
                 <Route path="/deals"                            element={desktop ? <DealsDesktop />          : <DealsMobile />} />
+                {/* EV-PR1 — `/events` top-level surface. */}
+                <Route path="/events"                           element={desktop ? <EventsDesktop />         : <EventsMobile />} />
+                <Route path="/events/:slug"                     element={desktop ? <EventDetailDesktop />    : <EventDetailMobile />} />
                 <Route path="/game/:id"                         element={desktop ? <GameDetailV2Desktop />   : <GameDetailV2Mobile />} />
                 <Route path="/settings"                         element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />
                 <Route path="/settings/:section"                element={desktop ? <SettingsDesktop />       : <SettingsMobile />} />

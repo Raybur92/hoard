@@ -30,6 +30,8 @@ import type {
   DealsResponse,
   GameDetailResponse,
   GameDealsResponse,
+  EventsListResponse,
+  EventDetailResponse,
 } from '@hoard/types';
 import * as cache from './cache';
 
@@ -206,6 +208,14 @@ export const api = {
   /** DEALS-PR1 — current deals for the user (wishlist + broader feed). */
   deals: () =>
     get<DealsResponse>('/api/deals'),
+
+  /** EV-PR1 — sectioned events list (hero + upcoming + recent + past). */
+  events: () =>
+    get<EventsListResponse>('/api/events'),
+
+  /** EV-PR1 — single-event detail including game grid + personalisation. */
+  eventBySlug: (slug: string) =>
+    get<EventDetailResponse>(`/api/events/${encodeURIComponent(slug)}`),
 
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),

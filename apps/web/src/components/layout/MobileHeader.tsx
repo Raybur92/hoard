@@ -67,14 +67,26 @@ export function MobileHeader({ title, sub, back, right, onBack }: MobileHeaderPr
       </div>
       <div style={{ display: 'flex', gap: 12, color: 'var(--paper-dim)', fontSize: "var(--text-sm)", alignItems: 'center' }}>
         {right ?? (
-          <button
-            type="button"
-            onClick={() => { tickHaptic(); search.open(); }}
-            aria-label="Search games"
-            className="m-icon-btn"
-          >
-            <Icon name="search" size={18} />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => { tickHaptic(); search.open(); }}
+              aria-label="Search games"
+              className="m-icon-btn"
+            >
+              <Icon name="search" size={18} />
+            </button>
+            {/* EV-D14 — Settings moved off the bottom tab bar to make room
+                for Events. Header cog keeps Settings discoverable globally. */}
+            <button
+              type="button"
+              onClick={() => { tickHaptic(); navigate('/settings'); }}
+              aria-label="Settings"
+              className="m-icon-btn"
+            >
+              <Icon name="cog" size={18} />
+            </button>
+          </>
         )}
       </div>
     </div>
