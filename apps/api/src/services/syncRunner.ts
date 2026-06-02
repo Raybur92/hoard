@@ -216,6 +216,9 @@ export async function runSync(
             // can read them off Game.
             themes: igdbGame.themes,
             playerPerspectives: igdbGame.playerPerspectives,
+            // DEALS-PR2.5+ — IGDB-tagged platforms; lets per-storefront
+            // deal syncs pre-filter Games before hitting external APIs.
+            platforms: igdbGame.platforms,
             coverUrl: igdbGame.coverUrl,
             heroImageUrl: igdbGame.heroImageUrl,
             ...(steamAppId ? { steamAppId } : {}),
@@ -234,6 +237,7 @@ export async function runSync(
             genres: igdbGame.genres,
             themes: igdbGame.themes,
             playerPerspectives: igdbGame.playerPerspectives,
+            platforms: igdbGame.platforms,
             coverUrl: igdbGame.coverUrl,
             heroImageUrl: igdbGame.heroImageUrl,
             steamAppId,

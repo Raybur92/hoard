@@ -15,7 +15,7 @@
  */
 
 import { prisma } from '@hoard/db';
-import { getNintendoPrice, marketToLocale, NintendoClientError, nintendoStoreUrl } from '../nintendoPrices';
+import { getNintendoPrice, getNintendoPriceByTitle, marketToLocale, NintendoClientError, nintendoStoreUrl } from '../nintendoPrices';
 
 const NINTENDO_SHOP_NAME = 'Nintendo eShop';
 // Synthetic shopId; Nintendo isn't on ITAD so it has no ITAD shop id.
@@ -61,25 +61,34 @@ export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
     return result;
   }
 
-  // Scope: Games with nintendoTitleId AND at least one UserGame. We
-  // include `distinct` indirectly by querying Game rows (no UserGame
-  // join) — every Game.nintendoTitleId is shared across all users that
-  // own that game on Switch.
+  // DEALS-PR2.5+ — broader scope: every Game in any user's library OR
+  // wishlist that IGDB tags as available on Switch. Andrea's call —
+  // "why do I have to wait for my Switch sync to see Nintendo deals?"
+  // — answered structurally: surface deals on any game on the user's
+  // radar that exists on Switch, regardless of which platform they
+  // own it on.
+  //
+  // The Game.platforms array (populated by IGDB at sync time, backfilled
+  // for existing rows via backfill-game-platforms.ts) pre-filters to
+  // Switch-available games before we hit Nintendo's API. For games
+  // where M3 Switch sync has populated nintendoTitleId, we use the
+  // exact-ID path; otherwise we fall back to fuzzy title search.
   const games = await prisma.game.findMany({
     where: {
-      nintendoTitleId: { not: null },
+      platforms: { hasSome: ['Nintendo Switch', 'Nintendo Switch 2'] },
       userGames: { some: {} },
     },
     select: { id: true, title: true, nintendoTitleId: true },
   });
   result.scanned = games.length;
   if (games.length === 0) return result;
-  console.log(`[nintendo-deals] scanning ${games.length} games (locale=${locale})`);
+  console.log(`[nintendo-deals] scanning ${games.length} Switch games (locale=${locale})`);
 
   for (const g of games) {
-    const titleId = g.nintendoTitleId!;
     try {
-      const price = await getNintendoPrice(titleId, locale);
+      const price = g.nintendoTitleId
+        ? await getNintendoPrice(g.nintendoTitleId, locale)
+        : await getNintendoPriceByTitle(g.title, locale);
       await sleep(REQ_DELAY_MS);
       if (!price) {
         // Nintendo returned nothing — game not on the index for this
@@ -133,8 +142,8 @@ export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
     } catch (err) {
       result.failed++;
       const msg = err instanceof NintendoClientError ? err.message : err instanceof Error ? err.message : String(err);
-      console.error(`[nintendo-deals] ${g.title} (titleId=${titleId}): ${msg}`);
-      // Don't abort the loop; one failure shouldn't block the rest.
+      const lookupBy = g.nintendoTitleId ? `titleId=${g.nintendoTitleId}` : `title="${g.title}"`;
+      console.error(`[nintendo-deals] ${g.title} (${lookupBy}): ${msg}`);
       await sleep(REQ_DELAY_MS);
     }
   }

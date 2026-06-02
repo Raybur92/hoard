@@ -98,6 +98,7 @@ export async function applySteamWishlistImport(
             // carries themes + playerPerspectives from the IGDB service.
             themes: release.themes,
             playerPerspectives: release.playerPerspectives,
+            platforms: release.platforms,
             coverUrl: release.coverUrl,
             heroImageUrl: release.heroImageUrl,
             // Persist steamAppId on the Game row if it isn't set yet —
@@ -113,6 +114,7 @@ export async function applySteamWishlistImport(
             genres: release.genres,
             themes: release.themes,
             playerPerspectives: release.playerPerspectives,
+            platforms: release.platforms,
             coverUrl: release.coverUrl,
             heroImageUrl: release.heroImageUrl,
             steamAppId: item.appid,

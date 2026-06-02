@@ -265,6 +265,12 @@ model Game {
   // values: First-person / Third-person / Side-view / Top-down / Text /
   // Bird-view / Auditory / VR.
   playerPerspectives   String[] @default([])
+  // DEALS-PR2.5+ — IGDB-tagged platforms the game ships on (e.g.
+  // ["PC (Microsoft Windows)", "Nintendo Switch", "PlayStation 5"]).
+  // Pre-filter for per-storefront deal syncs (Nintendo eShop sync only
+  // hits games released on Switch, not 2k+ Steam library; same pattern
+  // for future PSN-by-platform / Xbox-by-platform refinements).
+  platforms            String[] @default([])
   coverUrl             String?
   // Landscape hero image (IGDB artworks[0] preferred, screenshots[0] fallback).
   // Used by the Library OVERVIEW shelf cards which render landscape vs the

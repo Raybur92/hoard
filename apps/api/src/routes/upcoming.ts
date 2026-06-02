@@ -142,6 +142,7 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
         // B-IGDB-3 — persist IGDB-tag triple.
         themes: igdbRelease.themes,
         playerPerspectives: igdbRelease.playerPerspectives,
+        platforms: igdbRelease.platforms,
         coverUrl: igdbRelease.coverUrl,
         heroImageUrl: igdbRelease.heroImageUrl,
       },
@@ -153,6 +154,7 @@ router.post('/upcoming/:igdbId/wishlist', requireUser, requireActive, async (req
         genres: igdbRelease.genres,
         themes: igdbRelease.themes,
         playerPerspectives: igdbRelease.playerPerspectives,
+        platforms: igdbRelease.platforms,
         coverUrl: igdbRelease.coverUrl,
         heroImageUrl: igdbRelease.heroImageUrl,
       },

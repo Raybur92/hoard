@@ -92,17 +92,43 @@ function localeCurrency(locale: string): string {
   return locale === 'en-gb' ? 'GBP' : 'EUR';
 }
 
+/** Normalise title for matching (lowercase, strip non-alphanumeric, collapse whitespace). */
+function normaliseTitle(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Convert a Solr doc to a NintendoPrice (returns null if required price fields missing). */
+function docToPrice(doc: SolrDoc, locale: string, applicationIdHint: string): NintendoPrice | null {
+  const regular = doc.price_regular_f;
+  const lowest = doc.price_lowest_f;
+  const pct = doc.price_discount_percentage_f;
+  const hasDiscount = doc.price_has_discount_b;
+  if (regular === undefined || lowest === undefined || pct === undefined || hasDiscount === undefined) {
+    return null;
+  }
+  const current = hasDiscount ? Math.round(regular * (100 - pct)) / 100 : regular;
+  return {
+    regular,
+    current,
+    historicalLow: lowest,
+    discountPct: pct,
+    currency: localeCurrency(locale),
+    hasDiscount,
+    title: doc.title ?? doc.title_master_s ?? '(unknown)',
+    applicationId: doc.application_id_s ?? applicationIdHint,
+  };
+}
+
 /**
  * Fetch the Solr document for a specific Switch applicationId in the
  * given locale. Returns null when the title isn't on Nintendo's index
- * (delisted, region-locked elsewhere, etc.).
+ * (delisted, region-locked elsewhere, etc.). Use this when we have a
+ * known nintendoTitleId (from M3 Switch sync).
  */
 export async function getNintendoPrice(
   applicationId: string,
   locale: string,
 ): Promise<NintendoPrice | null> {
-  // Solr query: exact match on application_id_s, restricted to Switch
-  // games. wt=json explicit; rows=1 — we only want the canonical doc.
   const url = new URL(`${NINTENDO_BASE}/${locale}/select`);
   url.searchParams.set('q', `application_id_s:"${applicationId}"`);
   url.searchParams.set('fq', 'type:GAME AND system_type:nintendoswitch*');
@@ -118,36 +144,76 @@ export async function getNintendoPrice(
   const body = (await res.json()) as SolrResponse;
   const doc = body.response?.docs?.[0];
   if (!doc) return null;
-  if (doc.application_id_s !== applicationId) {
-    // Sanity check — Solr matched a different doc somehow. Skip.
-    return null;
+  if (doc.application_id_s !== applicationId) return null;
+  return docToPrice(doc, locale, applicationId);
+}
+
+/**
+ * DEALS-PR2.5+ — fetch the closest-matching Switch game by title.
+ *
+ * Used when we have a Game in the user's library that IGDB tags as
+ * available on Switch, but the user hasn't synced their console (so
+ * `Game.nintendoTitleId` is null). Falls back to fuzzy title match
+ * against Nintendo's Solr index.
+ *
+ * Picker semantics mirror the PSN scraper:
+ *   1. Filter out DLC-like results (heuristic keyword blacklist)
+ *   2. Prefer highest current discount %
+ *   3. Within ties, prefer normalised-exact name match, then shortest name
+ *
+ * Returns null when no usable doc is found.
+ */
+export async function getNintendoPriceByTitle(
+  title: string,
+  locale: string,
+): Promise<NintendoPrice | null> {
+  // Use Solr's `name` field for relevance-ranked title search. Quote
+  // the query so embedded spaces don't get parsed as boolean operators.
+  const url = new URL(`${NINTENDO_BASE}/${locale}/select`);
+  url.searchParams.set('q', `title:"${title.replace(/"/g, '\\"')}"`);
+  url.searchParams.set('fq', 'type:GAME AND system_type:nintendoswitch*');
+  url.searchParams.set('rows', '20');
+  url.searchParams.set('wt', 'json');
+
+  const res = await fetch(url.toString(), {
+    headers: { 'User-Agent': 'Hoard/1.0 (personal game tracker)' },
+  });
+  if (!res.ok) {
+    throw new NintendoClientError(`Nintendo Solr ${res.status}`, res.status);
   }
-  // All four price fields are required to surface a deal. If Nintendo
-  // doesn't have a price (e.g. demo / free-to-start without a sale),
-  // skip rather than emit a deal with zero values.
-  const regular = doc.price_regular_f;
-  const lowest = doc.price_lowest_f;
-  const pct = doc.price_discount_percentage_f;
-  const hasDiscount = doc.price_has_discount_b;
-  if (regular === undefined || lowest === undefined || pct === undefined || hasDiscount === undefined) {
-    return null;
-  }
-  const currency = localeCurrency(locale);
-  // Compute current selling price from regular × (1 - pct/100). Nintendo
-  // doesn't include a "current price" field directly; their UI computes
-  // it client-side. price_lowest_f is historical low, not necessarily
-  // the active discount.
-  const current = hasDiscount ? Math.round(regular * (100 - pct)) / 100 : regular;
-  return {
-    regular,
-    current,
-    historicalLow: lowest,
-    discountPct: pct,
-    currency,
-    hasDiscount,
-    title: doc.title ?? doc.title_master_s ?? '(unknown)',
-    applicationId,
+  const body = (await res.json()) as SolrResponse;
+  const docs = body.response?.docs ?? [];
+  if (docs.length === 0) return null;
+
+  // Filter + score
+  const DLC_KEYWORDS = ['dlc', 'pack', 'pass', 'expansion', 'edition addon', 'add-on', 'addon', 'season pass', 'cosmetic'];
+  const isDlc = (d: SolrDoc): boolean => {
+    const n = normaliseTitle(d.title ?? d.title_master_s ?? '');
+    return DLC_KEYWORDS.some((kw) => n.includes(kw));
   };
+  const eligible = docs.filter((d) => !isDlc(d) && (d.price_regular_f ?? 0) > 0);
+  const pool = eligible.length > 0 ? eligible : docs.filter((d) => (d.price_regular_f ?? 0) > 0);
+  if (pool.length === 0) return null;
+
+  const normQ = normaliseTitle(title);
+  const scored = pool.map((d) => {
+    const name = d.title ?? d.title_master_s ?? '';
+    const norm = normaliseTitle(name);
+    return {
+      d,
+      pct: d.price_discount_percentage_f ?? 0,
+      exactBonus: norm === normQ ? 1 : 0,
+      len: norm.length,
+    };
+  });
+  scored.sort((a, b) => {
+    if (a.pct !== b.pct) return b.pct - a.pct;
+    if (a.exactBonus !== b.exactBonus) return b.exactBonus - a.exactBonus;
+    return a.len - b.len;
+  });
+  const pick = scored[0]?.d;
+  if (!pick) return null;
+  return docToPrice(pick, locale, pick.application_id_s ?? '');
 }
 
 /**
