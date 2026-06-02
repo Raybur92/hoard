@@ -287,6 +287,59 @@ model Game {
   hltbData       HltbData?
   deals          Deal[]
   priceSnapshots PriceSnapshot[]
+  events         EventGame[]
+}
+
+// EV-PR1 — IGDB showcase / industry event. Net-new top-level surface
+// (docs/EVENTS_PLAN.md). Fed by `apps/api/src/services/events.ts::syncAllEvents`
+// from IGDB's `events` endpoint (nightly cron + admin manual refresh).
+//
+// NOT to be confused with the telemetry `UserEvent` model above — that's
+// the L1 event log for the user-research observation channel. This is the
+// game-industry-showcase model (State of Play, Nintendo Direct, etc.).
+model Event {
+  id            String    @id @default(cuid())
+  igdbId        Int       @unique
+  slug          String    @unique
+  name          String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime?
+  liveStreamUrl String?
+  timeZone      String?
+  logoUrl       String?
+  // [{name, type, url}, ...] derived from IGDB's `event_networks`.
+  networks      Json      @default("[]")
+  // [{youtubeId, name}, ...] derived from IGDB's `videos`.
+  videos        Json      @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  games EventGame[]
+
+  @@index([startTime])
+  @@index([slug])
+}
+
+// EV-PR1 — join row between Event and Game. IGDB's events endpoint returns
+// a `games` array per event — direct join data, no inference needed at
+// EV-PR1. `announcementType` (`announced` / `shown` / `released` / null)
+// stays null in EV-PR1; EV-PR3 ships derivation logic where patterns are
+// extractable from IGDB metadata.
+//
+// Replace-all join strategy on sync per EV-D9: each event's join rows are
+// deleted + recreated as a unit per sync. Idempotent and simple.
+model EventGame {
+  id               String  @id @default(cuid())
+  eventId          String
+  gameId           String
+  announcementType String?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  game  Game  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, gameId])
+  @@index([gameId])
 }
 
 model UserGame {

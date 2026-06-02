@@ -18,6 +18,7 @@ import igdbRouter from './routes/igdb';
 import adminRouter from './routes/admin';
 import feedbackRouter from './routes/feedback';
 import dealsRouter from './routes/deals';
+import eventsRouter from './routes/events';
 import { logEvent } from './services/userEvents';
 
 const app = express();
@@ -121,6 +122,7 @@ app.use('/api', igdbRouter);
 app.use('/api', adminRouter);
 app.use('/api', feedbackRouter);
 app.use('/api', dealsRouter);
+app.use('/api', eventsRouter);
 
 // ── Global error handler ──────────────────────────────────────────────
 // Extracted to a named function so TL1.2 tests can invoke it directly.

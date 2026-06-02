@@ -1004,3 +1004,111 @@ export interface UserEventListResponse {
   items: UserEventWithUser[];
   nextCursor: string | null;
 }
+
+/* ── Events (EV-PR1, docs/EVENTS_PLAN.md) ── */
+
+/**
+ * IGDB showcase / industry event raw shape — what the IGDB `events`
+ * endpoint returns (after our mapper). NOT to be confused with `UserEvent`
+ * above (that's the telemetry feed). `gameIgdbIds` is the resolved list
+ * of IGDB game ids from the nested `games` field; the sync orchestrator
+ * resolves each to a Hoard `Game` row at write time per EV-D11.
+ */
+export interface IgdbEvent {
+  igdbId: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  /** ISO 8601 in UTC. */
+  startTime: string;
+  /** ISO 8601 in UTC; null when IGDB didn't supply an end time. */
+  endTime: string | null;
+  liveStreamUrl: string | null;
+  /** IANA timezone, e.g. "America/Los_Angeles". Used by `.ics` per EV-D15
+   *  starting in EV-PR4; EV-PR1 ignores it. */
+  timeZone: string | null;
+  logoUrl: string | null;
+  networks: Array<{ name: string; type: string; url: string | null }>;
+  videos: Array<{ youtubeId: string; name: string | null }>;
+  gameIgdbIds: number[];
+}
+
+/** EV-PR1 — three-state classification per EV-D12.
+ *
+ *  - `upcoming` — startTime > now
+ *  - `live`     — startTime ≤ now AND (endTime ≥ now, OR endTime is null AND
+ *                 startTime + 4h ≥ now)
+ *  - `past`     — endTime < now (when present) OR startTime + 4h < now (when
+ *                 endTime is null)
+ */
+export type EventState = 'upcoming' | 'live' | 'past';
+
+/** Compact event row used by the `/events` list view + cross-page chips. */
+export interface EventListRow {
+  slug: string;
+  name: string;
+  startTime: string;
+  endTime: string | null;
+  liveStreamUrl: string | null;
+  logoUrl: string | null;
+  networks: Array<{ name: string; type: string; url: string | null }>;
+  gameCount: number;
+  state: EventState;
+}
+
+/** GET `/api/events` payload. Sectioned per `state` so the frontend can
+ *  render upcoming/recent/past in order without re-bucketing. `hero` is the
+ *  next-soonest upcoming event globally (EV-D13). */
+export interface EventsListResponse {
+  hero: EventListRow | null;
+  upcoming: EventListRow[];
+  /** Past events within the last 30 days (always rendered when populated). */
+  recent: EventListRow[];
+  /** Past events older than 30 days, within the 24-month default depth
+   *  window (EV-D6). EV-PR2 adds year-jump for going deeper. */
+  past: EventListRow[];
+  counts: { upcoming: number; past: number };
+}
+
+/** Detail-view event row — adds description / timezone / video deep-links
+ *  on top of the list row. */
+export interface EventDetailRow extends EventListRow {
+  description: string | null;
+  timeZone: string | null;
+  videos: Array<{ youtubeId: string; name: string | null }>;
+}
+
+/**
+ * One game card in the event's game grid. `userGame` is non-null when the
+ * user already has a UserGame for this game (drives the `on your wishlist` /
+ * `in your library` chip). `announcementType` stays null in EV-PR1; EV-PR3
+ * derives it from IGDB metadata where patterns are extractable.
+ */
+export interface EventGameRow {
+  igdbId: number;
+  name: string;
+  coverUrl: string | null;
+  heroImageUrl: string | null;
+  announcementType: string | null;
+  userGame: { id: string; status: GameStatus } | null;
+}
+
+/** GET `/api/events/:slug` payload. `personalisation` carries pre-computed
+ *  counts so the detail header can render `// 3 on your wishlist` without
+ *  the client iterating `games[]`. */
+export interface EventDetailResponse {
+  event: EventDetailRow;
+  games: EventGameRow[];
+  personalisation: {
+    onWishlistCount: number;
+    onLibraryCount: number;
+  };
+}
+
+/** Admin-only sync summary returned by POST `/api/admin/events/sync`. */
+export interface EventsSyncSummary {
+  scanned: number;
+  eventsUpserted: number;
+  gamesUpserted: number;
+  gameLinksUpserted: number;
+}
