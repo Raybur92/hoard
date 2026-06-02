@@ -399,11 +399,26 @@ router.post('/admin/deals/refresh', async (_req: Request, res: Response): Promis
     // deals service hasn't been touched yet.
     const { syncAllDeals } = await import('../services/deals/syncDeals');
     const { syncAllBundles } = await import('../services/deals/syncBundles');
+    const { syncAllNintendoDeals } = await import('../services/deals/syncNintendoDeals');
+    const { syncAllPsnDeals } = await import('../services/deals/syncPsnDeals');
     const result = await syncAllDeals();
     // DEALS-PR2 — also refresh bundles alongside deals. Single global
     // pull from ITAD; bundles are not user-scoped.
     const bundleResult = await syncAllBundles();
-    res.json({ ok: true, ...result, bundles: bundleResult });
+    // DEALS-PR2.5 — Nintendo eShop + PSN console-storefront coverage.
+    // Each runs sequentially after the ITAD sync (which populates the
+    // Game.{nintendoTitleId, psnConceptId} columns these orchestrators
+    // depend on). Per-source failure is caught + logged internally; the
+    // overall refresh returns successfully even if one source fails.
+    const nintendoResult = await syncAllNintendoDeals();
+    const psnResult = await syncAllPsnDeals();
+    res.json({
+      ok: true,
+      ...result,
+      bundles: bundleResult,
+      nintendo: nintendoResult,
+      psn: psnResult,
+    });
   } catch (err) {
     console.error('[admin/deals/refresh] sync failed:', err);
     const message = err instanceof Error ? err.message : String(err);

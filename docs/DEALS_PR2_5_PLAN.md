@@ -132,8 +132,8 @@ If the lookup ever fails (game removed from MS catalog, etc), skip that Game sil
 
 | Sub-task | Status | Notes |
 |---|---|---|
-| Nintendo eShop integration | Pending | Solr endpoint; join by nintendoTitleId |
-| PSN integration | Pending | Concept-page __NEXT_DATA__ scrape; join by psnConceptId |
-| Xbox integration | Pending | Display Catalog + bigId backfill |
-| `/admin/deals/refresh` orchestrator wire | Pending | Sequential after ITAD + bundles |
-| Doc closeouts (CLAUDE.md Known Gap closure, etc) | Pending | After ship |
+| Nintendo eShop integration | Done 2026-06-02 | Solr endpoint; join by nintendoTitleId; 8 tests pass |
+| PSN integration | Done 2026-06-02 | Concept-page __NEXT_DATA__ scrape; join by psnConceptId; 14 tests pass (incl. sample-HTML snapshot for Sony-shape-change canary) |
+| Xbox integration | **Dropped from this PR (2026-06-02)** | Mid-implementation probe revealed Microsoft Display Catalog requires `bigIds` — there's no anonymous resolver from `xboxTitleId → bigId`. `xbox.com/Search` doesn't embed structured JSON like PSN does (search results render client-side via separate JS bundles + Xbox-auth Display Catalog calls). Three remaining paths (drop, fuzzy regex match, manual mapping) — Andrea chose drop. Microsoft Store PC already covers the same digital catalog at similar prices via ITAD (123 deals tracked); Xbox console-side adds marginal value for the shrinking pool of Xbox-exclusive titles. Documented as Known Gap with revisit conditions. |
+| `/admin/deals/refresh` orchestrator wire | Done | Sequential after ITAD + bundles; per-source counters returned in response |
+| Doc closeouts | Done | Plan + Known Gap (Xbox revisit) + commit |
