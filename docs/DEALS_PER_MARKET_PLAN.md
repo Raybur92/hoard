@@ -1,6 +1,9 @@
 # Per-market deals sync — plan
 
-**Status:** Deferred 2026-06-03. Pick up fresh when ready.
+**Status:** ✅ Shipped 2026-06-03 (commit `309496c`). See CLAUDE.md Recent
+Fixes entry for landing notes. This file is preserved for the design
+rationale + operational recipe (pgbouncer-safe migration apply) in case
+the same pattern is needed for future schema additions.
 
 ## Problem
 
