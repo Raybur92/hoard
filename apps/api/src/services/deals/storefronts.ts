@@ -27,6 +27,7 @@ const TIER_1_FIRST_PARTY = new Set<string>([
   'epic game store', // ITAD has been seen with both spellings
   'humble store',     // Humble's own digital storefront (distinct from "Humble Bundle")
   'battle.net',
+  'blizzard',         // ITAD calls Battle.net "Blizzard" in /service/shops/v1
   'itch.io',
   'playstation store',
   'xbox store',
@@ -34,19 +35,38 @@ const TIER_1_FIRST_PARTY = new Set<string>([
   'nintendo eshop',
   'nintendo us',      // ITAD's name for nintendo.com US storefront
   'nintendo uk',
+  // Publisher-owned first-party stores added 2026-06-03 after the ITAD
+  // shop catalog diagnostic showed them as legitimate first-party for
+  // their own publisher catalogs (EA's FIFA/Mass Effect/Battlefield;
+  // Ubisoft's Assassin's Creed/Far Cry/Watch Dogs lines).
+  'ea store',
+  'ubisoft store',
 ]);
 
 // Tier 2 — trusted resellers allow-list. Locked 2026-05-30 per OQ-DEALS-9.
-// Expansion candidates (Fanatical, GamesPlanet) are not yet in the
-// list; edit + deploy when ready.
+// Expanded 2026-06-03 after ITAD shop-catalog diagnostic:
+//   - GreenManGaming added (ITAD's spelling) — earlier "green man gaming"
+//     entry was a name mismatch; ITAD writes it as one word.
+//   - Fanatical + GamesPlanet (DE/FR/UK/US regional variants) promoted
+//     from "expansion candidates" to active allow-list per Andrea's call.
+// Items in the spec's lock that ITAD doesn't track at all (Humble Bundle
+// as a separate shop, Instant Gaming, Kinguin, CDKeys) are kept in the
+// set so that if ITAD ever adds them, they're surface-ready — but they
+// produce no deals via /games/prices/v3 today.
 const TIER_2_RESELLER_ALLOW_LIST = new Set<string>([
   'humble bundle',     // Humble's bundle product line — distinct from Humble Store
   'instant gaming',
   'gmg',               // ITAD sometimes uses "GMG"
-  'green man gaming',  // ITAD sometimes uses the full name
+  'green man gaming',  // legacy spelling — kept as a defensive alias
+  'greenmangaming',    // ITAD's actual spelling (no spaces) in /service/shops/v1
   'kinguin',
   'cdkeys',
   'cd keys',           // possible alt-spelling
+  'fanatical',
+  'gamesplanet de',
+  'gamesplanet fr',
+  'gamesplanet uk',
+  'gamesplanet us',
 ]);
 
 export type StorefrontTier = 'first-party' | 'reseller' | 'excluded';
