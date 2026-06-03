@@ -6,6 +6,7 @@ import { EventListRow } from './events/EventListRow';
 import { Marker } from '../primitives/Marker';
 import { Btn } from '../primitives/Btn';
 import type { EventListRow as EventListRowData } from '@hoard/types';
+import { api } from '../../lib/api';
 
 /**
  * EV-PR1 — `/events` list view. Sections:
@@ -20,10 +21,8 @@ export function EventsDesktop() {
   useDocumentTitle('Events');
   const { data, loading, error, refetch } = useEvents();
 
-  // EV-PR1 ships the `.ics` download via direct hit to the API; no SDK
-  // route needed since the response is just text/calendar.
   function downloadIcs(slug: string) {
-    window.open(`/api/events/${encodeURIComponent(slug)}/ics`, '_blank');
+    void api.downloadEventIcs(slug);
   }
 
   useEffect(() => { /* placeholder for any list-mount telemetry */ }, []);

@@ -8,6 +8,7 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { countdownParts, daysUntil } from '../../lib/utils';
 import type { EventDetailResponse, EventState } from '@hoard/types';
+import { api } from '../../lib/api';
 
 /**
  * EV-PR1 — `/events/:slug` detail view.
@@ -28,7 +29,7 @@ export function EventDetailDesktop() {
 
   function downloadIcs() {
     if (!slug) return;
-    window.open(`/api/events/${encodeURIComponent(slug)}/ics`, '_blank');
+    void api.downloadEventIcs(slug);
   }
 
   if (loading && !data) {

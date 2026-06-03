@@ -6,6 +6,7 @@ import { MobileHeader } from '../layout/MobileHeader';
 import { Marker } from '../primitives/Marker';
 import { Btn } from '../primitives/Btn';
 import type { EventListRow as EventListRowData } from '@hoard/types';
+import { api } from '../../lib/api';
 
 /**
  * EV-PR1 mobile — same composition as desktop, single-column.
@@ -19,7 +20,7 @@ export function EventsMobile() {
   const { data, loading, error, refetch } = useEvents();
 
   function downloadIcs(slug: string) {
-    window.open(`/api/events/${encodeURIComponent(slug)}/ics`, '_blank');
+    void api.downloadEventIcs(slug);
   }
 
   if (loading && !data) {

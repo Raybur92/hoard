@@ -9,6 +9,7 @@ import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
 import { countdownParts, daysUntil } from '../../lib/utils';
 import type { EventDetailResponse, EventState } from '@hoard/types';
+import { api } from '../../lib/api';
 
 /**
  * EV-PR1 mobile detail view. Single-column compact layout; same state
@@ -22,7 +23,7 @@ export function EventDetailMobile() {
 
   function downloadIcs() {
     if (!slug) return;
-    window.open(`/api/events/${encodeURIComponent(slug)}/ics`, '_blank');
+    void api.downloadEventIcs(slug);
   }
 
   if (loading && !data) {

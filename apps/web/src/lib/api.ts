@@ -229,6 +229,28 @@ export const api = {
     cache.invalidate(`event:${slug}`);
   },
 
+  /** EV-PR1 — fetch the .ics calendar file as a Blob and trigger a browser
+   *  download. Uses fetch (not window.open) so credentials cookies are sent
+   *  cross-origin and API_BASE is honoured in dev with a custom API port. */
+  downloadEventIcs: async (slug: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/api/events/${encodeURIComponent(slug)}/ics`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new Error(`failed to download .ics (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${slug}.ics`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  },
+
   game: (id: string) =>
     get<UserGameDetail>(`/api/games/${id}`),
 
