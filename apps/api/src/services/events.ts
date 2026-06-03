@@ -192,11 +192,21 @@ offset ${offset};`,
  * when `/api/events/:slug` doesn't find a row in the DB, we attempt one
  * IGDB lookup before responding 404. Returns null when IGDB has no event
  * with that slug.
+ *
+ * `opts.skipCache` bypasses the 24h slugCache — used by `resolveEventGames`
+ * so explicit user-triggered refreshes never serve a stale empty payload
+ * (community curation often adds games hours after the event airs;
+ * yesterday's cached empty result must not survive the user's retry).
  */
-export async function getEventBySlug(slug: string): Promise<IgdbEvent | null> {
+export async function getEventBySlug(
+  slug: string,
+  opts: { skipCache?: boolean } = {},
+): Promise<IgdbEvent | null> {
   const key = `slug:${slug}`;
-  const cached = slugCache.get(key);
-  if (cached !== undefined) return cached;
+  if (!opts.skipCache) {
+    const cached = slugCache.get(key);
+    if (cached !== undefined) return cached;
+  }
 
   // IGDB accepts string-equality in `where` via double-quoted strings.
   const safe = slug.replace(/"/g, '\\"');
@@ -481,7 +491,11 @@ export async function resolveEventGames(
   prisma: PrismaClient,
   slug: string,
 ): Promise<{ eventId: string; linksWritten: number; gamesUpserted: number }> {
-  const igdbEvent = await getEventBySlug(slug);
+  // Bypass the 24h slugCache: this path is invoked by the user clicking
+  // [load games] / [check again], so the intent is always fresh data.
+  // Caching here would silently surface yesterday's empty payload after
+  // IGDB community curation has caught up.
+  const igdbEvent = await getEventBySlug(slug, { skipCache: true });
   if (!igdbEvent) throw new Error(`Event ${slug} not found on IGDB`);
 
   const { resolved, upserted } = await resolveGameIdsToHoard(prisma, igdbEvent.gameIgdbIds);
