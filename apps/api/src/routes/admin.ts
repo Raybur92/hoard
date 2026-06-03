@@ -585,8 +585,8 @@ router.get('/admin/deals/probe', async (req: Request, res: Response): Promise<vo
       res.status(400).json({ ok: false, error: 'pass ?title= or ?appId=' });
       return;
     }
-    const { lookupItadIdsByTitles, lookupItadIdsBySteamAppIds, getPricesForGames } = await import('../services/itad');
-    const { classifyShop } = await import('../services/deals/storefronts');
+    const { lookupItadIdsByTitles, lookupItadIdsBySteamAppIds, getPricesForGames, getShops } = await import('../services/itad');
+    const { classifyShop, isShopInScope } = await import('../services/deals/storefronts');
     let itadId: string | null = null;
     if (appIdStr) {
       const map = await lookupItadIdsBySteamAppIds([Number(appIdStr)]);

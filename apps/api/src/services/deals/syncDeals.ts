@@ -31,11 +31,50 @@ import {
   isItadConfigured,
   ItadClientError,
   getPricesForGames,
+  getShops,
   lookupItadIdsByTitles,
   lookupItadIdsBySteamAppIds,
   type ItadGamePrices,
 } from '../itad';
 import { isReseller, isShopInScope } from './storefronts';
+
+/**
+ * Cached per-process. ITAD's shop catalog is stable enough that one call
+ * per orchestrator run is fine; the prisma+route worker re-imports on
+ * restart, refreshing the cache.
+ *
+ * Without an explicit `shops` query parameter, ITAD's `/games/prices/v3`
+ * returns its default popular-shops subset (typically Steam / GOG /
+ * Epic / Humble Store for PC titles) — which EXCLUDES every Tier-2
+ * reseller in our allow-list (GMG / Kinguin / CDKeys / Humble Bundle /
+ * Instant Gaming). Resolving the full allow-list to shop IDs here +
+ * passing them explicitly broadens coverage to match the storefront
+ * taxonomy in storefronts.ts.
+ *
+ * Fail-soft: if `/shops/v1` errors, fall back to `[]` (no shops param)
+ * so the orchestrator continues with ITAD's default subset. Better to
+ * have partial coverage than zero.
+ */
+let allowedShopIdsCache: number[] | null = null;
+async function getAllowedShopIds(): Promise<number[]> {
+  if (allowedShopIdsCache !== null) return allowedShopIdsCache;
+  try {
+    const shops = await getShops();
+    allowedShopIdsCache = shops
+      .filter((s) => isShopInScope(s.title))
+      .map((s) => s.id);
+    console.log(
+      `[deals-sync] /shops/v1 → ${shops.length} total, ${allowedShopIdsCache.length} in allow-list`,
+    );
+  } catch (err) {
+    console.error(
+      '[deals-sync] /shops/v1 failed — falling back to ITAD default subset:',
+      err instanceof Error ? err.message : err,
+    );
+    allowedShopIdsCache = [];
+  }
+  return allowedShopIdsCache;
+}
 
 const PRICES_BATCH_SIZE = 200;
 const ITAD_REQ_DELAY_MS = 350; // ~3 req/s under ITAD's free-tier budget
@@ -348,10 +387,11 @@ export async function syncDealsForGames(
   for (const [gameId, itadId] of itadIdMap) gameIdByItadId.set(itadId, gameId);
 
   const itadIds = [...itadIdMap.values()];
+  const allowedShopIds = await getAllowedShopIds();
   for (let i = 0; i < itadIds.length; i += PRICES_BATCH_SIZE) {
     const batch = itadIds.slice(i, i + PRICES_BATCH_SIZE);
     try {
-      const prices = await getPricesForGames(batch, marketCode);
+      const prices = await getPricesForGames(batch, marketCode, allowedShopIds);
       for (const p of prices) {
         const gameId = gameIdByItadId.get(p.id);
         if (!gameId) continue;

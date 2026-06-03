@@ -160,6 +160,7 @@ const ITAD_PRICES_MAX_BATCH = 200;
 export async function getPricesForGames(
   itadIds: string[],
   marketCode: string,
+  shopIds?: number[],
 ): Promise<ItadGamePrices[]> {
   if (itadIds.length === 0) return [];
   if (itadIds.length > ITAD_PRICES_MAX_BATCH) {
@@ -167,11 +168,16 @@ export async function getPricesForGames(
       `getPricesForGames called with ${itadIds.length} ids — exceeds ITAD batch limit of ${ITAD_PRICES_MAX_BATCH}`,
     );
   }
-  return await itadFetch<ItadGamePrices[]>(
-    '/games/prices/v3',
-    { country: marketCode },
-    itadIds,
-  );
+  // Without an explicit `shops` parameter ITAD returns its default
+  // popular-shops subset (Steam / GOG / Epic / Humble Store for typical
+  // PC titles) — Tier-2 resellers (GMG / Kinguin / CDKeys / Humble
+  // Bundle / Instant Gaming) are excluded. Pass the allow-listed shop
+  // IDs explicitly to broaden coverage.
+  const params: Record<string, string> = { country: marketCode };
+  if (shopIds && shopIds.length > 0) {
+    params['shops'] = shopIds.join(',');
+  }
+  return await itadFetch<ItadGamePrices[]>('/games/prices/v3', params, itadIds);
 }
 
 /**
