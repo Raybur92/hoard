@@ -4,6 +4,7 @@ import { useEventDetail } from '../../hooks/useEvents';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useNow } from '../../hooks/useNow';
 import { EventGameGrid } from './events/EventGameGrid';
+import { EventVideoGrid } from './events/EventVideoGrid';
 import { Marker } from '../primitives/Marker';
 import { Btn } from '../primitives/Btn';
 import { Icon } from '../primitives/Icon';
@@ -61,19 +62,15 @@ export function EventDetailDesktop() {
       <Link to="/events" className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)', textDecoration: 'none' }}>
         ← back to events
       </Link>
-      <DetailHero data={data} onAddToCalendar={downloadIcs} />
-      {data.event.description && (
-        <div className="t-sans" style={{ marginTop: 24, fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--paper-dim)', maxWidth: 720 }}>
-          {data.event.description}
-        </div>
-      )}
+      <DetailHero
+        data={data}
+        onAddToCalendar={downloadIcs}
+        wishlistedCount={data.personalisation.onWishlistCount}
+      />
 
       <section style={{ marginTop: 32 }}>
         <Marker style={{ marginBottom: 12 }}>
           // games{data.event.gamesResolvedAt !== null && ` · ${data.games.length}`}
-          {data.personalisation.onWishlistCount > 0 && (
-            <span style={{ color: 'var(--amber)' }}> · {data.personalisation.onWishlistCount} on your wishlist</span>
-          )}
         </Marker>
         <EventGameGrid
           games={data.games}
@@ -86,25 +83,18 @@ export function EventDetailDesktop() {
 
       {data.event.videos.length > 0 && (
         <section style={{ marginTop: 32 }}>
-          <Marker style={{ marginBottom: 12 }}>// videos</Marker>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {data.event.videos.map((v) => (
-              <a
-                key={v.youtubeId}
-                href={`https://www.youtube.com/watch?v=${encodeURIComponent(v.youtubeId)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="t-mono"
-                style={{
-                  fontSize: 'var(--text-sm)', color: 'var(--paper)',
-                  textDecoration: 'none', padding: '6px 12px',
-                  border: '1px solid var(--rule)', background: 'var(--ink-2)',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}
-              >
-                <Icon name="play" size={12} /> {v.name ?? 'watch on youtube'} <Icon name="ext" size={11} />
-              </a>
-            ))}
+          <Marker style={{ marginBottom: 12 }}>// trailers · {data.event.videos.length}</Marker>
+          <EventVideoGrid videos={data.event.videos} />
+        </section>
+      )}
+
+      {/* Description moves below the primary content for past events —
+          it's metadata, not the focal point. Still surfaced when present. */}
+      {data.event.description && (
+        <section style={{ marginTop: 32 }}>
+          <Marker style={{ marginBottom: 12, color: 'var(--paper-faint)' }}>// about</Marker>
+          <div className="t-sans" style={{ fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--paper-dim)', maxWidth: 720 }}>
+            {data.event.description}
           </div>
         </section>
       )}
@@ -112,7 +102,36 @@ export function EventDetailDesktop() {
   );
 }
 
-function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAddToCalendar: () => void }) {
+/**
+ * Wishlist personalisation chip — surfaces "this event matters to me"
+ * top-right of the hero whenever the user has wishlisted games linked
+ * to the event. Visible across all states (upcoming / live / past).
+ */
+function WishlistChip({ count }: { count: number }) {
+  return (
+    <div style={{
+      position: 'absolute', top: 16, right: 16,
+      color: 'var(--amber)',
+      border: '1px solid var(--amber-dim)',
+      background: 'var(--ink-2)',
+      padding: '4px 10px',
+      fontSize: 'var(--text-2xs)',
+      letterSpacing: '0.05em',
+      textTransform: 'uppercase',
+      whiteSpace: 'nowrap',
+    }}>
+      ★ {count} on your wishlist
+    </div>
+  );
+}
+
+function DetailHero({
+  data, onAddToCalendar, wishlistedCount,
+}: {
+  data: EventDetailResponse;
+  onAddToCalendar: () => void;
+  wishlistedCount: number;
+}) {
   const e = data.event;
   const state: EventState = e.state;
   const now = useNow(state === 'upcoming' ? 1000 : 0);
@@ -125,21 +144,72 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
   const timeLabel = startDate.toLocaleTimeString(undefined, {
     hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
   });
+  const compactDateLabel = startDate.toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
   const network = e.networks[0]?.name ?? null;
+
+  // Past-state compact hero — the focal point of a past-event page is the
+  // games grid, not the metadata. Render header in a single inline row
+  // (name + meta + watch-recap action), eating ~80px instead of ~250px.
+  if (state === 'past') {
+    return (
+      <header className="panel" style={{
+        marginTop: 16, padding: 18, position: 'relative',
+        borderColor: 'var(--rule)',
+      }}>
+        {wishlistedCount > 0 && <WishlistChip count={wishlistedCount} />}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+          paddingRight: wishlistedCount > 0 ? 180 : 0,
+        }}>
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <h1 className="t-display" style={{
+              margin: 0,
+              fontSize: 'clamp(var(--text-lg), 2.5vw, var(--text-xl))',
+              lineHeight: 1.1,
+              color: 'var(--paper)',
+              letterSpacing: '-0.01em',
+              textWrap: 'balance',
+              overflowWrap: 'break-word',
+            }}>
+              {e.name}
+            </h1>
+            <div className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)', marginTop: 8 }}>
+              <span style={{ color: 'var(--paper-dim)' }}>
+                aired {Math.abs(away)} day{Math.abs(away) === 1 ? '' : 's'} ago
+              </span>
+              {network && ` · ${network}`}
+              {` · ${compactDateLabel}`}
+            </div>
+          </div>
+          {e.liveStreamUrl && (
+            <a
+              href={e.liveStreamUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn sm"
+              style={{ textDecoration: 'none', flex: '0 0 auto' }}
+            >
+              <Icon name="ext" size={11} /> watch recap
+            </a>
+          )}
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="panel" style={{
-      marginTop: 16, padding: 24,
-      borderColor: state === 'live' ? 'var(--red-dim)' : state === 'upcoming' ? 'var(--amber-dim)' : 'var(--rule)',
+      marginTop: 16, padding: 24, position: 'relative',
+      borderColor: state === 'live' ? 'var(--red-dim)' : 'var(--amber-dim)',
     }}>
+      {wishlistedCount > 0 && <WishlistChip count={wishlistedCount} />}
       {state === 'live' && (
         <Marker className="events-live-pulse" style={{ color: 'var(--red)' }}>● live now</Marker>
       )}
       {state === 'upcoming' && (
         <Marker style={{ color: 'var(--amber)' }}>// next showcase · {away} days away</Marker>
-      )}
-      {state === 'past' && (
-        <Marker>// aired {Math.abs(away)} day{Math.abs(away) === 1 ? '' : 's'} ago</Marker>
       )}
 
       {/* Title gets flex priority so long event names don't crush into a
