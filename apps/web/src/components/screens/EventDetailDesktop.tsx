@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useEventDetail } from '../../hooks/useEvents';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
@@ -24,7 +25,14 @@ import { api } from '../../lib/api';
  */
 export function EventDetailDesktop() {
   const { slug } = useParams<{ slug: string }>();
-  const { data, loading, error, refetch } = useEventDetail(slug);
+  const { data: fresh, loading, error, refetch } = useEventDetail(slug);
+  // DASH-PR2 stale-while-revalidate pattern: keep the last successful
+  // response on screen during refetches so cache invalidations don't
+  // flash the page to a loading skeleton + unmount the game grid
+  // (which makes [check again] look like a "page reload").
+  const lastGoodRef = useRef<EventDetailResponse | null>(null);
+  if (fresh) lastGoodRef.current = fresh;
+  const data = fresh ?? lastGoodRef.current;
   useDocumentTitle(data?.event.name ?? 'Event');
 
   function downloadIcs() {
@@ -32,10 +40,10 @@ export function EventDetailDesktop() {
     void api.downloadEventIcs(slug);
   }
 
-  if (loading && !data) {
+  if (!data && loading) {
     return <div className="app-content" style={{ padding: 24 }}><Marker>// loading…</Marker></div>;
   }
-  if (error) {
+  if (!data && error) {
     return (
       <div className="app-content" style={{ padding: 24 }}>
         <Link to="/events" className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)' }}>← back to events</Link>

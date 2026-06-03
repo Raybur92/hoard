@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEventDetail } from '../../hooks/useEvents';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
@@ -18,7 +19,13 @@ import { api } from '../../lib/api';
  */
 export function EventDetailMobile() {
   const { slug } = useParams<{ slug: string }>();
-  const { data, loading, error, refetch } = useEventDetail(slug);
+  const { data: fresh, loading, error, refetch } = useEventDetail(slug);
+  // DASH-PR2 stale-while-revalidate: keep last successful response on
+  // screen during refetches so the [check again] click doesn't flash
+  // the page to loading + unmount the grid (perceived as a reload).
+  const lastGoodRef = useRef<EventDetailResponse | null>(null);
+  if (fresh) lastGoodRef.current = fresh;
+  const data = fresh ?? lastGoodRef.current;
   useDocumentTitle(data?.event.name ?? 'Event');
 
   function downloadIcs() {
@@ -26,7 +33,7 @@ export function EventDetailMobile() {
     void api.downloadEventIcs(slug);
   }
 
-  if (loading && !data) {
+  if (!data && loading) {
     return (
       <>
         <MobileHeader title="Event" />
@@ -34,7 +41,7 @@ export function EventDetailMobile() {
       </>
     );
   }
-  if (error) {
+  if (!data && error) {
     return (
       <>
         <MobileHeader title="Event" />
