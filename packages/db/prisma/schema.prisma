@@ -469,8 +469,14 @@ model Deal {
   gameId          String
   shopId          String    // ITAD shop ID (e.g. "61" for Steam)
   shopName        String    // human-readable: "Steam" / "Humble" / "Instant Gaming"
+  // ISO 3166-1 alpha-2 market code. One Deal row per (game, shop, market) —
+  // a single shop carries different prices in different markets (currency,
+  // regional pricing, regional sales). Added 2026-06-03 per DEALS-PR4
+  // (docs/DEALS_PER_MARKET_PLAN.md) — sync now iterates over distinct
+  // active user markets instead of running once in the admin's market.
+  marketCode      String
   isReseller      Boolean   // false for Tier-1 official storefronts, true for allow-list
-  currentPrice    Float     // shop's native currency (per user's marketCode at query time)
+  currentPrice    Float     // shop's native currency in the row's marketCode
   originalPrice   Float?
   currency        String    // ISO 4217 (e.g. "EUR" / "USD")
   discountPct     Int       // 0-100
@@ -488,7 +494,7 @@ model Deal {
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
-  @@unique([gameId, shopId])
+  @@unique([gameId, shopId, marketCode])
   @@index([gameId])
   @@index([shopId])
   @@index([fetchedAt])
@@ -507,13 +513,17 @@ model PriceSnapshot {
   id         String   @id @default(cuid())
   gameId     String
   shopId     String
+  // Same per-market keying as Deal — trending-down is computed per
+  // (gameId, shopId, marketCode) since prices vary by market. Added
+  // 2026-06-03 per DEALS-PR4.
+  marketCode String
   price      Float
   currency   String
   snapshotAt DateTime @default(now())
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
-  @@index([gameId, shopId, snapshotAt(sort: Desc)])
+  @@index([gameId, shopId, marketCode, snapshotAt(sort: Desc)])
   @@index([snapshotAt])
 }
 

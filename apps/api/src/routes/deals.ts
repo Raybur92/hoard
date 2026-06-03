@@ -106,22 +106,37 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     }
   }
 
-  // Fetch every current deal in the DB. CM12 below filters per-user.
+  // Fetch every current deal in the DB FOR THIS USER'S MARKET. CM12
+  // below filters per-user.
+  //
+  // DEALS-PR4 2026-06-03 — added per-market filtering. Each Deal row
+  // is keyed by (gameId, shopId, marketCode); we surface only rows
+  // priced in the viewer's market. Falls back to admin's market when
+  // the viewer hasn't set theirs (preserves the previous v1 behavior
+  // for users who haven't configured Settings → Account → Market).
   //
   // DEALS-PR2.5 — previously this query was scoped to `gameId IN
   // (user's library + wishlist)` which prevented deals on games the
-  // user had no UserGame for from EVER surfacing. Result: broader
-  // feed was always empty (every Deal in the DB is for a game in
-  // SOME user's library because the sync orchestrators scope to
-  // `userGames: { some: {} }`, but Andrea's library overlaps with
-  // them differently). Dropping the scope makes the route return:
+  // user had no UserGame for from EVER surfacing. Dropped that scope;
+  // the route now returns:
   //   - deals on games the user has wishlisted → wishlistDeals
   //   - deals on games no user has on radar yet → broaderFeed
-  //     (rare in practice — sync only writes deals for catalogue
-  //     games, and the catalogue IS the global radar)
   //   - deals on games the user owns (status != Wishlist) → suppressed
   //     via CM12 below.
+  const viewer = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { marketCode: true },
+  });
+  let effectiveMarket = viewer?.marketCode ?? null;
+  if (!effectiveMarket) {
+    const admin = await prisma.user.findFirst({
+      where: { isAdmin: true, marketCode: { not: null } },
+      select: { marketCode: true },
+    });
+    effectiveMarket = admin?.marketCode ?? 'US';
+  }
   const deals = await prisma.deal.findMany({
+    where: { marketCode: effectiveMarket },
     include: {
       game: { select: { id: true, igdbId: true, title: true, coverUrl: true, heroImageUrl: true } },
     },
@@ -157,10 +172,10 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     ? wishlistDeduped.filter((d) => d.id !== topWishlistDeal.id)
     : wishlistDeduped;
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { marketCode: true },
-  });
+  // Reuse the viewer lookup from the per-market filter above instead of
+  // re-querying. The response's `marketCode` field reflects the user's
+  // saved preference (null when not set) — distinct from `effectiveMarket`
+  // which is the resolved market used for filtering.
 
   // DEALS-PR2 — bundles relevant to the user. Pull ITAD ids off the
   // user's library + wishlist games (cached on Game.metadata.itadId
@@ -211,7 +226,7 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     topWishlistDeal,
     wishlistDeals,
     broaderFeed: broaderRows,
-    marketCode: user?.marketCode ?? null,
+    marketCode: viewer?.marketCode ?? null,
     lastSyncedAt: latestSync?.toISOString() ?? null,
     bundles: bundleRows,
   };

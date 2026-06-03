@@ -16,6 +16,7 @@
 
 import { prisma } from '@hoard/db';
 import { getNintendoPrice, getNintendoPriceByTitle, marketToLocale, NintendoClientError, nintendoStoreUrl } from '../nintendoPrices';
+import { getDistinctActiveMarkets } from './syncDeals';
 
 const NINTENDO_SHOP_NAME = 'Nintendo eShop';
 // Synthetic shopId; Nintendo isn't on ITAD so it has no ITAD shop id.
@@ -33,46 +34,18 @@ export interface SyncNintendoResult {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Pick the dominant market for the sync run. Same heuristic as
- * `syncAllDeals` — admin's marketCode preferred, fall through to any
- * user's, then null (skip Nintendo entirely if no European user).
- */
-async function pickMarket(): Promise<string | null> {
-  const admin = await prisma.user.findFirst({
-    where: { isAdmin: true, marketCode: { not: null } },
-    select: { marketCode: true },
-  });
-  if (admin?.marketCode) return admin.marketCode;
-  const any = await prisma.user.findFirst({
-    where: { marketCode: { not: null } },
-    select: { marketCode: true },
-  });
-  return any?.marketCode ?? null;
-}
-
-export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
+async function syncNintendoDealsForMarket(market: string): Promise<SyncNintendoResult> {
   const result: SyncNintendoResult = { scanned: 0, fetched: 0, upserted: 0, cleared: 0, failed: 0 };
-
-  const market = await pickMarket();
   const locale = marketToLocale(market);
   if (!locale) {
-    console.log('[nintendo-deals] no user with a Nintendo-supported market; skipping');
+    console.log(`[nintendo-deals] market=${market} not supported; skipping`);
     return result;
   }
 
   // DEALS-PR2.5+ — broader scope: every Game in any user's library OR
-  // wishlist that IGDB tags as available on Switch. Andrea's call —
-  // "why do I have to wait for my Switch sync to see Nintendo deals?"
-  // — answered structurally: surface deals on any game on the user's
-  // radar that exists on Switch, regardless of which platform they
-  // own it on.
-  //
-  // The Game.platforms array (populated by IGDB at sync time, backfilled
-  // for existing rows via backfill-game-platforms.ts) pre-filters to
-  // Switch-available games before we hit Nintendo's API. For games
-  // where M3 Switch sync has populated nintendoTitleId, we use the
-  // exact-ID path; otherwise we fall back to fuzzy title search.
+  // wishlist that IGDB tags as available on Switch. Same Game pool
+  // regardless of market (Game.platforms is global); only the locale
+  // / currency changes per market.
   const games = await prisma.game.findMany({
     where: {
       platforms: { hasSome: ['Nintendo Switch', 'Nintendo Switch 2'] },
@@ -82,7 +55,7 @@ export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
   });
   result.scanned = games.length;
   if (games.length === 0) return result;
-  console.log(`[nintendo-deals] scanning ${games.length} Switch games (locale=${locale})`);
+  console.log(`[nintendo-deals] market=${market} (locale=${locale}) — scanning ${games.length} Switch games`);
 
   for (const g of games) {
     try {
@@ -100,9 +73,8 @@ export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
 
       if (price.hasDiscount) {
         const url = nintendoStoreUrl(locale, price.title);
-        const dealKey = { gameId_shopId: { gameId: g.id, shopId: String(NINTENDO_SHOP_ID) } };
         await prisma.deal.upsert({
-          where: dealKey,
+          where: { gameId_shopId_marketCode: { gameId: g.id, shopId: String(NINTENDO_SHOP_ID), marketCode: market } },
           update: {
             shopName: NINTENDO_SHOP_NAME,
             isReseller: false,
@@ -119,6 +91,7 @@ export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
             gameId: g.id,
             shopId: String(NINTENDO_SHOP_ID),
             shopName: NINTENDO_SHOP_NAME,
+            marketCode: market,
             isReseller: false,
             currentPrice: price.current,
             originalPrice: price.regular,
@@ -132,10 +105,9 @@ export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
         });
         result.upserted++;
       } else {
-        // Not on sale — clear any existing Nintendo Deal row so the UI
-        // doesn't show a stale "on sale" indicator after the sale ends.
+        // Not on sale — clear THIS market's Nintendo Deal row only.
         const cleared = await prisma.deal.deleteMany({
-          where: { gameId: g.id, shopId: String(NINTENDO_SHOP_ID) },
+          where: { gameId: g.id, shopId: String(NINTENDO_SHOP_ID), marketCode: market },
         });
         if (cleared.count > 0) result.cleared++;
       }
@@ -143,11 +115,33 @@ export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
       result.failed++;
       const msg = err instanceof NintendoClientError ? err.message : err instanceof Error ? err.message : String(err);
       const lookupBy = g.nintendoTitleId ? `titleId=${g.nintendoTitleId}` : `title="${g.title}"`;
-      console.error(`[nintendo-deals] ${g.title} (${lookupBy}): ${msg}`);
+      console.error(`[nintendo-deals] ${g.title} (${lookupBy}, market=${market}): ${msg}`);
       await sleep(REQ_DELAY_MS);
     }
   }
 
-  console.log(`[nintendo-deals] done: scanned=${result.scanned} fetched=${result.fetched} upserted=${result.upserted} cleared=${result.cleared} failed=${result.failed}`);
+  console.log(`[nintendo-deals] market=${market} done: scanned=${result.scanned} fetched=${result.fetched} upserted=${result.upserted} cleared=${result.cleared} failed=${result.failed}`);
   return result;
+}
+
+/**
+ * DEALS-PR4 2026-06-03 — per-market Nintendo sync. Loops over every
+ * distinct active user market (admin's at minimum). Same Game pool
+ * is queried each iteration, just with a different Nintendo locale +
+ * currency. Each market's Deal rows are isolated via the new composite
+ * unique index (gameId, shopId, marketCode).
+ */
+export async function syncAllNintendoDeals(): Promise<SyncNintendoResult> {
+  const markets = await getDistinctActiveMarkets();
+  console.log(`[nintendo-deals] markets to sync: ${markets.join(', ')}`);
+  const combined: SyncNintendoResult = { scanned: 0, fetched: 0, upserted: 0, cleared: 0, failed: 0 };
+  for (const m of markets) {
+    const r = await syncNintendoDealsForMarket(m);
+    combined.scanned = Math.max(combined.scanned, r.scanned); // same pool each market
+    combined.fetched += r.fetched;
+    combined.upserted += r.upserted;
+    combined.cleared += r.cleared;
+    combined.failed += r.failed;
+  }
+  return combined;
 }

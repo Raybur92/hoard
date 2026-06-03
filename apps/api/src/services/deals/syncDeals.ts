@@ -238,10 +238,10 @@ async function persistItadId(gameId: string, currentMetadata: unknown, itadId: s
 const TRENDING_DOWN_DROPS = Number(process.env['TRENDING_DOWN_DROPS'] ?? 2);
 const TRENDING_DOWN_DAYS = Number(process.env['TRENDING_DOWN_DAYS'] ?? 30);
 
-async function computeTrendingDown(gameId: string, shopId: string): Promise<boolean> {
+async function computeTrendingDown(gameId: string, shopId: string, marketCode: string): Promise<boolean> {
   const since = new Date(Date.now() - TRENDING_DOWN_DAYS * 24 * 60 * 60 * 1000);
   const snapshots = await prisma.priceSnapshot.findMany({
-    where: { gameId, shopId, snapshotAt: { gte: since } },
+    where: { gameId, shopId, marketCode, snapshotAt: { gte: since } },
     orderBy: { snapshotAt: 'asc' },
     select: { price: true },
   });
@@ -255,7 +255,7 @@ async function computeTrendingDown(gameId: string, shopId: string): Promise<bool
   return drops >= TRENDING_DOWN_DROPS;
 }
 
-async function applyPriceData(gameId: string, prices: ItadGamePrices): Promise<{ deals: number; snapshots: number }> {
+async function applyPriceData(gameId: string, prices: ItadGamePrices, marketCode: string): Promise<{ deals: number; snapshots: number }> {
   let dealsUpserted = 0;
   let snapshotsCreated = 0;
   const seenShopIds = new Set<string>();
@@ -279,6 +279,7 @@ async function applyPriceData(gameId: string, prices: ItadGamePrices): Promise<{
       data: {
         gameId,
         shopId: shopIdStr,
+        marketCode,
         price: currentPrice,
         currency: deal.price.currency,
       },
@@ -289,9 +290,9 @@ async function applyPriceData(gameId: string, prices: ItadGamePrices): Promise<{
     // we'd have a "deal" that isn't a deal — keep `Deal` semantics
     // tied to active discounts.
     if (discountPct > 0) {
-      const isTrendingDown = await computeTrendingDown(gameId, shopIdStr);
+      const isTrendingDown = await computeTrendingDown(gameId, shopIdStr, marketCode);
       await prisma.deal.upsert({
-        where: { gameId_shopId: { gameId, shopId: shopIdStr } },
+        where: { gameId_shopId_marketCode: { gameId, shopId: shopIdStr, marketCode } },
         update: {
           shopName,
           isReseller: isReseller(shopName),
@@ -311,6 +312,7 @@ async function applyPriceData(gameId: string, prices: ItadGamePrices): Promise<{
           gameId,
           shopId: shopIdStr,
           shopName,
+          marketCode,
           isReseller: isReseller(shopName),
           currentPrice,
           originalPrice,
@@ -328,17 +330,18 @@ async function applyPriceData(gameId: string, prices: ItadGamePrices): Promise<{
     }
   }
 
-  // Delete Deal rows for shops not in this response (they're no longer
-  // on sale). The (gameId, shopId) unique index makes the targeted
+  // Delete Deal rows for shops not in this response IN THIS MARKET
+  // (they're no longer on sale). Other markets' rows for this game
+  // are unaffected. The composite unique index keeps the targeted
   // delete cheap.
   const existing = await prisma.deal.findMany({
-    where: { gameId },
+    where: { gameId, marketCode },
     select: { shopId: true },
   });
   const stale = existing.filter((e) => !seenShopIds.has(e.shopId));
   if (stale.length > 0) {
     await prisma.deal.deleteMany({
-      where: { gameId, shopId: { in: stale.map((s) => s.shopId) } },
+      where: { gameId, marketCode, shopId: { in: stale.map((s) => s.shopId) } },
     });
   }
 
@@ -397,7 +400,7 @@ export async function syncDealsForGames(
         const gameId = gameIdByItadId.get(p.id);
         if (!gameId) continue;
         try {
-          const { deals, snapshots } = await applyPriceData(gameId, p);
+          const { deals, snapshots } = await applyPriceData(gameId, p, marketCode);
           result.dealsUpserted += deals;
           result.snapshotsCreated += snapshots;
         } catch (err) {
@@ -432,16 +435,37 @@ export async function gameIdsForUser(userId: string): Promise<string[]> {
 }
 
 /**
- * The full nightly sync — every game across every user. Used by the
- * cron entry point + admin manual refresh.
+ * Returns the set of distinct user-configured marketCodes that the
+ * sync should iterate over. Includes the admin's market as a baseline
+ * even if no other user has set theirs (so the user with the most
+ * library exposure always gets covered). Falls back to `['US']` when
+ * the system has no markets configured at all.
+ */
+export async function getDistinctActiveMarkets(): Promise<string[]> {
+  const rows = await prisma.user.findMany({
+    where: { marketCode: { not: null } },
+    select: { marketCode: true, isAdmin: true },
+  });
+  const set = new Set<string>();
+  for (const r of rows) {
+    if (r.marketCode) set.add(r.marketCode);
+  }
+  if (set.size === 0) return ['US'];
+  return [...set].sort();
+}
+
+/**
+ * The full nightly sync — every game across every user, across every
+ * active user market. Used by the cron entry point + admin manual
+ * refresh.
  *
- * For market selection: ITAD's prices endpoint requires a country code
- * and prices vary by region. For v1 we use a single-market sync per
- * OQ-DEALS-3 — preferring the admin user's marketCode (most likely
- * Andrea's `AT`), falling back to any user with marketCode set, falling
- * back to `'US'` when no user has configured one. Future enhancement
- * (DEALS-PR4 or later): per-market sync when the user-base grows
- * across regions.
+ * DEALS-PR4 2026-06-03 — switched from single-market (admin's) to
+ * per-market iteration. Each iteration calls `syncDealsForGames` with
+ * the same gameId pool but a different marketCode; the upserts /
+ * snapshots / stale-cleanup are scoped per-market via the new
+ * composite unique index. Run-time scales linearly with N markets.
+ * For closed-beta scale (1-3 distinct markets) that's tractable; if
+ * the user base grows across many regions, revisit parallelism.
  */
 export async function syncAllDeals(): Promise<SyncDealsResult> {
   const rows = await prisma.userGame.findMany({
@@ -449,18 +473,26 @@ export async function syncAllDeals(): Promise<SyncDealsResult> {
     select: { gameId: true },
   });
   const gameIds = rows.map((r) => r.gameId);
-  // Pick the market: admin's first, any user's marketCode second, US default.
-  const adminUser = await prisma.user.findFirst({
-    where: { isAdmin: true, marketCode: { not: null } },
-    select: { marketCode: true },
-  });
-  let marketCode = adminUser?.marketCode ?? null;
-  if (!marketCode) {
-    const anyUser = await prisma.user.findFirst({
-      where: { marketCode: { not: null } },
-      select: { marketCode: true },
-    });
-    marketCode = anyUser?.marketCode ?? null;
+  const markets = await getDistinctActiveMarkets();
+  console.log(`[deals-sync] markets to sync: ${markets.join(', ')}`);
+
+  // Aggregate per-market results into one combined SyncDealsResult.
+  const combined: SyncDealsResult = {
+    scanned: gameIds.length,
+    resolved: 0,
+    dealsUpserted: 0,
+    snapshotsCreated: 0,
+    failed: 0,
+    skipped: 0,
+  };
+  for (const m of markets) {
+    console.log(`[deals-sync] === market ${m} ===`);
+    const r = await syncDealsForGames(gameIds, m);
+    combined.resolved = Math.max(combined.resolved, r.resolved); // same pool every market
+    combined.dealsUpserted += r.dealsUpserted;
+    combined.snapshotsCreated += r.snapshotsCreated;
+    combined.failed += r.failed;
+    combined.skipped = Math.max(combined.skipped, r.skipped);
   }
-  return syncDealsForGames(gameIds, marketCode ?? 'US');
+  return combined;
 }
