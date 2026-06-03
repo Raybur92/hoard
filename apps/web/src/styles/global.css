@@ -714,9 +714,13 @@ select:focus-visible {
 .app-mobile {
   display: flex;
   flex-direction: column;
-  /* dvh accounts for retracted iOS Safari URL bar */
-  height: 100vh;
-  height: 100dvh;
+  /* Pin to the visual-viewport edges. In a home-screen PWA, height:100dvh
+     under-fills to the true screen bottom, which left the tab bar floating
+     with a void band beneath it (reported 2026-06-03). position:fixed +
+     inset:0 anchors the shell to the real screen edges and sidesteps the
+     dvh/vh/% ambiguity. */
+  position: fixed;
+  inset: 0;
   overflow: hidden;
   background: var(--void);
   /* clear the notch / Dynamic Island; the OS already paints its own
