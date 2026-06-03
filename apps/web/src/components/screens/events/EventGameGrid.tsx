@@ -80,14 +80,47 @@ export function EventGameGrid({
     );
   }
 
-  // Resolved + empty.
+  // Resolved + empty. Could mean IGDB truly has no games for this event,
+  // OR community curation hadn't caught up at resolve time (common for
+  // events the day-of). Surface a [check again] button so the user can
+  // retry once curation lands without us guessing a refresh cadence.
   if (games.length === 0) {
+    const lastChecked = gamesResolvedAt
+      ? new Date(gamesResolvedAt).toLocaleString(undefined, {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        })
+      : null;
     return (
       <div className="panel" style={{ padding: 24, textAlign: 'center' }}>
         <Marker>// no games linked to this event yet</Marker>
-        <div className="t-sans t-dim" style={{ fontSize: 'var(--text-sm)', marginTop: 8 }}>
-          IGDB's game list for this event is community-curated. Check back later.
+        <div className="t-sans t-dim" style={{ fontSize: 'var(--text-sm)', marginTop: 8, marginBottom: 16 }}>
+          IGDB's game list for this event is community-curated.
+          {lastChecked && ` Last checked: ${lastChecked}.`}
         </div>
+        {error && (
+          <Marker style={{ color: 'var(--red)', marginBottom: 12 }}>
+            // {error}
+          </Marker>
+        )}
+        <Btn
+          sm
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true);
+            setError(null);
+            try {
+              await api.resolveEventGames(eventSlug);
+              onResolved?.();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : 'failed to refresh');
+              setLoading(false);
+            }
+          }}
+        >
+          <Icon name="refresh" size={11} />
+          {loading ? 'checking…' : 'check again'}
+        </Btn>
+        {loading && <SkeletonGrid {...(mobile ? { mobile: true } : {})} />}
       </div>
     );
   }
