@@ -337,6 +337,12 @@ export async function getPsnPrice(
     'pack', 'kosmetik', 'punkte', 'currency', 'boost', 'season pass',
     'wäh', 'coin', 'gold', 'silver', 'skin', 'character', 'multiverse-finale',
     'mods-pack', 'cosmetic', 'addon', 'add-on', 'bonus content',
+    // 2026-06-03 — bundle SKUs surfaced as wrong-game matches for short
+    // queries even after the prefix-match tightening (e.g. "Warlock"
+    // matched a "Warlock Bundle" multi-SKU package on PSN). Bundles are
+    // never the right target — they bundle the base game with DLC and
+    // have inflated discount %.
+    'bundle',
   ];
   const isDlc = (p: ProductWithPrice): boolean => {
     const n = normaliseTitle(p.name);
