@@ -101,26 +101,6 @@ export function EventDetailMobile() {
   );
 }
 
-/** Wishlist personalisation chip — top-right of hero across all states.
- *  Mirrors the desktop chip but tightened for mobile real estate. */
-function WishlistChip({ count }: { count: number }) {
-  return (
-    <div style={{
-      position: 'absolute', top: 12, right: 12,
-      color: 'var(--amber)',
-      border: '1px solid var(--amber-dim)',
-      background: 'var(--ink-2)',
-      padding: '3px 8px',
-      fontSize: 'var(--text-3xs)',
-      letterSpacing: '0.05em',
-      textTransform: 'uppercase',
-      whiteSpace: 'nowrap',
-    }}>
-      ★ {count} wished
-    </div>
-  );
-}
-
 function DetailHero({
   data, onAddToCalendar, wishlistedCount,
 }: {
@@ -143,29 +123,31 @@ function DetailHero({
   if (state === 'past') {
     return (
       <header className="panel" style={{
-        padding: 14, position: 'relative',
+        padding: 14,
         borderColor: 'var(--rule)',
       }}>
-        {wishlistedCount > 0 && <WishlistChip count={wishlistedCount} />}
-        <div style={{ paddingRight: wishlistedCount > 0 ? 110 : 0 }}>
-          <h1 className="t-display" style={{
-            margin: 0,
-            fontSize: 'var(--text-lg)',
-            lineHeight: 1.15,
-            color: 'var(--paper)',
-            letterSpacing: '-0.01em',
-            textWrap: 'balance',
-            overflowWrap: 'break-word',
-          }}>
-            {e.name}
-          </h1>
-          <div className="t-mono t-dim" style={{ fontSize: 'var(--text-2xs)', marginTop: 6 }}>
-            <span style={{ color: 'var(--paper-dim)' }}>
-              aired {Math.abs(away)}d ago
+        <h1 className="t-display" style={{
+          margin: 0,
+          fontSize: 'var(--text-lg)',
+          lineHeight: 1.15,
+          color: 'var(--paper)',
+          letterSpacing: '-0.01em',
+          textWrap: 'balance',
+          overflowWrap: 'break-word',
+        }}>
+          {e.name}
+        </h1>
+        <div className="t-mono t-dim" style={{ fontSize: 'var(--text-2xs)', marginTop: 6 }}>
+          <span style={{ color: 'var(--paper-dim)' }}>
+            aired {Math.abs(away)}d ago
+          </span>
+          {network && ` · ${network}`}
+          {` · ${compactDateLabel}`}
+          {wishlistedCount > 0 && (
+            <span style={{ color: 'var(--amber)' }}>
+              {' · '}★ {wishlistedCount} wished
             </span>
-            {network && ` · ${network}`}
-            {` · ${compactDateLabel}`}
-          </div>
+          )}
         </div>
         {e.liveStreamUrl && (
           <div style={{ marginTop: 12 }}>
@@ -186,14 +168,22 @@ function DetailHero({
 
   return (
     <header className="panel" style={{
-      padding: 16, position: 'relative',
+      padding: 16,
       borderColor: state === 'live' ? 'var(--red-dim)' : 'var(--amber-dim)',
     }}>
-      {wishlistedCount > 0 && <WishlistChip count={wishlistedCount} />}
-      {state === 'live' && <Marker className="events-live-pulse" style={{ color: 'var(--red)' }}>● live now</Marker>}
-      {state === 'upcoming' && <Marker style={{ color: 'var(--amber)' }}>// {away} days away</Marker>}
+      {/* Top row: state marker (left) + wishlist chip (right) — anchored
+          to the same baseline so the chip reads as content, not floating. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        {state === 'live' && <Marker className="events-live-pulse" style={{ color: 'var(--red)' }}>● live now</Marker>}
+        {state === 'upcoming' && <Marker style={{ color: 'var(--amber)' }}>// {away} days away</Marker>}
+        {wishlistedCount > 0 && (
+          <span className="marker" style={{ color: 'var(--amber)' }}>
+            ★ {wishlistedCount} wished
+          </span>
+        )}
+      </div>
 
-      <div style={{ marginTop: 8, paddingRight: wishlistedCount > 0 ? 110 : 0 }}>
+      <div style={{ marginTop: 8 }}>
         {network && (
           <div className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)' }}>{network}</div>
         )}

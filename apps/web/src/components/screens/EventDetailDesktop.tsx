@@ -102,29 +102,6 @@ export function EventDetailDesktop() {
   );
 }
 
-/**
- * Wishlist personalisation chip — surfaces "this event matters to me"
- * top-right of the hero whenever the user has wishlisted games linked
- * to the event. Visible across all states (upcoming / live / past).
- */
-function WishlistChip({ count }: { count: number }) {
-  return (
-    <div style={{
-      position: 'absolute', top: 16, right: 16,
-      color: 'var(--amber)',
-      border: '1px solid var(--amber-dim)',
-      background: 'var(--ink-2)',
-      padding: '4px 10px',
-      fontSize: 'var(--text-2xs)',
-      letterSpacing: '0.05em',
-      textTransform: 'uppercase',
-      whiteSpace: 'nowrap',
-    }}>
-      ★ {count} on your wishlist
-    </div>
-  );
-}
-
 function DetailHero({
   data, onAddToCalendar, wishlistedCount,
 }: {
@@ -155,13 +132,11 @@ function DetailHero({
   if (state === 'past') {
     return (
       <header className="panel" style={{
-        marginTop: 16, padding: 18, position: 'relative',
+        marginTop: 16, padding: 18,
         borderColor: 'var(--rule)',
       }}>
-        {wishlistedCount > 0 && <WishlistChip count={wishlistedCount} />}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
-          paddingRight: wishlistedCount > 0 ? 180 : 0,
         }}>
           <div style={{ flex: '1 1 320px', minWidth: 0 }}>
             <h1 className="t-display" style={{
@@ -181,6 +156,11 @@ function DetailHero({
               </span>
               {network && ` · ${network}`}
               {` · ${compactDateLabel}`}
+              {wishlistedCount > 0 && (
+                <span style={{ color: 'var(--amber)' }}>
+                  {' · '}★ {wishlistedCount} on your wishlist
+                </span>
+              )}
             </div>
           </div>
           {e.liveStreamUrl && (
@@ -201,16 +181,24 @@ function DetailHero({
 
   return (
     <header className="panel" style={{
-      marginTop: 16, padding: 24, position: 'relative',
+      marginTop: 16, padding: 24,
       borderColor: state === 'live' ? 'var(--red-dim)' : 'var(--amber-dim)',
     }}>
-      {wishlistedCount > 0 && <WishlistChip count={wishlistedCount} />}
-      {state === 'live' && (
-        <Marker className="events-live-pulse" style={{ color: 'var(--red)' }}>● live now</Marker>
-      )}
-      {state === 'upcoming' && (
-        <Marker style={{ color: 'var(--amber)' }}>// next showcase · {away} days away</Marker>
-      )}
+      {/* Top row: state marker (left) + wishlist chip (right) on the same
+          baseline so the chip looks anchored to content, not floating. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        {state === 'live' && (
+          <Marker className="events-live-pulse" style={{ color: 'var(--red)' }}>● live now</Marker>
+        )}
+        {state === 'upcoming' && (
+          <Marker style={{ color: 'var(--amber)' }}>// next showcase · {away} days away</Marker>
+        )}
+        {wishlistedCount > 0 && (
+          <span className="marker" style={{ color: 'var(--amber)' }}>
+            ★ {wishlistedCount} on your wishlist
+          </span>
+        )}
+      </div>
 
       {/* Title gets flex priority so long event names don't crush into a
           vertical text column; title scales down via clamp() and uses
