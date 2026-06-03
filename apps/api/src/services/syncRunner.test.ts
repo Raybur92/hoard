@@ -6,6 +6,8 @@ jest.mock('@hoard/db', () => ({
     },
     userGame: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
       upsert: jest.fn(),
     },
     hltbData: {
@@ -72,6 +74,8 @@ beforeEach(() => {
   (getGameByGogAppId as jest.Mock).mockResolvedValue(null);
   (prisma.game.upsert as jest.Mock).mockResolvedValue(mockGame);
   (prisma.userGame.findUnique as jest.Mock).mockResolvedValue(null);
+  (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+  (prisma.userGame.update as jest.Mock).mockResolvedValue({ id: 'ug-1' });
   (prisma.userGame.upsert as jest.Mock).mockResolvedValue({ id: 'ug-1' });
   (prisma.hltbData.findUnique as jest.Mock).mockResolvedValue(null);
 });
@@ -576,5 +580,220 @@ describe('runSync', () => {
         create: expect.objectContaining({ gameId: 'game-existing' }),
       }),
     );
+  });
+
+  // R1 — pre-check by platform-side ID against the user's library so
+  // post-remap durability survives IGDB external_games drift AND target-
+  // Game-already-has-the-ID constraint conflicts (Nightreign-on-Elden-
+  // Ring shape). This is the deferred sync-side companion to R2.
+  describe('R1 — userGame pre-check by platform-side ID', () => {
+    it('routes a Steam sync to an existing UserGame matched by steamAppId, skipping IGDB resolution', async () => {
+      // User remapped a wrong-matched UserGame onto the right Game; R2's
+      // fold put steamAppId on the target Game. The next sync should
+      // route directly to that UserGame without re-running IGDB lookup.
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue({
+        id: 'ug-existing',
+        status: 'OnHold',
+        playtimeByPlatform: { ST: 196 },
+        lastPlayedAt: new Date('2024-01-15'),
+      });
+
+      const result = await runSync('user-1', [
+        {
+          igdbSearchTitle: 'The Room',
+          platformCode: 'ST',
+          playtimeMinutes: 196,
+          lastPlayedAt: new Date('2024-01-15'),
+          steamAppId: 288160,
+        },
+      ]);
+
+      expect(result.imported).toBe(1);
+      expect(prisma.userGame.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'user-1', game: { steamAppId: 288160 } },
+      });
+      // The IGDB resolution + Game.upsert + UserGame.upsert path is the
+      // one we're explicitly bypassing on a pre-check hit — assert none
+      // of them ran. If any of these fire, R1's short-circuit is broken.
+      expect(getGameBySteamId).not.toHaveBeenCalled();
+      expect(searchGames).not.toHaveBeenCalled();
+      expect(prisma.game.upsert).not.toHaveBeenCalled();
+      expect(prisma.userGame.upsert).not.toHaveBeenCalled();
+      // Should have written via `update` against the pre-resolved id
+      expect(prisma.userGame.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'ug-existing' },
+          data: expect.objectContaining({
+            playtimeByPlatform: { ST: 196 },
+          }),
+        }),
+      );
+    });
+
+    it('falls through to the existing IGDB resolution path when no UserGame matches the platform-side ID', async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue(null);
+      (getGameBySteamId as jest.Mock).mockResolvedValue(mockIgdbResult);
+
+      const result = await runSync('user-1', [
+        {
+          igdbSearchTitle: 'Hollow Knight',
+          platformCode: 'ST',
+          playtimeMinutes: 300,
+          lastPlayedAt: new Date('2024-01-15'),
+          steamAppId: 367520,
+        },
+      ]);
+
+      expect(result.imported).toBe(1);
+      expect(prisma.userGame.findFirst).toHaveBeenCalled();
+      // Fell through — the IGDB + Game.upsert path ran
+      expect(getGameBySteamId).toHaveBeenCalledWith(367520);
+      expect(prisma.game.upsert).toHaveBeenCalled();
+      expect(prisma.userGame.upsert).toHaveBeenCalled();
+      // Did NOT write via update (no pre-resolved id)
+      expect(prisma.userGame.update).not.toHaveBeenCalled();
+    });
+
+    it('matches a PSN sync against an existing UserGame whose Game holds psnConceptId', async () => {
+      // PSN sync returns concept ID. Even if IGDB's external_games still
+      // maps that concept to a different (wrong) igdbId, R1 routes by
+      // user library state and lands on the right UserGame.
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue({
+        id: 'ug-psn',
+        status: 'OnHold',
+        playtimeByPlatform: { PS: 1081 },
+        lastPlayedAt: null,
+      });
+
+      const result = await runSync('user-1', [
+        {
+          igdbSearchTitle: 'Star Wars Battlefront II',
+          platformCode: 'PS',
+          playtimeMinutes: 1100,
+          lastPlayedAt: new Date('2024-02-01'),
+          psnConceptId: 229438,
+        },
+      ]);
+
+      expect(result.imported).toBe(1);
+      expect(prisma.userGame.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'user-1', game: { psnConceptId: 229438 } },
+      });
+      expect(getGameByPsnConceptId).not.toHaveBeenCalled();
+      expect(prisma.userGame.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // Merges playtime (1100 > 1081 → 1100)
+          data: expect.objectContaining({
+            playtimeByPlatform: { PS: 1100 },
+          }),
+        }),
+      );
+    });
+
+    it('preserves existing PS playtime when a Steam pre-check hit comes in with only ST minutes', async () => {
+      // Cross-platform game in user's library (PS + ST). Steam sync
+      // shouldn't clobber the PS entry.
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue({
+        id: 'ug-cross',
+        status: 'OnHold',
+        playtimeByPlatform: { PS: 1081, ST: 91 },
+        lastPlayedAt: null,
+      });
+
+      await runSync('user-1', [
+        {
+          igdbSearchTitle: 'Star Wars Battlefront II',
+          platformCode: 'ST',
+          playtimeMinutes: 120,
+          lastPlayedAt: new Date('2024-03-01'),
+          steamAppId: 6060,
+        },
+      ]);
+
+      expect(prisma.userGame.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            // PS untouched, ST raised from 91 → 120
+            playtimeByPlatform: { PS: 1081, ST: 120 },
+          }),
+        }),
+      );
+    });
+
+    it('CM13 — auto-promotes Wishlist → OnHold via the R1 pre-check path when engagement arrives', async () => {
+      // User wishlisted a game (CM12 per-platform wishlist), then they
+      // start playing it on PSN. The PSN sync hits R1 with concept ID;
+      // CM13's promoteWishlistOnOwnership should flip the status.
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue({
+        id: 'ug-wish',
+        status: 'Wishlist',
+        playtimeByPlatform: {},
+        lastPlayedAt: null,
+      });
+
+      await runSync('user-1', [
+        {
+          igdbSearchTitle: 'Triangle Strategy',
+          platformCode: 'PS',
+          playtimeMinutes: 81,
+          lastPlayedAt: new Date('2024-04-01'),
+          psnConceptId: 10012776,
+        },
+      ]);
+
+      expect(prisma.userGame.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'OnHold',
+            playtimeByPlatform: { PS: 81 },
+          }),
+        }),
+      );
+    });
+
+    it('does not write status when the existing status is non-Wishlist (CM13 stays a no-op)', async () => {
+      (prisma.userGame.findFirst as jest.Mock).mockResolvedValue({
+        id: 'ug-existing',
+        status: 'Completed',
+        playtimeByPlatform: { ST: 500 },
+        lastPlayedAt: null,
+      });
+
+      await runSync('user-1', [
+        {
+          igdbSearchTitle: 'Anything',
+          platformCode: 'ST',
+          playtimeMinutes: 600,
+          lastPlayedAt: null,
+          steamAppId: 42,
+        },
+      ]);
+
+      const call = (prisma.userGame.update as jest.Mock).mock.calls[0][0];
+      expect(call.data.status).toBeUndefined();
+      expect(call.data.playtimeByPlatform).toEqual({ ST: 600 });
+    });
+
+    it('skips the pre-check entirely when SyncedGame carries no platform-side ID (title-only manual-add edge)', async () => {
+      // No steamAppId / psnConceptId / etc. on the sync row → no
+      // buildable filter → R1 must NOT run findFirst (or pass an empty
+      // where-clause, which would dangerously match an arbitrary
+      // UserGame).
+      (getGameBySteamId as jest.Mock).mockResolvedValue(null);
+      (searchGames as jest.Mock).mockResolvedValue([mockIgdbResult]);
+
+      await runSync('user-1', [
+        {
+          igdbSearchTitle: 'Hollow Knight',
+          platformCode: 'ST',
+          playtimeMinutes: 300,
+          lastPlayedAt: null,
+        },
+      ]);
+
+      expect(prisma.userGame.findFirst).not.toHaveBeenCalled();
+      // The existing path ran instead
+      expect(prisma.game.upsert).toHaveBeenCalled();
+    });
   });
 });

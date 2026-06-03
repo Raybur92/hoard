@@ -1,4 +1,5 @@
 import { prisma } from '@hoard/db';
+import type { GameStatus } from '@hoard/db';
 import { Prisma } from '@prisma/client';
 import type { PlatformCode } from '@hoard/types';
 import {
@@ -94,6 +95,72 @@ async function triggerHltbBackground(
   })();
 }
 
+/**
+ * R1 — build a Prisma `where`-clause fragment that joins to Game on the
+ * stable platform-side ID carried by this synced game, if any. Order
+ * matches the existing IGDB resolution cascade (Steam → PSN → Xbox →
+ * GOG → itch → Epic → Nintendo) — first defined wins. Returns null when
+ * the sync has no platform-side ID at all (only `igdbSearchTitle`),
+ * forcing the call site to fall through to the IGDB resolution path.
+ */
+type PlatformIdFilter =
+  | { steamAppId: number }
+  | { psnConceptId: number }
+  | { xboxTitleId: number }
+  | { gogAppId: number }
+  | { itchGameId: number }
+  | { epicCatalogItemId: string }
+  | { nintendoTitleId: string };
+
+function buildPlatformIdFilter(sg: SyncedGame): PlatformIdFilter | null {
+  if (sg.steamAppId !== undefined) return { steamAppId: sg.steamAppId };
+  if (sg.psnConceptId !== undefined) return { psnConceptId: sg.psnConceptId };
+  if (sg.xboxTitleId !== undefined) return { xboxTitleId: sg.xboxTitleId };
+  if (sg.gogAppId !== undefined) return { gogAppId: sg.gogAppId };
+  if (sg.itchGameId !== undefined) return { itchGameId: sg.itchGameId };
+  if (sg.epicCatalogItemId !== undefined) return { epicCatalogItemId: sg.epicCatalogItemId };
+  if (sg.nintendoTitleId !== undefined) return { nintendoTitleId: sg.nintendoTitleId };
+  return null;
+}
+
+/**
+ * R1 — apply this sync iteration's playtime / lastPlayedAt / CM13
+ * promotion to an existing UserGame that we matched on its Game's
+ * platform-side ID. Mirrors the merge logic in the main code path below
+ * (lines following the Game.upsert) but writes via `update` against the
+ * pre-resolved UserGame id, sparing the IGDB external_games lookup +
+ * Game.upsert + UserGame.findUnique-by-composite-key roundtrip.
+ */
+async function applySyncToExistingUserGame(
+  userGameRow: { id: string; status: GameStatus; playtimeByPlatform: Prisma.JsonValue; lastPlayedAt: Date | null },
+  sg: SyncedGame,
+): Promise<void> {
+  const platformKey = sg.platformCode as PlatformCode;
+  const existingPlaytime = (userGameRow.playtimeByPlatform ?? {}) as Record<string, number>;
+  const mergedPlaytime = {
+    ...existingPlaytime,
+    [platformKey]: Math.max(existingPlaytime[platformKey] ?? 0, sg.playtimeMinutes),
+  };
+  const newLastPlayed = sg.lastPlayedAt ?? userGameRow.lastPlayedAt ?? null;
+  const totalMergedPlaytime = Object.values(mergedPlaytime).reduce<number>((sum, m) => sum + (m ?? 0), 0);
+  const hasEngagement = totalMergedPlaytime > 0 || sg.hasBeenPlayed === true;
+  // Same CM13 helper the existing path uses — pass a synthetic engagement
+  // value so the helper's "playtime > 0 → OnHold" rule covers the Xbox
+  // no-minutes case without faking minutes downstream.
+  const promoteToStatus = promoteWishlistOnOwnership(
+    userGameRow.status,
+    hasEngagement ? Math.max(totalMergedPlaytime, 1) : 0,
+  );
+  await prisma.userGame.update({
+    where: { id: userGameRow.id },
+    data: {
+      playtimeByPlatform: mergedPlaytime,
+      ...(newLastPlayed ? { lastPlayedAt: newLastPlayed } : {}),
+      ...(promoteToStatus ? { status: promoteToStatus } : {}),
+    },
+  });
+}
+
 export async function runSync(
   userId: string,
   syncedGames: SyncedGame[],
@@ -112,6 +179,36 @@ export async function runSync(
 
   for (const sg of syncedGames) {
     try {
+      // R1 — pre-check by platform-side ID against the user's library.
+      // Before going through IGDB external_games + Game.upsert + UserGame
+      // routing, see if the user already has a UserGame whose Game holds
+      // the incoming platform-side ID. If yes, route the playtime /
+      // lastPlayedAt / CM13 promotion straight to that UserGame and skip
+      // the IGDB lookup entirely.
+      //
+      // Why this matters: when the user remaps a wrong-matched UserGame
+      // via the [wrong game?] UI, R2's fold moves the platform-side ID
+      // from the source Game onto the target Game (when target's slot is
+      // null). That fold is what makes the next sync's P2002 collision
+      // recovery resolve to the target. BUT if the target Game already
+      // owns a platform-side ID on the same field (Nightreign-on-Elden-
+      // Ring shape), the fold is skipped and the source row keeps the ID
+      // — next sync re-creates the duplicate. R1 closes that gap by
+      // routing on the user's library state directly, not the Game-row
+      // mapping. As a bonus it also short-circuits the IGDB call on the
+      // happy path (one fewer round-trip per game).
+      const platformIdFilter = buildPlatformIdFilter(sg);
+      if (platformIdFilter) {
+        const existingByPlatformId = await prisma.userGame.findFirst({
+          where: { userId, game: platformIdFilter },
+        });
+        if (existingByPlatformId) {
+          await applySyncToExistingUserGame(existingByPlatformId, sg);
+          imported++;
+          continue;
+        }
+      }
+
       // N-series resolution order — try the stable platform-side ID
       // (Steam appid / PSN conceptId / Xbox titleId / GOG appid) FIRST
       // via IGDB external_games. Bypasses fuzzy title matching entirely,
