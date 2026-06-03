@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useEventDetail } from '../../hooks/useEvents';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useNow } from '../../hooks/useNow';
@@ -8,6 +8,7 @@ import { EventGameGrid } from './events/EventGameGrid';
 import { EventVideoGrid } from './events/EventVideoGrid';
 import { Marker } from '../primitives/Marker';
 import { Btn } from '../primitives/Btn';
+import { BackBar } from '../primitives/BackBar';
 import { Icon } from '../primitives/Icon';
 import { countdownParts, daysUntil } from '../../lib/utils';
 import type { EventDetailResponse, EventState } from '@hoard/types';
@@ -34,7 +35,6 @@ function crumbName(name: string): string {
  */
 export function EventDetailDesktop() {
   const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
   const { data: fresh, loading, error, refetch } = useEventDetail(slug);
   // DASH-PR2 stale-while-revalidate pattern: keep the last successful
   // response on screen during refetches so cache invalidations don't
@@ -77,15 +77,7 @@ export function EventDetailDesktop() {
     <>
       <TopBar crumbs={['hoard', 'events', crumbName(data.event.name)]} />
 
-      {/* Explicit back affordance — same band as GameDetailDesktop /
-          S1-S4 detail screens (12px 36px, borderBottom, navigate(-1)).
-          Not extracted to a shared primitive yet; copies live inline
-          in 4 other detail screens so this is the established shape. */}
-      <div style={{ padding: '12px 36px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Btn sm onClick={() => navigate(-1)}>
-          <Icon name="back" size={10} /> back
-        </Btn>
-      </div>
+      <BackBar />
 
       <div
         className="thin-scroll"

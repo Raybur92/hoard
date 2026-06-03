@@ -7,6 +7,7 @@ import { Cover } from '../primitives/Cover';
 import { Plat } from '../primitives/Plat';
 import { Chip } from '../primitives/Chip';
 import { Btn } from '../primitives/Btn';
+import { BackBar } from '../primitives/BackBar';
 import { Icon } from '../primitives/Icon';
 import { Barcode } from '../primitives/Barcode';
 import { useGame } from '../../hooks/useGame';
@@ -193,17 +194,14 @@ export function GameDetailDesktop({ userGameId: propUserGameId }: { userGameId?:
       {/* PR A — A9e: explicit back affordance for desktop. Mobile already
           has navigate(-1) via MobileHeader's back caret; the breadcrumb's
           "library" link covers the slow-path but a chip is more discoverable. */}
-      <div style={{ padding: '12px 36px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Btn sm onClick={() => navigate(-1)}>
-          <Icon name="back" size={10} /> back
-        </Btn>
+      <BackBar>
         {/* Sync-quality batch (2026-05-08, decision #33): when the matcher
             grabbed the wrong game, this opens a search dialog. Notes /
             status / playtime are preserved across the remap. */}
         <Btn sm onClick={() => setRemapOpen(true)} ariaLabel="This is the wrong game — open the remap dialog">
           wrong game?
         </Btn>
-      </div>
+      </BackBar>
 
       {relicOpen && (
         <RelicOverlay

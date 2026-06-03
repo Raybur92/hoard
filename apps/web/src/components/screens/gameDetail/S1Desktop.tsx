@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import type { GameDetailGameInfo, UserGameDetail } from '@hoard/types';
 import { TopBar } from '../../layout/TopBar';
 import { Btn } from '../../primitives/Btn';
+import { BackBar } from '../../primitives/BackBar';
 import { Chip } from '../../primitives/Chip';
 import { Cover } from '../../primitives/Cover';
 import { Icon } from '../../primitives/Icon';
@@ -78,11 +79,7 @@ export function S1Desktop({ game, wishlistUserGame, onMutated }: Props) {
     <>
       <TopBar crumbs={['hoard', 'browse', game.title.toLowerCase()]} />
 
-      <div style={{ padding: '12px 36px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Btn sm onClick={() => navigate(-1)}>
-          <Icon name="back" size={10} /> back
-        </Btn>
-      </div>
+      <BackBar />
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '32px 36px 40px' }}>
         <Marker>

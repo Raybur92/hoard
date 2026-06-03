@@ -13,6 +13,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { GameDetailGameInfo, UserGameDetail } from '@hoard/types';
 import { TopBar } from '../../layout/TopBar';
 import { Btn } from '../../primitives/Btn';
+import { BackBar } from '../../primitives/BackBar';
 import { Icon } from '../../primitives/Icon';
 import { RelicCard } from './RelicCard';
 import { useRelicAnimation } from './useRelicAnimation';
@@ -35,11 +36,7 @@ export function S4Desktop({ game, userGame, onMutated }: Props) {
     <>
       <TopBar crumbs={['hoard', 'archive', game.title.toLowerCase()]} />
 
-      <div style={{ padding: '12px 36px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Btn sm onClick={() => navigate(-1)}>
-          <Icon name="back" size={10} /> back
-        </Btn>
-      </div>
+      <BackBar />
 
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '40px 36px 60px' }}>
         <div className={animate ? 'relic-animate' : undefined} data-testid="relic-stage">
