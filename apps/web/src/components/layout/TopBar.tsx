@@ -14,6 +14,9 @@ const CRUMB_PATHS: Record<string, string> = {
   dashboard: '/',
   library:   '/library',
   upcoming:  '/upcoming',
+  releases:  '/releases',
+  events:    '/events',
+  deals:     '/deals',
   settings:  '/settings',
   platforms: '/settings/platforms',
 };
