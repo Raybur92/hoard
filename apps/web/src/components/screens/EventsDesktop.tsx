@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { TopBar } from '../layout/TopBar';
 import { EventHeroCountdown } from './events/EventHeroCountdown';
 import { EventListRow } from './events/EventListRow';
 import { Marker } from '../primitives/Marker';
 import { Btn } from '../primitives/Btn';
+import { Icon } from '../primitives/Icon';
 import type { EventListRow as EventListRowData } from '@hoard/types';
 import { api } from '../../lib/api';
 
@@ -27,21 +29,27 @@ export function EventsDesktop() {
 
   useEffect(() => { /* placeholder for any list-mount telemetry */ }, []);
 
-  if (loading && !data) {
+  if (!data && loading) {
     return (
-      <div className="app-content" style={{ padding: 24 }}>
-        <Marker>// loading events…</Marker>
-      </div>
+      <>
+        <TopBar crumbs={['hoard', 'events']} />
+        <div style={{ padding: '24px 32px' }}>
+          <Marker>// loading events…</Marker>
+        </div>
+      </>
     );
   }
-  if (error) {
+  if (!data && error) {
     return (
-      <div className="app-content" style={{ padding: 24 }}>
-        <Marker style={{ color: 'var(--red)' }}>// failed to load events · {error}</Marker>
-        <div style={{ marginTop: 12 }}>
-          <Btn onClick={refetch}>retry</Btn>
+      <>
+        <TopBar crumbs={['hoard', 'events']} />
+        <div style={{ padding: '24px 32px' }}>
+          <Marker style={{ color: 'var(--red)' }}>// failed to load events · {error}</Marker>
+          <div style={{ marginTop: 12 }}>
+            <Btn onClick={refetch}>retry</Btn>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
   if (!data) return null;
@@ -49,47 +57,59 @@ export function EventsDesktop() {
   const isEmpty = !data.hero && data.upcoming.length === 0 && data.recent.length === 0 && data.past.length === 0;
 
   return (
-    <div className="app-content" style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
-      <header style={{ marginBottom: 32 }}>
-        <div className="t-display" style={{
-          fontSize: 'var(--text-xl)',
-          letterSpacing: '0.06em',
-          color: 'var(--paper)',
-          lineHeight: 1,
-        }}>
-          EVENTS
-        </div>
-        <Marker style={{ marginTop: 8 }}>
-          // {data.counts.upcoming} upcoming · {data.counts.past} past
-        </Marker>
-      </header>
+    <>
+      <TopBar crumbs={['hoard', 'events']} />
+      {/* Sub-header band — same shape as DealsDesktop / ReleasesDesktop:
+          page label on the left, status + actions on the right. */}
+      <div style={{
+        padding: '16px 32px 14px',
+        borderBottom: '1px solid var(--rule)',
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      }}>
+        <span className="t-up" style={{ fontSize: 'var(--text-2xs)' }}>events</span>
+        <span className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)' }}>
+          · {data.counts.upcoming} upcoming · {data.counts.past} past
+        </span>
+        <span style={{ flex: 1 }} />
+        <Btn sm onClick={refetch}>
+          <Icon name="refresh" size={10} /> refresh
+        </Btn>
+      </div>
 
-      {isEmpty && (
-        <div className="panel" style={{ padding: 32, textAlign: 'center' }}>
-          <Marker>// no events yet</Marker>
-          <div className="t-sans t-dim" style={{ fontSize: 'var(--text-sm)', marginTop: 8 }}>
-            Sync runs nightly. If you're an admin you can trigger a refresh from the admin panel.
+      <div
+        className="thin-scroll"
+        style={{
+          flex: 1, overflow: 'auto', padding: '24px 32px 40px',
+          display: 'flex', flexDirection: 'column', gap: 32,
+        }}
+      >
+        {isEmpty && (
+          <div className="panel" style={{ padding: 32, textAlign: 'center' }}>
+            <Marker>// no events yet</Marker>
+            <div className="t-sans t-dim" style={{ fontSize: 'var(--text-sm)', marginTop: 8 }}>
+              Sync runs nightly. If you're an admin you can trigger a refresh from the admin panel.
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {data.hero && (
-        <section style={{ marginBottom: 32 }}>
-          <EventHeroCountdown event={data.hero} onAddToCalendar={() => downloadIcs(data.hero!.slug)} />
-        </section>
-      )}
+        {data.hero && (
+          <section>
+            <EventHeroCountdown event={data.hero} onAddToCalendar={() => downloadIcs(data.hero!.slug)} />
+          </section>
+        )}
 
-      <Section title="upcoming" rows={data.upcoming.filter((r) => r.slug !== data.hero?.slug)} />
-      <Section title="recent · last 30 days" rows={data.recent} />
-      <ArchiveSections rows={data.past} />
-    </div>
+        <Section title="upcoming" rows={data.upcoming.filter((r) => r.slug !== data.hero?.slug)} />
+        <Section title="recent · last 30 days" rows={data.recent} />
+        <ArchiveSections rows={data.past} />
+      </div>
+    </>
   );
 }
 
 function Section({ title, rows }: { title: string; rows: EventListRowData[] }) {
   if (rows.length === 0) return null;
   return (
-    <section style={{ marginBottom: 32 }}>
+    <section>
       <Marker style={{ marginBottom: 12 }}>// {title}</Marker>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {rows.map((e) => <EventListRow key={e.slug} event={e} />)}

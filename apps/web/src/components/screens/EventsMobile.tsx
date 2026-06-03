@@ -5,6 +5,7 @@ import { EventListRow } from './events/EventListRow';
 import { MobileHeader } from '../layout/MobileHeader';
 import { Marker } from '../primitives/Marker';
 import { Btn } from '../primitives/Btn';
+import { Icon } from '../primitives/Icon';
 import type { EventListRow as EventListRowData } from '@hoard/types';
 import { api } from '../../lib/api';
 
@@ -23,35 +24,43 @@ export function EventsMobile() {
     void api.downloadEventIcs(slug);
   }
 
-  if (loading && !data) {
+  if (!data && loading) {
     return (
-      <div className="app-mobile-content" style={{ padding: 16 }}>
-        <MobileHeader title="Events" />
-        <Marker>// loading events…</Marker>
-      </div>
+      <>
+        <MobileHeader title="events" />
+        <div className="app-mobile-content" style={{ padding: 16 }}>
+          <Marker>// loading events…</Marker>
+        </div>
+      </>
     );
   }
-  if (error) {
+  if (!data && error) {
     return (
-      <div className="app-mobile-content" style={{ padding: 16 }}>
-        <MobileHeader title="Events" />
-        <Marker style={{ color: 'var(--red)' }}>// failed to load · {error}</Marker>
-        <div style={{ marginTop: 12 }}><Btn onClick={refetch}>retry</Btn></div>
-      </div>
+      <>
+        <MobileHeader title="events" />
+        <div className="app-mobile-content" style={{ padding: 16 }}>
+          <Marker style={{ color: 'var(--red)' }}>// failed to load · {error}</Marker>
+          <div style={{ marginTop: 12 }}><Btn onClick={refetch}>retry</Btn></div>
+        </div>
+      </>
     );
   }
   if (!data) return null;
 
   return (
     <>
-      <MobileHeader title="Events" />
-      <div className="app-mobile-content" style={{ padding: 16 }}>
-        <Marker style={{ marginBottom: 16 }}>
-          // {data.counts.upcoming} upcoming · {data.counts.past} past
-        </Marker>
-
+      <MobileHeader
+        title="events"
+        sub={`// ${data.counts.upcoming} upcoming · ${data.counts.past} past`}
+        right={
+          <Btn sm ariaLabel="Refresh events" onClick={() => refetch()}>
+            <Icon name="refresh" size={10} />
+          </Btn>
+        }
+      />
+      <div className="app-mobile-content" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 24 }}>
         {data.hero && (
-          <section style={{ marginBottom: 24 }}>
+          <section>
             <EventHeroCountdown event={data.hero} onAddToCalendar={() => downloadIcs(data.hero!.slug)} />
           </section>
         )}

@@ -5,6 +5,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { SearchModalProvider } from '../../../hooks/useSearchModal';
 import type { EventsListResponse, EventDetailResponse } from '@hoard/types';
 
 vi.mock('../../../hooks/useEvents', () => ({
@@ -57,7 +58,7 @@ describe('EventsDesktop (list)', () => {
     (useEvents as ReturnType<typeof vi.fn>).mockReturnValue({
       data: emptyResponse, loading: false, error: null, refetch: vi.fn(),
     });
-    render(<MemoryRouter><EventsDesktop /></MemoryRouter>);
+    render(<MemoryRouter><SearchModalProvider><EventsDesktop /></SearchModalProvider></MemoryRouter>);
     expect(screen.getByText(/no events yet/i)).toBeInTheDocument();
   });
 
@@ -71,7 +72,7 @@ describe('EventsDesktop (list)', () => {
       },
       loading: false, error: null, refetch: vi.fn(),
     });
-    render(<MemoryRouter><EventsDesktop /></MemoryRouter>);
+    render(<MemoryRouter><SearchModalProvider><EventsDesktop /></SearchModalProvider></MemoryRouter>);
     expect(screen.getByText('Summer Game Fest 2026')).toBeInTheDocument();
     expect(screen.getByText(/next showcase/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add summer game fest 2026 to calendar/i })).toBeInTheDocument();
@@ -93,7 +94,7 @@ describe('EventsDesktop (list)', () => {
       },
       loading: false, error: null, refetch: vi.fn(),
     });
-    render(<MemoryRouter><EventsDesktop /></MemoryRouter>);
+    render(<MemoryRouter><SearchModalProvider><EventsDesktop /></SearchModalProvider></MemoryRouter>);
     expect(screen.getByText('Upcoming A')).toBeInTheDocument();
     expect(screen.getByText('Recent B')).toBeInTheDocument();
     expect(screen.getByText(/upcoming$/i)).toBeInTheDocument();
@@ -105,7 +106,7 @@ describe('EventsDesktop (list)', () => {
     (useEvents as ReturnType<typeof vi.fn>).mockReturnValue({
       data: null, loading: false, error: 'network down', refetch,
     });
-    render(<MemoryRouter><EventsDesktop /></MemoryRouter>);
+    render(<MemoryRouter><SearchModalProvider><EventsDesktop /></SearchModalProvider></MemoryRouter>);
     expect(screen.getByText(/failed to load events/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
@@ -151,9 +152,11 @@ function makeDetail(state: 'upcoming' | 'live' | 'past'): EventDetailResponse {
 function renderDetail() {
   return render(
     <MemoryRouter initialEntries={['/events/state-of-play-2026-06']}>
-      <Routes>
-        <Route path="/events/:slug" element={<EventDetailDesktop />} />
-      </Routes>
+      <SearchModalProvider>
+        <Routes>
+          <Route path="/events/:slug" element={<EventDetailDesktop />} />
+        </Routes>
+      </SearchModalProvider>
     </MemoryRouter>,
   );
 }
@@ -164,7 +167,9 @@ describe('EventDetailDesktop', () => {
       data: makeDetail('upcoming'), loading: false, error: null, refetch: vi.fn(),
     });
     renderDetail();
-    expect(screen.getByText('State of Play — June 2026')).toBeInTheDocument();
+    // Event name appears in both TopBar's sr-only h1 (breadcrumb) and the
+    // visible hero h1 — just assert it shows up somewhere on the page.
+    expect(screen.getAllByText('State of Play — June 2026').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/next showcase/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add to calendar/i })).toBeInTheDocument();
   });

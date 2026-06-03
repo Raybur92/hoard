@@ -1,8 +1,9 @@
 import { useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useEventDetail } from '../../hooks/useEvents';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useNow } from '../../hooks/useNow';
+import { TopBar } from '../layout/TopBar';
 import { EventGameGrid } from './events/EventGameGrid';
 import { EventVideoGrid } from './events/EventVideoGrid';
 import { Marker } from '../primitives/Marker';
@@ -11,6 +12,13 @@ import { Icon } from '../primitives/Icon';
 import { countdownParts, daysUntil } from '../../lib/utils';
 import type { EventDetailResponse, EventState } from '@hoard/types';
 import { api } from '../../lib/api';
+
+/** Truncate long event names for the breadcrumb tail. Matches the pattern
+ *  GameDetailV2Desktop uses (single-line, ellipsis at ~40 chars). */
+function crumbName(name: string): string {
+  const max = 40;
+  return name.length > max ? `${name.slice(0, max - 1)}…` : name;
+}
 
 /**
  * EV-PR1 — `/events/:slug` detail view.
@@ -42,63 +50,75 @@ export function EventDetailDesktop() {
   }
 
   if (!data && loading) {
-    return <div className="app-content" style={{ padding: 24 }}><Marker>// loading…</Marker></div>;
+    return (
+      <>
+        <TopBar crumbs={['hoard', 'events', '…']} />
+        <div style={{ padding: '24px 32px' }}><Marker>// loading…</Marker></div>
+      </>
+    );
   }
   if (!data && error) {
     return (
-      <div className="app-content" style={{ padding: 24 }}>
-        <Link to="/events" className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)' }}>← back to events</Link>
-        <Marker style={{ marginTop: 16, color: 'var(--red)' }}>
-          // {error.includes('404') ? 'event not found' : 'failed to load'}
-        </Marker>
-        <div style={{ marginTop: 12 }}><Btn onClick={refetch}>retry</Btn></div>
-      </div>
+      <>
+        <TopBar crumbs={['hoard', 'events', '…']} />
+        <div style={{ padding: '24px 32px' }}>
+          <Marker style={{ color: 'var(--red)' }}>
+            // {error.includes('404') ? 'event not found' : 'failed to load'}
+          </Marker>
+          <div style={{ marginTop: 12 }}><Btn onClick={refetch}>retry</Btn></div>
+        </div>
+      </>
     );
   }
   if (!data) return null;
 
   return (
-    <div className="app-content" style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
-      <Link to="/events" className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)', textDecoration: 'none' }}>
-        ← back to events
-      </Link>
-      <DetailHero
-        data={data}
-        onAddToCalendar={downloadIcs}
-        wishlistedCount={data.personalisation.onWishlistCount}
-      />
+    <>
+      <TopBar crumbs={['hoard', 'events', crumbName(data.event.name)]} />
 
-      <section style={{ marginTop: 32 }}>
-        <Marker style={{ marginBottom: 12 }}>
-          // games{data.event.gamesResolvedAt !== null && ` · ${data.games.length}`}
-        </Marker>
-        <EventGameGrid
-          games={data.games}
-          eventSlug={data.event.slug}
-          gamesResolvedAt={data.event.gamesResolvedAt}
-          showSparseDisclaimer={data.event.state !== 'upcoming'}
-          onResolved={refetch}
+      <div
+        className="thin-scroll"
+        style={{
+          flex: 1, overflow: 'auto', padding: '24px 32px 40px',
+          display: 'flex', flexDirection: 'column', gap: 32,
+        }}
+      >
+        <DetailHero
+          data={data}
+          onAddToCalendar={downloadIcs}
+          wishlistedCount={data.personalisation.onWishlistCount}
         />
-      </section>
 
-      {data.event.videos.length > 0 && (
-        <section style={{ marginTop: 32 }}>
-          <Marker style={{ marginBottom: 12 }}>// trailers · {data.event.videos.length}</Marker>
-          <EventVideoGrid videos={data.event.videos} />
+        <section>
+          <Marker style={{ marginBottom: 12 }}>
+            // games{data.event.gamesResolvedAt !== null && ` · ${data.games.length}`}
+          </Marker>
+          <EventGameGrid
+            games={data.games}
+            eventSlug={data.event.slug}
+            gamesResolvedAt={data.event.gamesResolvedAt}
+            showSparseDisclaimer={data.event.state !== 'upcoming'}
+            onResolved={refetch}
+          />
         </section>
-      )}
 
-      {/* Description moves below the primary content for past events —
-          it's metadata, not the focal point. Still surfaced when present. */}
-      {data.event.description && (
-        <section style={{ marginTop: 32 }}>
-          <Marker style={{ marginBottom: 12, color: 'var(--paper-faint)' }}>// about</Marker>
-          <div className="t-sans" style={{ fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--paper-dim)', maxWidth: 720 }}>
-            {data.event.description}
-          </div>
-        </section>
-      )}
-    </div>
+        {data.event.videos.length > 0 && (
+          <section>
+            <Marker style={{ marginBottom: 12 }}>// trailers · {data.event.videos.length}</Marker>
+            <EventVideoGrid videos={data.event.videos} />
+          </section>
+        )}
+
+        {data.event.description && (
+          <section>
+            <Marker style={{ marginBottom: 12, color: 'var(--paper-faint)' }}>// about</Marker>
+            <div className="t-sans" style={{ fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--paper-dim)', maxWidth: 720 }}>
+              {data.event.description}
+            </div>
+          </section>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -132,7 +152,7 @@ function DetailHero({
   if (state === 'past') {
     return (
       <header className="panel" style={{
-        marginTop: 16, padding: 18,
+        padding: 18,
         borderColor: 'var(--rule)',
       }}>
         <div style={{
@@ -181,7 +201,7 @@ function DetailHero({
 
   return (
     <header className="panel" style={{
-      marginTop: 16, padding: 24,
+      padding: 24,
       borderColor: state === 'live' ? 'var(--red-dim)' : 'var(--amber-dim)',
     }}>
       {/* Top row: state marker (left) + wishlist chip (right) on the same

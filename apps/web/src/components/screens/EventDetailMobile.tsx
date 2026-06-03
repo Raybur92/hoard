@@ -37,7 +37,7 @@ export function EventDetailMobile() {
   if (!data && loading) {
     return (
       <>
-        <MobileHeader title="Event" />
+        <MobileHeader title="event" back />
         <div className="app-mobile-content" style={{ padding: 16 }}><Marker>// loading…</Marker></div>
       </>
     );
@@ -45,7 +45,7 @@ export function EventDetailMobile() {
   if (!data && error) {
     return (
       <>
-        <MobileHeader title="Event" />
+        <MobileHeader title="event" back />
         <div className="app-mobile-content" style={{ padding: 16 }}>
           <Marker style={{ color: 'var(--red)' }}>
             // {error.includes('404') ? 'event not found' : 'failed to load'}
@@ -59,7 +59,7 @@ export function EventDetailMobile() {
 
   return (
     <>
-      <MobileHeader title={data.event.name} />
+      <MobileHeader title={data.event.name} back />
       <div className="app-mobile-content" style={{ padding: 16 }}>
         <DetailHero
           data={data}
