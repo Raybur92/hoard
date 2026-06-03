@@ -1,6 +1,17 @@
 /* Hoard design tokens — ported exactly from project/styles.css */
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Major+Mono+Display&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+
+/* Display face — self-hosted. PP Neue Machina (Inktrap Ultrabold) replaces
+   Major Mono Display for hero numbers / wordmark / shelf numbers / countdowns.
+   Served from apps/web/public/fonts/. */
+@font-face {
+  font-family: 'PP Neue Machina';
+  src: url('/fonts/PPNeueMachina-InktrapUltrabold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   /* background scale */
@@ -37,7 +48,7 @@
   /* typography */
   --mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --sans:    'IBM Plex Sans', system-ui, sans-serif;
-  --display: 'Major Mono Display', 'JetBrains Mono', monospace;
+  --display: 'PP Neue Machina', 'JetBrains Mono', monospace;
 
   /* layout */
   --sidebar-w:   220px;
