@@ -25,10 +25,14 @@ const STATEMENTS: string[] = [
     "logoUrl"       TEXT,
     "networks"      JSONB NOT NULL DEFAULT '[]'::jsonb,
     "videos"        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    "gamesResolvedAt" TIMESTAMP(3),
     "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt"     TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Event_pkey" PRIMARY KEY ("id")
   )`,
+  // Belt-and-suspenders: if Event already exists from a partial earlier
+  // run that pre-dated the gamesResolvedAt column, add it now.
+  `ALTER TABLE "Event" ADD COLUMN IF NOT EXISTS "gamesResolvedAt" TIMESTAMP(3)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Event_igdbId_key" ON "Event"("igdbId")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Event_slug_key"   ON "Event"("slug")`,
   `CREATE INDEX        IF NOT EXISTS "Event_startTime_idx" ON "Event"("startTime")`,
