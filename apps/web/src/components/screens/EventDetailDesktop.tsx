@@ -133,7 +133,7 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
       borderColor: state === 'live' ? 'var(--red-dim)' : state === 'upcoming' ? 'var(--amber-dim)' : 'var(--rule)',
     }}>
       {state === 'live' && (
-        <Marker style={{ color: 'var(--red)' }}>// live now</Marker>
+        <Marker className="events-live-pulse" style={{ color: 'var(--red)' }}>● live now</Marker>
       )}
       {state === 'upcoming' && (
         <Marker style={{ color: 'var(--amber)' }}>// next showcase · {away} days away</Marker>
@@ -142,27 +142,34 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
         <Marker>// aired {Math.abs(away)} day{Math.abs(away) === 1 ? '' : 's'} ago</Marker>
       )}
 
-      <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
-        <div style={{ flex: '1 1 0', minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: 'var(--text-2xl)', lineHeight: 1.1, color: 'var(--paper)', letterSpacing: '-0.02em' }}>
+      {/* Monumental layout: title and countdown both at architectural scale,
+          asymmetric (title left, digits right). */}
+      <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 32, alignItems: 'flex-end' }}>
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+          <h1 className="t-display" style={{
+            margin: 0, fontSize: 'var(--text-display-sm)', lineHeight: 0.92,
+            color: 'var(--paper)', letterSpacing: '-0.03em',
+          }}>
             {e.name}
           </h1>
           {network && (
-            <div className="t-mono t-dim" style={{ fontSize: 'var(--text-sm)', marginTop: 8 }}>
+            <div className="t-mono t-dim" style={{ fontSize: 'var(--text-sm)', marginTop: 14 }}>
               {network} · {dateLabel} · {timeLabel}
             </div>
           )}
         </div>
 
         {state === 'upcoming' && cd && (
-          <div style={{ flex: '0 0 auto', display: 'flex', gap: 6 }}>
+          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', gap: 18 }}>
             {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
-              <div key={k} style={{
-                background: 'var(--ink-2)', border: '1px solid var(--rule-bright)',
-                padding: '10px 12px', textAlign: 'center', minWidth: 50,
-              }}>
-                <div className="t-mono t-tnum" style={{ fontSize: 'var(--text-lg)', color: 'var(--amber)', lineHeight: 1 }}>{v}</div>
-                <div className="t-faint t-up" style={{ fontSize: 'var(--text-3xs)', marginTop: 4 }}>{k.toUpperCase()}</div>
+              <div key={k} style={{ textAlign: 'center' }}>
+                <div className="t-mono t-tnum" style={{
+                  fontSize: 'var(--text-display)', color: 'var(--amber)',
+                  lineHeight: 0.82, letterSpacing: '-0.05em',
+                }}>{v}</div>
+                <div className="t-faint t-up" style={{
+                  fontSize: 'var(--text-3xs)', marginTop: 6, letterSpacing: '0.18em',
+                }}>{k.toUpperCase()}</div>
               </div>
             ))}
           </div>

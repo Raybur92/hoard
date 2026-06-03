@@ -746,3 +746,17 @@ select:focus-visible {
   border-radius: 2px;
   animation: skel-pulse 1.4s ease-in-out infinite alternate;
 }
+
+/* ---------- events: live-event pulse ----------
+   Signature moment for events in the `live` state (start_time has passed,
+   end_time hasn't OR start + 4h window not elapsed yet). The `// live now`
+   marker breathes via opacity 1 → 0.45 → 1 over 2s. Reduced-motion users
+   get a static red marker via the global @media reset above. */
+
+@keyframes events-live-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.events-live-pulse {
+  animation: events-live-pulse 2s ease-in-out infinite;
+}

@@ -39,27 +39,33 @@ export function EventHeroCountdown({ event, onAddToCalendar }: EventHeroCountdow
         // next showcase{away > 0 ? ` · ${away} days away` : ' · airing soon'}
       </Marker>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 24, marginTop: 12 }}>
-        <div style={{ minWidth: 0, flex: '1 1 0' }}>
-          <div style={{ fontSize: 'var(--text-xl)', lineHeight: 1.1, color: 'var(--paper)', letterSpacing: '-0.01em' }}>
+      {/* Monumental layout — title left, countdown right, both at architectural scale. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 32, marginTop: 16 }}>
+        <div style={{ minWidth: 0, flex: '1 1 280px' }}>
+          <div className="t-display" style={{
+            fontSize: 'var(--text-2xl)', lineHeight: 0.95, color: 'var(--paper)',
+            letterSpacing: '-0.02em',
+          }}>
             {event.name}
           </div>
           {network && (
-            <div className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)', marginTop: 6 }}>
+            <div className="t-mono t-dim" style={{ fontSize: 'var(--text-xs)', marginTop: 10 }}>
               {network} · {dateLabel} · {timeLabel}
             </div>
           )}
         </div>
 
         {cd && (
-          <div style={{ flex: '0 0 auto', display: 'flex', gap: 4 }}>
+          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', gap: 14 }}>
             {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
-              <div key={k} style={{
-                background: 'var(--ink-2)', border: '1px solid var(--rule-bright)',
-                padding: '6px 8px', textAlign: 'center', minWidth: 38,
-              }}>
-                <div className="t-mono t-tnum" style={{ fontSize: 'var(--text-md)', color: 'var(--amber)', lineHeight: 1 }}>{v}</div>
-                <div className="t-faint t-up" style={{ fontSize: 'var(--text-3xs)', marginTop: 3 }}>{k.toUpperCase()}</div>
+              <div key={k} style={{ textAlign: 'center' }}>
+                <div className="t-mono t-tnum" style={{
+                  fontSize: 'var(--text-display-sm)', color: 'var(--amber)',
+                  lineHeight: 0.85, letterSpacing: '-0.04em',
+                }}>{v}</div>
+                <div className="t-faint t-up" style={{
+                  fontSize: 'var(--text-3xs)', marginTop: 6, letterSpacing: '0.15em',
+                }}>{k.toUpperCase()}</div>
               </div>
             ))}
           </div>

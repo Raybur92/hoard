@@ -101,7 +101,7 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
       padding: 16,
       borderColor: state === 'live' ? 'var(--red-dim)' : state === 'upcoming' ? 'var(--amber-dim)' : 'var(--rule)',
     }}>
-      {state === 'live' && <Marker style={{ color: 'var(--red)' }}>// live now</Marker>}
+      {state === 'live' && <Marker className="events-live-pulse" style={{ color: 'var(--red)' }}>● live now</Marker>}
       {state === 'upcoming' && <Marker style={{ color: 'var(--amber)' }}>// {away} days away</Marker>}
       {state === 'past' && <Marker>// aired {Math.abs(away)} day{Math.abs(away) === 1 ? '' : 's'} ago</Marker>}
 
@@ -112,14 +112,16 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
       </div>
 
       {state === 'upcoming' && cd && (
-        <div style={{ marginTop: 12, display: 'flex', gap: 4 }}>
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-end', gap: 8, justifyContent: 'space-between' }}>
           {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
-            <div key={k} style={{
-              background: 'var(--ink-2)', border: '1px solid var(--rule-bright)',
-              padding: '6px 8px', textAlign: 'center', flex: 1,
-            }}>
-              <div className="t-mono t-tnum" style={{ fontSize: 'var(--text-md)', color: 'var(--amber)', lineHeight: 1 }}>{v}</div>
-              <div className="t-faint t-up" style={{ fontSize: 'var(--text-3xs)', marginTop: 3 }}>{k.toUpperCase()}</div>
+            <div key={k} style={{ textAlign: 'center', flex: 1 }}>
+              <div className="t-mono t-tnum" style={{
+                fontSize: 'var(--text-2xl)', color: 'var(--amber)',
+                lineHeight: 0.85, letterSpacing: '-0.04em',
+              }}>{v}</div>
+              <div className="t-faint t-up" style={{
+                fontSize: 'var(--text-3xs)', marginTop: 4, letterSpacing: '0.15em',
+              }}>{k.toUpperCase()}</div>
             </div>
           ))}
         </div>

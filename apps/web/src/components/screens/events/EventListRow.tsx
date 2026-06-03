@@ -54,12 +54,15 @@ export function EventListRow({ event }: EventListRowProps) {
         </div>
       </div>
 
-      <div className="t-mono t-tnum" style={{
-        fontSize: 'var(--text-xs)',
-        color: isLive ? 'var(--red)' : isUpcoming ? 'var(--amber)' : 'var(--paper-faint)',
-        whiteSpace: 'nowrap',
-      }}>
-        {isLive ? '· live ·' : isUpcoming ? (away === 0 ? 'today' : `${away}d`) : `${Math.abs(away)}d ago`}
+      <div
+        className={isLive ? 't-mono t-tnum events-live-pulse' : 't-mono t-tnum'}
+        style={{
+          fontSize: 'var(--text-xs)',
+          color: isLive ? 'var(--red)' : isUpcoming ? 'var(--amber)' : 'var(--paper-faint)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {isLive ? '● live' : isUpcoming ? (away === 0 ? 'today' : `${away}d`) : `${Math.abs(away)}d ago`}
       </div>
     </Link>
   );
