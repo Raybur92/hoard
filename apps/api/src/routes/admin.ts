@@ -465,6 +465,40 @@ router.get('/admin/deals/shops', async (_req: Request, res: Response): Promise<v
   });
 });
 
+// GET /api/admin/itad/shops
+//
+// Diagnostic — fetches ITAD's full shop catalog (/service/shops/v1)
+// and annotates each entry with our storefront classification. Used
+// to verify whether Tier-2 resellers in our allow-list are absent
+// from ITAD's catalog (coverage gap) or present under different
+// names than we expect (allow-list-name mismatch).
+router.get('/admin/itad/shops', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { getShops } = await import('../services/itad');
+    const { classifyShop } = await import('../services/deals/storefronts');
+    const shops = await getShops();
+    const annotated = shops.map((s) => ({
+      id: s.id,
+      title: s.title,
+      classification: classifyShop(s.title),
+    }));
+    res.json({
+      total: shops.length,
+      counts: {
+        firstParty: annotated.filter((s) => s.classification === 'first-party').length,
+        reseller: annotated.filter((s) => s.classification === 'reseller').length,
+        excluded: annotated.filter((s) => s.classification === 'excluded').length,
+      },
+      firstParty: annotated.filter((s) => s.classification === 'first-party'),
+      reseller: annotated.filter((s) => s.classification === 'reseller'),
+      excluded: annotated.filter((s) => s.classification === 'excluded'),
+    });
+  } catch (err) {
+    console.error('[admin/itad/shops] failed:', err);
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // GET /api/admin/deals/probe-psn?title=Astro%20Bot&market=AT
 //
 // Diagnostic — fetches PSN's anonymous search page for a title, parses
