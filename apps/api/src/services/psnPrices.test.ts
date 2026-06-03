@@ -187,6 +187,58 @@ describe('DEALS-PR2.5 — getPsnPrice (title-based search)', () => {
     expect(p).toBeNull();
   });
 
+  it('rejects franchise sibling that does not share a whole-word prefix (Warlock regression)', async () => {
+    // Andrea reported 2026-06-03: a "Warlock" query was matching "Project
+    // Warlock" because Jaccard 0.5 (1 shared token / 2 union) passed the
+    // threshold. Single-token queries are inherently too ambiguous for
+    // symmetric similarity scoring. The prefix-match rule rejects this —
+    // neither "warlock" nor "project warlock" is a whole-word prefix of
+    // the other (token order matters).
+    const fixture = {
+      data: {
+        results: [
+          {
+            __typename: 'Product',
+            id: 'EP4389-PROJECTWARLOCK00-PROJWARLOCK00000',
+            name: 'Project Warlock',
+            price: { __typename: 'SkuPrice', basePrice: '€14,99', discountedPrice: '€1,49', discountText: '-90%', isFree: false },
+          },
+        ],
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice('Warlock', 'it-it');
+    expect(p).toBeNull();
+  });
+
+  it('accepts a candidate whose name extends the query as a prefix (Hollow Knight → Voidheart Edition)', async () => {
+    // Same prefix-match rule must still ALLOW edition/expansion suffixes
+    // of the base game — "Hollow Knight" → "Hollow Knight: Voidheart Edition"
+    // is a legitimate cross-platform match.
+    const fixture = {
+      data: {
+        results: [
+          {
+            __typename: 'Product',
+            id: 'EP1003-PPSA00000_00-HOLLOWKNIGHTVH00',
+            name: 'Hollow Knight: Voidheart Edition',
+            price: { __typename: 'SkuPrice', basePrice: '€14,99', discountedPrice: '€7,49', discountText: '-50%', isFree: false },
+          },
+        ],
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice('Hollow Knight', 'it-it');
+    expect(p).not.toBeNull();
+    expect(p!.title).toBe('Hollow Knight: Voidheart Edition');
+  });
+
   it('prefers exact-name match over higher-discount franchise sibling (Gothic 1 Remake regression)', async () => {
     // Andrea reported 2026-06-02: a "Gothic 1 Remake" query was returning the
     // 50%-off Gothic 1 Classic SKU instead of the full-price Remake. Cause:

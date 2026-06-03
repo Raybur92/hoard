@@ -231,20 +231,34 @@ function collectProducts(obj: unknown, sink: ProductWithPrice[] = [], depth = 0)
   return sink;
 }
 
-/** Split a normalised title into tokens, dropping common stop words that vary
- * between storefronts ("The Last of Us Part II" vs "Last of Us Part II"). */
+/** Common stop words stripped before similarity comparison so "The Last of
+ * Us Part II" matches "Last of Us Part II" across storefronts. */
 const STOP_WORDS = new Set(['the', 'a', 'an', 'of', 'and']);
-function titleTokens(normalised: string): Set<string> {
-  return new Set(normalised.split(/\s+/).filter((t) => t.length > 0 && !STOP_WORDS.has(t)));
+
+/** Strip stop words from a normalised title and rejoin with single spaces. */
+function strippedTitle(normalised: string): string {
+  return normalised.split(/\s+/).filter((t) => t.length > 0 && !STOP_WORDS.has(t)).join(' ');
 }
 
-/** Jaccard similarity over two token sets. Range [0, 1]; 1 = identical sets. */
-function jaccardSim(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 && b.size === 0) return 1;
-  let intersection = 0;
-  for (const t of a) if (b.has(t)) intersection++;
-  const union = a.size + b.size - intersection;
-  return union === 0 ? 0 : intersection / union;
+/** Returns true when either string is a whole-word prefix of the other.
+ *
+ * Designed for matching game titles across storefronts where one side
+ * may carry extra qualifiers (edition / DLC mention / subtitle):
+ *
+ *   "Hollow Knight" ⊂ "Hollow Knight: Voidheart Edition"  → true (name extends query)
+ *   "The Witcher 3" ⊂ "The Witcher 3: Wild Hunt"          → true (name extends query)
+ *   "Witcher 3 Wild Hunt Complete" ⊃ "Witcher 3 Wild Hunt" → true (query extends name)
+ *
+ * Critically rejects franchise neighbours that share words but differ
+ * in identity, even though Jaccard similarity would let them through:
+ *
+ *   "Warlock"          vs "Project Warlock"            → false (token order matters)
+ *   "Gothic 1 Remake"  vs "Gothic 1 Classic"           → false (last token differs)
+ *   "Marvel Spider-Man" vs "Spider-Man Miles Morales"  → false (no shared prefix)
+ */
+function prefixMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  return a.startsWith(b + ' ') || b.startsWith(a + ' ');
 }
 
 /**
@@ -300,19 +314,25 @@ export async function getPsnPrice(
   //   - PSN's search returns franchise neighbours (e.g. "Gothic 1 Remake"
   //     query → "Gothic 1 Classic" in results)
   //
-  // Picker priorities (post-2026-06-02 fix — Andrea's Gothic 1 Remake
-  // case showed prior policy picked the wrong franchise entry):
+  // Picker priorities (2026-06-03 — Andrea's Warlock case showed Jaccard
+  // similarity was still too permissive: "Warlock" → "Project Warlock"
+  // shares 1 token / 2 union = 0.5 and slipped through. Switched to a
+  // prefix-match rule that's strict on token order: candidate name must
+  // share a whole-word prefix with the query in either direction):
   //   1. Filter out DLC/microtransaction noise via name keywords
-  //   2. Reject candidates below a Jaccard-similarity threshold so we
-  //      don't return a wrong-game deal when no real match exists
-  //      (Gothic 1 Classic for a "Gothic 1 Remake" query → rejected)
-  //   3. Sort: exact normalised-name match wins, then highest token-
-  //      overlap similarity, then highest discount %, then shortest name
-  //   4. Returns null when no candidate passes the similarity floor —
-  //      a missing PSN deal is far better UX than a wrong one.
+  //   2. Reject candidates that don't share a whole-word prefix with the
+  //      query after stop-word stripping. "Warlock" vs "Project Warlock"
+  //      doesn't share a prefix → rejected. "Hollow Knight" vs "Hollow
+  //      Knight: Voidheart Edition" → accepted (name extends query).
+  //   3. Sort: exact normalised-name match wins, then highest discount %,
+  //      then shortest name (closer to base game).
+  //   4. Returns null when no candidate passes the prefix gate — a
+  //      missing PSN deal is far better UX than a wrong one.
   //
-  // Previous policy sorted by discount % FIRST which let a deeply-
+  // Prior policy sorted by discount % FIRST (4b120aa) which let a deeply-
   // discounted franchise sibling beat the exact-named full-price item.
+  // Then 6b24a34 inverted to exact-match-first with Jaccard fallback but
+  // single-token queries like "Warlock" had too low a Jaccard ceiling.
   const DLC_KEYWORDS = [
     'pack', 'kosmetik', 'punkte', 'currency', 'boost', 'season pass',
     'wäh', 'coin', 'gold', 'silver', 'skin', 'character', 'multiverse-finale',
@@ -323,31 +343,25 @@ export async function getPsnPrice(
     return DLC_KEYWORDS.some((kw) => n.includes(kw));
   };
   const normQuery = normaliseTitle(title);
-  const queryTokens = titleTokens(normQuery);
+  const queryStripped = strippedTitle(normQuery);
   const nonFree = products.filter((p) => !p.price.isFree);
   const eligible = nonFree.filter((p) => !isDlc(p));
   const pool = eligible.length > 0 ? eligible : nonFree;
 
-  // Threshold rationale: 0.5 lets "Hollow Knight" match "Hollow Knight:
-  // Voidheart Edition" (2 shared tokens / 4 total = 0.5) but rejects
-  // "Gothic 1 Classic" for "Gothic 1 Remake" (2 / 4 = 0.5 — boundary;
-  // exact-match bonus saves the day when both Remake and Classic are
-  // in the results). Adjust if franchise pollution gets through.
-  const SIM_THRESHOLD = 0.5;
   const scored = pool.map((p) => {
     const normName = normaliseTitle(p.name);
-    const sim = jaccardSim(queryTokens, titleTokens(normName));
+    const nameStripped = strippedTitle(normName);
     const exactMatch = normName === normQuery;
+    const isPrefixMatch = prefixMatch(queryStripped, nameStripped);
     const pct = p.price.discountText
       ? Math.abs(parseInt(p.price.discountText.replace(/[^0-9]/g, ''), 10))
       : 0;
-    return { p, exactMatch, sim, pct, len: normName.length };
+    return { p, exactMatch, isPrefixMatch, pct, len: normName.length };
   });
-  const filtered = scored.filter((s) => s.exactMatch || s.sim >= SIM_THRESHOLD);
+  const filtered = scored.filter((s) => s.isPrefixMatch);
   if (filtered.length === 0) return null;
   filtered.sort((a, b) => {
     if (a.exactMatch !== b.exactMatch) return a.exactMatch ? -1 : 1;
-    if (a.sim !== b.sim) return b.sim - a.sim;
     if (a.pct !== b.pct) return b.pct - a.pct;
     return a.len - b.len;
   });
