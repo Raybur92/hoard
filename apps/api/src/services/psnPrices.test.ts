@@ -187,6 +187,34 @@ describe('DEALS-PR2.5 — getPsnPrice (title-based search)', () => {
     expect(p).toBeNull();
   });
 
+  it('rejects apostrophe-s neighbour (Warlock\'s Tower regression)', async () => {
+    // Andrea 2026-06-03 (round 2): even after the prefix-match tightening,
+    // "Warlock" query was still picking "Warlock's Tower" because
+    // normaliseTitle replaced the apostrophe with a SPACE — leaving
+    // "warlock s tower" which token-prefix-matches "warlock". Fixed by
+    // stripping apostrophes to empty string FIRST so "Warlock's" → "warlocks"
+    // (one token, no spurious prefix), and "warlock " (with trailing space)
+    // is no longer a prefix of "warlocks tower".
+    const fixture = {
+      data: {
+        results: [
+          {
+            __typename: 'Product',
+            id: 'EP0896-CUSA10740_00-BUNDLEWARLOCKSTO',
+            name: "Warlock's Tower",
+            price: { __typename: 'SkuPrice', basePrice: '€4,99', discountedPrice: '€0,49', discountText: '-90%', isFree: false },
+          },
+        ],
+      },
+    };
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => htmlWith(fixture),
+    });
+    const p = await getPsnPrice('Warlock', 'en-at');
+    expect(p).toBeNull();
+  });
+
   it('rejects franchise sibling that does not share a whole-word prefix (Warlock regression)', async () => {
     // Andrea reported 2026-06-03: a "Warlock" query was matching "Project
     // Warlock" because Jaccard 0.5 (1 shared token / 2 union) passed the

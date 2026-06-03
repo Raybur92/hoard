@@ -187,11 +187,20 @@ export function extractPsnPriceFromHtml(html: string): {
 }
 
 /**
- * Normalise a title for fuzzy matching. Lowercase, strip non-alphanumeric
- * (except spaces), collapse multi-spaces.
+ * Normalise a title for fuzzy matching. Strips apostrophes/curly-quotes
+ * to EMPTY STRING first (they're word-internal — "Warlock's" must become
+ * "warlocks", not the buggy "warlock s" where the residue "s" reads as
+ * a token boundary and lets prefix-match accept "Warlock's Tower" for a
+ * "Warlock" query). Then lowercases + collapses everything else non-
+ * alphanumeric to a single space.
  */
 function normaliseTitle(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return s
+    .toLowerCase()
+    .replace(/['’ʼ]/g, '') // ASCII apostrophe + right single quote + modifier letter apostrophe
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
