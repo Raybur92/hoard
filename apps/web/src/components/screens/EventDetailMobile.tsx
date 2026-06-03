@@ -116,11 +116,11 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
           {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
             <div key={k} style={{ textAlign: 'center', flex: 1 }}>
               <div className="t-mono t-tnum" style={{
-                fontSize: 'var(--text-2xl)', color: 'var(--amber)',
-                lineHeight: 0.85, letterSpacing: '-0.04em',
+                fontSize: 'var(--text-xl)', color: 'var(--amber)',
+                lineHeight: 0.9, letterSpacing: '-0.03em',
               }}>{v}</div>
               <div className="t-faint t-up" style={{
-                fontSize: 'var(--text-3xs)', marginTop: 4, letterSpacing: '0.15em',
+                fontSize: 'var(--text-3xs)', marginTop: 3, letterSpacing: '0.15em',
               }}>{k.toUpperCase()}</div>
             </div>
           ))}

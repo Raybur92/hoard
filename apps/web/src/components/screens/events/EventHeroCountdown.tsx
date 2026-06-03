@@ -39,12 +39,19 @@ export function EventHeroCountdown({ event, onAddToCalendar }: EventHeroCountdow
         // next showcase{away > 0 ? ` · ${away} days away` : ' · airing soon'}
       </Marker>
 
-      {/* Monumental layout — title left, countdown right, both at architectural scale. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 32, marginTop: 16 }}>
-        <div style={{ minWidth: 0, flex: '1 1 280px' }}>
+      {/* Asymmetric layout — title wins flex priority over the countdown so
+          long event names don't get squeezed into vertical columns of text.
+          Title scales down via clamp() for very long names; text-wrap:
+          balance distributes line breaks evenly. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 28, marginTop: 16 }}>
+        <div style={{ minWidth: 0, flex: '3 1 360px' }}>
           <div className="t-display" style={{
-            fontSize: 'var(--text-2xl)', lineHeight: 0.95, color: 'var(--paper)',
-            letterSpacing: '-0.02em',
+            fontSize: 'clamp(var(--text-lg), 3vw, var(--text-xl))',
+            lineHeight: 1.05,
+            color: 'var(--paper)',
+            letterSpacing: '-0.01em',
+            textWrap: 'balance',
+            overflowWrap: 'break-word',
           }}>
             {event.name}
           </div>
@@ -56,15 +63,15 @@ export function EventHeroCountdown({ event, onAddToCalendar }: EventHeroCountdow
         </div>
 
         {cd && (
-          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', gap: 14 }}>
+          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
             {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
               <div key={k} style={{ textAlign: 'center' }}>
                 <div className="t-mono t-tnum" style={{
-                  fontSize: 'var(--text-display-sm)', color: 'var(--amber)',
-                  lineHeight: 0.85, letterSpacing: '-0.04em',
+                  fontSize: 'var(--text-2xl)', color: 'var(--amber)',
+                  lineHeight: 0.9, letterSpacing: '-0.03em',
                 }}>{v}</div>
                 <div className="t-faint t-up" style={{
-                  fontSize: 'var(--text-3xs)', marginTop: 6, letterSpacing: '0.15em',
+                  fontSize: 'var(--text-3xs)', marginTop: 4, letterSpacing: '0.15em',
                 }}>{k.toUpperCase()}</div>
               </div>
             ))}

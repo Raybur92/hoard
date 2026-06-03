@@ -142,13 +142,19 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
         <Marker>// aired {Math.abs(away)} day{Math.abs(away) === 1 ? '' : 's'} ago</Marker>
       )}
 
-      {/* Monumental layout: title and countdown both at architectural scale,
-          asymmetric (title left, digits right). */}
-      <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 32, alignItems: 'flex-end' }}>
-        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+      {/* Title gets flex priority so long event names don't crush into a
+          vertical text column; title scales down via clamp() and uses
+          text-wrap: balance for clean line breaks. */}
+      <div style={{ marginTop: 18, display: 'flex', flexWrap: 'wrap', gap: 28, alignItems: 'flex-end' }}>
+        <div style={{ flex: '3 1 380px', minWidth: 0 }}>
           <h1 className="t-display" style={{
-            margin: 0, fontSize: 'var(--text-display-sm)', lineHeight: 0.92,
-            color: 'var(--paper)', letterSpacing: '-0.03em',
+            margin: 0,
+            fontSize: 'clamp(var(--text-xl), 4vw, var(--text-2xl))',
+            lineHeight: 1.05,
+            color: 'var(--paper)',
+            letterSpacing: '-0.02em',
+            textWrap: 'balance',
+            overflowWrap: 'break-word',
           }}>
             {e.name}
           </h1>
@@ -160,15 +166,15 @@ function DetailHero({ data, onAddToCalendar }: { data: EventDetailResponse; onAd
         </div>
 
         {state === 'upcoming' && cd && (
-          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', gap: 18 }}>
+          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
             {([['d', cd.d], ['h', cd.h], ['m', cd.m], ['s', cd.s]] as [string, string][]).map(([k, v]) => (
               <div key={k} style={{ textAlign: 'center' }}>
                 <div className="t-mono t-tnum" style={{
-                  fontSize: 'var(--text-display)', color: 'var(--amber)',
-                  lineHeight: 0.82, letterSpacing: '-0.05em',
+                  fontSize: 'var(--text-display-sm)', color: 'var(--amber)',
+                  lineHeight: 0.88, letterSpacing: '-0.04em',
                 }}>{v}</div>
                 <div className="t-faint t-up" style={{
-                  fontSize: 'var(--text-3xs)', marginTop: 6, letterSpacing: '0.18em',
+                  fontSize: 'var(--text-3xs)', marginTop: 5, letterSpacing: '0.18em',
                 }}>{k.toUpperCase()}</div>
               </div>
             ))}
