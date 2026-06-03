@@ -352,7 +352,14 @@ export async function getPsnPrice(
   const queryStripped = strippedTitle(normQuery);
   const nonFree = products.filter((p) => !p.price.isFree);
   const eligible = nonFree.filter((p) => !isDlc(p));
-  const pool = eligible.length > 0 ? eligible : nonFree;
+  // Removed 2026-06-03 fallback that re-included DLC when eligible was
+  // empty. Cause: Warlock (the actual game) doesn't exist on PSN — the
+  // only "Warlock"-prefixed non-free SKU is a Bundle/Stories DLC. With
+  // the fallback in place, that DLC re-entered the pool and the picker
+  // accepted it. Now: if every non-free candidate is DLC, return null
+  // (no real game match on PSN). Better to surface no deal than a
+  // wrong-game / DLC deal.
+  const pool = eligible;
 
   const scored = pool.map((p) => {
     const normName = normaliseTitle(p.name);
