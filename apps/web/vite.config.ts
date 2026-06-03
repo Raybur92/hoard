@@ -6,17 +6,23 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (not 'autoUpdate'): a new build does NOT silently swap the
+      // SW. Instead `PWAUpdatePrompt` (useRegisterSW → onNeedRefresh) shows a
+      // "// new version available · reload" toast and only calls
+      // updateServiceWorker(true) — which posts SKIP_WAITING + reloads — when
+      // the user accepts. This replaces the old workbox `skipWaiting: true`
+      // (removed): autoUpdate still left installed iOS standalone PWAs stale
+      // for a launch or two because they don't reliably poll for a new SW.
+      // The component pairs this with an explicit registration.update() on
+      // foreground + interval so deploys actually reach the home-screen app
+      // without the delete-and-re-add dance. (Supersedes the post-Luigi
+      // skipWaiting decision — same goal, reliably delivered + user-visible.)
+      registerType: 'prompt',
       manifest: false, // use existing public/manifest.json
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        // Activate new SW immediately on deploy instead of waiting for every
-        // tab to close. Required so users actually receive bug fixes without
-        // having to hard-refresh — see Luigi's Steam-connect 404 incident.
-        skipWaiting: true,
-        clientsClaim: true,
         runtimeCaching: [
           {
             // Stale-while-revalidate for shell endpoints fired on every nav.

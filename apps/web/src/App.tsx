@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OfflineBanner } from './components/layout/OfflineBanner';
+import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { RequireAuth } from './components/RequireAuth';
 import { RequireActive } from './components/RequireActive';
 import { AppShell } from './components/layout/AppShell';
@@ -82,6 +83,10 @@ export default function App() {
             render error that blocked Gaetano on mobile PSN connect (O12). */}
         <SearchModalProvider>
         <OfflineBanner />
+        {/* SW update toast — owns SW registration (useRegisterSW) and the
+            foreground update-check. Mounted app-wide so a new deploy is
+            offered as a "reload" prompt on every surface. */}
+        <PWAUpdatePrompt />
         <ErrorBoundary>
           <Suspense fallback={<SuspenseFallback />}>
             <Routes>
