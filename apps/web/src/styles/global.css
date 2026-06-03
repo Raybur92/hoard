@@ -760,3 +760,21 @@ select:focus-visible {
 .events-live-pulse {
   animation: events-live-pulse 2s ease-in-out infinite;
 }
+
+/* ---------- events: list row interactive feedback ----------
+   EventListRow uses className="panel event-row" — `.panel` provides the
+   base border/bg, `.event-row` adds the hover/active feedback. Background
+   shifts from --ink to --ink-2 on hover (same step the .panel.raised
+   variant uses, so the visual change reads as 'lift by one elevation
+   notch'). Active state goes one step darker for tap feedback on touch
+   devices. State-specific border colors (live red, upcoming bright)
+   stay intact since we only animate the background. */
+.event-row {
+  transition: background-color 120ms ease;
+}
+.event-row:hover {
+  background: var(--ink-2);
+}
+.event-row:active {
+  background: var(--ink);
+}

@@ -145,23 +145,20 @@ export function EventGameGrid({
   );
 }
 
-/** Lightweight skeleton loader rendered while [load games] is in flight. */
+/** Lightweight skeleton loader rendered while [load games] is in flight.
+ *  Uses the existing `.skel` class (global.css :740) for the breathing
+ *  opacity 0.3 → 0.55 pulse, so the skeleton feels alive rather than
+ *  flatly idle. */
 function SkeletonGrid({ mobile }: { mobile?: boolean }) {
   const cols = mobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(140px, 1fr))';
   const count = mobile ? 4 : 6;
   return (
     <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: cols, gap: 16 }}>
       {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          style={{
-            display: 'flex', flexDirection: 'column', gap: 6,
-            opacity: 0.4,
-          }}
-        >
-          <div style={{ width: '100%', aspectRatio: '140 / 186', background: 'var(--ink-2)', border: '1px solid var(--rule)' }} />
-          <div style={{ height: 10, background: 'var(--ink-2)', width: '80%' }} />
-          <div style={{ height: 8, background: 'var(--ink-2)', width: '60%' }} />
+        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="skel" style={{ width: '100%', aspectRatio: '140 / 186' }} />
+          <div className="skel" style={{ height: 10, width: '80%' }} />
+          <div className="skel" style={{ height: 8, width: '60%' }} />
         </div>
       ))}
     </div>
@@ -191,7 +188,17 @@ function EventGameCard({ game }: { game: EventGameRow }) {
           </div>
         )}
       </div>
-      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--paper)', lineHeight: 1.3, overflow: 'hidden' }}>
+      <div style={{
+        fontSize: 'var(--text-xs)',
+        color: 'var(--paper)',
+        lineHeight: 1.3,
+        // Predictable card heights across the grid — long titles cap at
+        // 2 lines with ellipsis instead of wrapping to 3+ inconsistently.
+        display: '-webkit-box',
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical',
+        overflow: 'hidden',
+      }}>
         {game.name}
       </div>
       {game.announcementType && (

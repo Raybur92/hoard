@@ -50,8 +50,18 @@ export function EventsDesktop() {
 
   return (
     <div className="app-content" style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
-      <header style={{ marginBottom: 24 }}>
-        <Marker>// events · {data.counts.upcoming} upcoming · {data.counts.past} past</Marker>
+      <header style={{ marginBottom: 32 }}>
+        <div className="t-display" style={{
+          fontSize: 'var(--text-xl)',
+          letterSpacing: '0.06em',
+          color: 'var(--paper)',
+          lineHeight: 1,
+        }}>
+          EVENTS
+        </div>
+        <Marker style={{ marginTop: 8 }}>
+          // {data.counts.upcoming} upcoming · {data.counts.past} past
+        </Marker>
       </header>
 
       {isEmpty && (

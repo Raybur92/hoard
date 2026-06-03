@@ -24,7 +24,7 @@ export function EventListRow({ event }: EventListRowProps) {
   return (
     <Link
       to={`/events/${event.slug}`}
-      className="panel"
+      className="panel event-row"
       style={{
         display: 'grid',
         gridTemplateColumns: '32px 1fr auto',
@@ -33,14 +33,33 @@ export function EventListRow({ event }: EventListRowProps) {
         alignItems: 'center',
         textDecoration: 'none',
         color: 'inherit',
-        borderColor: isLive ? 'var(--red-dim)' : 'var(--rule)',
+        // Upcoming rows get a brighter border tone so they read as
+        // "current" against past archive rows. Live still claims the
+        // strongest treatment with --red-dim.
+        borderColor: isLive ? 'var(--red-dim)' : isUpcoming ? 'var(--rule-bright)' : 'var(--rule)',
       }}
     >
-      <div style={{
-        width: 24, height: 24, display: 'grid', placeItems: 'center',
-        background: 'var(--ink-2)', borderRadius: 2, fontSize: 'var(--text-2xs)',
-        color: isLive ? 'var(--red)' : isUpcoming ? 'var(--amber)' : 'var(--paper-dim)',
-      }}>▣</div>
+      {event.logoUrl ? (
+        <img
+          src={event.logoUrl}
+          alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          style={{
+            width: 24,
+            height: 24,
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
+      ) : (
+        <div style={{
+          width: 24, height: 24, display: 'grid', placeItems: 'center',
+          background: 'var(--ink-2)', borderRadius: 2, fontSize: 'var(--text-2xs)',
+          color: isLive ? 'var(--red)' : isUpcoming ? 'var(--amber)' : 'var(--paper-dim)',
+        }}>▣</div>
+      )}
 
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--paper)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
