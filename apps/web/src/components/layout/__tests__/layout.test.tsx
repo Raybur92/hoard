@@ -15,6 +15,8 @@ vi.mock('../../../lib/api', () => ({
     me: vi.fn().mockRejectedValue(new Error('test: no user')),
     platformStatus: vi.fn().mockResolvedValue({ platforms: [] }),
     gameCounts: vi.fn().mockResolvedValue({ counts: {} }),
+    // B-IGDB-3b2 — Sidebar reads lens-index for the browse-by groups.
+    lensIndex: vi.fn().mockResolvedValue({ genre: [], theme: [], perspective: [] }),
     logout: vi.fn().mockResolvedValue(undefined),
   },
 }));
@@ -78,11 +80,11 @@ describe('MobileFrame', () => {
 });
 
 describe('MobileTabBar', () => {
-  it('renders 4 tabs', () => {
+  it('renders 5 tabs (Dash / Library / Soon / Events / Deals per EV-D14)', () => {
     const { container } = render(
       <MemoryRouter><MobileTabBar /></MemoryRouter>,
     );
-    expect(container.querySelectorAll('.item')).toHaveLength(4);
+    expect(container.querySelectorAll('.item')).toHaveLength(5);
   });
 
   it('marks active tab', () => {

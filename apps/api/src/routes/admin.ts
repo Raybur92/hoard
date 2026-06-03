@@ -663,6 +663,31 @@ router.get('/admin/deals/probe', async (req: Request, res: Response): Promise<vo
   }
 });
 
+/* ── Events sync (EV-PR1 / docs/EVENTS_PLAN.md §6) ──────────────────── */
+
+// POST /api/admin/events/sync
+//
+// Manual trigger for the IGDB showcase-events sync. Cron does the same
+// work nightly (EV-D1); this endpoint exists so the admin can refresh
+// after a fresh event lands without waiting for the next nightly run.
+//
+// Different surface from `GET /api/admin/events` below — that one is the
+// TELEMETRY UserEvent feed (TL-D10). Same path string, different method.
+//
+// Long-running (up to a few minutes for a 500-event batch with cold IGDB
+// caches); admin should expect a slow response.
+router.post('/admin/events/sync', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { syncAllEvents } = await import('../services/events');
+    const result = await syncAllEvents(prisma);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[admin/events/sync] sync failed:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
 /* ── Events / Telemetry (TL1.3 of docs/TELEMETRY_PLAN.md) ────── */
 
 // GET /api/admin/events
