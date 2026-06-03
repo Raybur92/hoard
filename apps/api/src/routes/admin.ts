@@ -596,6 +596,8 @@ router.get('/admin/deals/probe-psn', async (req: Request, res: Response): Promis
       locale,
       totalProductsFound: products.length,
       first3: products.slice(0, 3),
+      // All products, lightweight shape — used for picker diagnosis.
+      allProductsLite: products.map((p) => ({ name: p.name, id: p.id, __typename: p.__typename })),
       fullFirstProduct,
     });
   } catch (err) {
