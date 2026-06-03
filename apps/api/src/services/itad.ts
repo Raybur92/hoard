@@ -181,15 +181,23 @@ export async function getPricesForGames(
 }
 
 /**
- * Fetch ITAD's full shop catalog. Per the canonical docs the path is
- * `/shops/v1` (no `/service/` prefix); response is an array of
- * `{ id, name }` entries. Not currently called by the orchestrator —
- * the storefront classifier matches by shop NAME from `/games/prices/v3`
- * responses directly — but exposed for diagnostic + future filter-chip
- * work.
+ * Fetch ITAD's full shop catalog. Per the canonical ITAD v2 API docs
+ * the path is `/service/shops/v1` (an older comment in this file said
+ * "no /service/ prefix" — that was wrong; ITAD's actual endpoint
+ * 404s without it). Response is an array of `{ id, title }` entries.
+ * Used by syncDeals.ts to resolve the storefront allow-list (defined
+ * in storefronts.ts by name) to numeric IDs we then pass as the
+ * `shops` filter to /games/prices/v3 — broadens coverage to include
+ * Tier-2 resellers (GMG / Kinguin / CDKeys / Humble Bundle / Instant
+ * Gaming) which are excluded from ITAD's default popular subset.
+ *
+ * Requires `country` query param per ITAD's v2 schema (the shop list
+ * is technically market-scoped because not every reseller operates
+ * everywhere); we pass 'US' as the broad-coverage market here since
+ * the classifier matches by name regardless of region.
  */
 export async function getShops(): Promise<ItadShop[]> {
-  return await itadFetch<ItadShop[]>('/shops/v1', {});
+  return await itadFetch<ItadShop[]>('/service/shops/v1', { country: 'US' });
 }
 
 /* ── DEALS-PR2 — bundles ──────────────────────────────────────── */

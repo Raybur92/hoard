@@ -67,8 +67,9 @@ async function getAllowedShopIds(): Promise<number[]> {
       `[deals-sync] /shops/v1 → ${shops.length} total, ${allowedShopIdsCache.length} in allow-list`,
     );
   } catch (err) {
+    const status = err instanceof ItadClientError ? err.status : undefined;
     console.error(
-      '[deals-sync] /shops/v1 failed — falling back to ITAD default subset:',
+      `[deals-sync] /service/shops/v1 failed${status ? ` (status=${status})` : ''} — falling back to ITAD default subset:`,
       err instanceof Error ? err.message : err,
     );
     allowedShopIdsCache = [];
