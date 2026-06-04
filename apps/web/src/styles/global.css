@@ -630,11 +630,13 @@ select:focus-visible {
   border-top: 1px solid var(--rule);
   background: var(--ink);
   flex-shrink: 0;
-  /* Home-indicator clearance is handled at the outer `.app-mobile` container
-     (padding-bottom: env(safe-area-inset-bottom)) so the gesture zone shows
-     page bg, not tab-bar bg. This way the tab bar visually anchors flush to
-     the bottom of the content area instead of looking like it has empty
-     padding below its items. */
+  /* Own the home-indicator inset HERE (not on .app-mobile) so the tab-bar
+     BACKGROUND extends all the way to the screen bottom, with the icons/labels
+     lifted above the home indicator. This anchors the bar flush to the bottom
+     edge — the standard iOS tab-bar pattern. The earlier approach (inset on
+     the shell) left a void strip of page bg below the bar that read as the bar
+     "floating above the bottom border" (Andrea, 2026-06-03). */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .m-tabbar .item {
   display: flex;
@@ -726,12 +728,10 @@ select:focus-visible {
   /* clear the notch / Dynamic Island; the OS already paints its own
      status bar via apple-mobile-web-app-status-bar-style=black-translucent */
   padding-top: env(safe-area-inset-top);
-  /* clear the iOS home-indicator gesture region BELOW the tab bar so the
-     bar visually anchors to the bottom of the content area (page bg fills
-     the gesture zone). Previous version painted tab-bar bg through the
-     gesture zone, which read as "the tab bar has empty space below its
-     items and isn't anchored to the bottom." */
-  padding-bottom: env(safe-area-inset-bottom);
+  /* No bottom padding here — the home-indicator inset is owned by .m-tabbar
+     so the tab-bar background extends to the true screen bottom (see there).
+     Putting it on the shell left a void strip of page bg below the bar that
+     read as the bar "floating above the bottom edge" (Andrea, 2026-06-03). */
 }
 .app-mobile-content {
   flex: 1;
