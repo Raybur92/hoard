@@ -1,4 +1,4 @@
-name: test-db-keepalive
+name: db-keepalive
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   issues: write
 
 jobs:
-  ping:
+  ping-test-db:
     runs-on: ubuntu-latest
     steps:
       - name: Ping test DB (3 attempts, 30s backoff)
@@ -42,29 +42,12 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          # All gh commands below pass --repo "$GH_REPO" explicitly. This
-          # workflow doesn't checkout the repo (the ping job has no code to
-          # run against), so gh has no git context to infer the target from.
-          # Without --repo, every gh call exits with
-          # "failed to run git: fatal: not a git repository" — the actual
-          # failure mode Andrea hit during Phase C step 2 verification.
-          # GH_REPO env is also honored by gh as a fallback, but the
-          # explicit flag is clearer at each call site.
-          #
-          # Ensure the canonical label exists — idempotent, succeeds whether
-          # the label was created earlier (manually or by a previous run) or
-          # never existed. `|| true` swallows the "already exists" error so
-          # `set -e` doesn't bail; `2>/dev/null` keeps the log clean when the
-          # label IS already there.
           echo "→ ensuring infra:test-db label exists (idempotent)"
           gh label create 'infra:test-db' \
             --repo "$GH_REPO" \
             --description 'Test database operational issues' \
             --color FBCA04 \
             2>/dev/null || true
-          # Lookup must match BOTH the label AND the exact title.
-          # Label-only could pick a stale historical issue with the same label;
-          # title-only could miss when label hygiene drifts.
           echo "→ checking for existing open canonical issue"
           existing=$(gh issue list \
             --repo "$GH_REPO" \
@@ -88,6 +71,72 @@ jobs:
               --body "Test DB keepalive Action failed at $timestamp.
 
           Check Supabase dashboard; manual unpause may be needed.
+          Latest run: $RUN_URL"
+          fi
+          echo "✓ issue-opening step complete"
+
+  ping-prod-db:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping production DB (3 attempts, 30s backoff)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is not set"
+            exit 1
+          fi
+          # Strip Prisma-specific query params (pgbouncer, connection_limit) for libpq.
+          PSQL_URL="${DATABASE_URL%%\?*}"
+          for attempt in 1 2 3; do
+            if psql "$PSQL_URL" -c "SELECT 1" > /dev/null 2>&1; then
+              echo "✓ prod DB is awake (attempt $attempt)"
+              exit 0
+            fi
+            echo "× attempt $attempt failed, retrying in 30s..."
+            sleep 30
+          done
+          echo "::error::prod DB ping failed after 3 attempts"
+          exit 1
+
+      - name: Open or update canonical issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          CANONICAL_TITLE: '[infra] prod-db keepalive failing'
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          echo "→ ensuring infra:prod-db label exists (idempotent)"
+          gh label create 'infra:prod-db' \
+            --repo "$GH_REPO" \
+            --description 'Production database operational issues' \
+            --color E11D48 \
+            2>/dev/null || true
+          echo "→ checking for existing open canonical issue"
+          existing=$(gh issue list \
+            --repo "$GH_REPO" \
+            --label 'infra:prod-db' \
+            --state open \
+            --json number,title \
+            --jq ".[] | select(.title == \"$CANONICAL_TITLE\") | .number" \
+            | head -n 1)
+          timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if [ -n "$existing" ]; then
+            echo "→ existing issue #$existing — commenting"
+            gh issue comment "$existing" \
+              --repo "$GH_REPO" \
+              --body "Keepalive failed at $timestamp. Run: $RUN_URL"
+          else
+            echo "→ no existing issue — creating canonical issue"
+            gh issue create \
+              --repo "$GH_REPO" \
+              --title "$CANONICAL_TITLE" \
+              --label 'infra:prod-db' \
+              --body "Production DB keepalive Action failed at $timestamp. Supabase project may be paused.
+
+          Go to https://supabase.com/dashboard and resume the hoard project.
           Latest run: $RUN_URL"
           fi
           echo "✓ issue-opening step complete"
