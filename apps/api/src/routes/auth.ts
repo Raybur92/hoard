@@ -261,6 +261,8 @@ router.get('/auth/google', (_req: Request, res: Response): void => {
 router.get('/auth/google/callback', async (req: Request, res: Response): Promise<void> => {
   const code = typeof req.query['code'] === 'string' ? req.query['code'] : null;
   if (!code) {
+    const googleError = typeof req.query['error'] === 'string' ? req.query['error'] : 'no_code';
+    console.error('[auth] Google OAuth callback without code:', googleError);
     res.redirect(`${WEB_URL}/login?error=google_failed`);
     return;
   }
@@ -277,13 +279,19 @@ router.get('/auth/google/callback', async (req: Request, res: Response): Promise
         grant_type: 'authorization_code',
       }).toString(),
     });
-    if (!tokenRes.ok) throw new Error('Token exchange failed');
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text().catch(() => '<unreadable>');
+      throw new Error(`Token exchange failed (${tokenRes.status}): ${body}`);
+    }
     const tokenData = await tokenRes.json() as { access_token: string };
 
     const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
-    if (!userInfoRes.ok) throw new Error('User info fetch failed');
+    if (!userInfoRes.ok) {
+      const body = await userInfoRes.text().catch(() => '<unreadable>');
+      throw new Error(`User info fetch failed (${userInfoRes.status}): ${body}`);
+    }
     const googleUser = await userInfoRes.json() as { id: string; email: string; name: string };
 
     // Connect mode: associate Google account with the currently logged-in user
