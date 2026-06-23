@@ -65,8 +65,18 @@ async function main(): Promise<void> {
 
     // Purge globally-expired deal rows that individual orchestrators may have
     // missed (each orchestrator only cleans up shops it re-fetched).
-    const purged = await prisma.deal.deleteMany({ where: { expiresAt: { lt: new Date() } } });
-    if (purged.count > 0) console.log(`[cron/daily] purged ${purged.count} expired deal rows`);
+    const now = new Date();
+    const purgedExpired = await prisma.deal.deleteMany({ where: { expiresAt: { lt: now } } });
+    if (purgedExpired.count > 0) console.log(`[cron/daily] purged ${purgedExpired.count} expired deal rows`);
+
+    // Purge stale Deal rows not refreshed in the last 7 days. When a
+    // sale ends and ITAD returns the shop at full price (0% discount),
+    // the per-game cleanup now correctly handles it (seenShopIds only
+    // contains shops with active discounts). This is belt-and-suspenders
+    // for games that were out of sync scope or hit a network error.
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const purgedStale = await prisma.deal.deleteMany({ where: { fetchedAt: { lt: sevenDaysAgo } } });
+    if (purgedStale.count > 0) console.log(`[cron/daily] purged ${purgedStale.count} stale deal rows (fetchedAt > 7d ago)`);
 
     const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
     console.log(

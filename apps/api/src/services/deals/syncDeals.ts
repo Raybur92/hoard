@@ -264,7 +264,6 @@ async function applyPriceData(gameId: string, prices: ItadGamePrices, marketCode
     const shopName = deal.shop.name;
     if (!isShopInScope(shopName)) continue;
     const shopIdStr = String(deal.shop.id);
-    seenShopIds.add(shopIdStr);
 
     const currentPrice = deal.price.amount;
     const originalPrice = deal.regular.amount;
@@ -286,10 +285,13 @@ async function applyPriceData(gameId: string, prices: ItadGamePrices, marketCode
     });
     snapshotsCreated++;
 
-    // Only upsert Deal when there's an actual discount. If cut === 0
-    // we'd have a "deal" that isn't a deal — keep `Deal` semantics
-    // tied to active discounts.
+    // Only upsert Deal — and only mark the shop as "seen" (protecting
+    // it from the stale-row cleanup below) — when there's an actual
+    // discount. A shop returning full price (discountPct === 0) means
+    // its previous sale has ended; we must NOT add it to seenShopIds
+    // so the cleanup below deletes any lingering Deal row.
     if (discountPct > 0) {
+      seenShopIds.add(shopIdStr);
       const isTrendingDown = await computeTrendingDown(gameId, shopIdStr, marketCode);
       await prisma.deal.upsert({
         where: { gameId_shopId_marketCode: { gameId, shopId: shopIdStr, marketCode } },
