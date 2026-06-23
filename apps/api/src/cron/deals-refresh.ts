@@ -63,6 +63,11 @@ async function main(): Promise<void> {
     const psn = await syncAllPsnDeals();
     console.log('[cron/daily] step 5/5 done:', psn);
 
+    // Purge globally-expired deal rows that individual orchestrators may have
+    // missed (each orchestrator only cleans up shops it re-fetched).
+    const purged = await prisma.deal.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+    if (purged.count > 0) console.log(`[cron/daily] purged ${purged.count} expired deal rows`);
+
     const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
     console.log(
       `[cron/daily] complete in ${elapsedSec}s — ` +

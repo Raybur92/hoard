@@ -135,8 +135,12 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     });
     effectiveMarket = admin?.marketCode ?? 'US';
   }
+  const now = new Date();
   const deals = await prisma.deal.findMany({
-    where: { marketCode: effectiveMarket },
+    where: {
+      marketCode: effectiveMarket,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
     include: {
       game: { select: { id: true, igdbId: true, title: true, coverUrl: true, heroImageUrl: true } },
     },
