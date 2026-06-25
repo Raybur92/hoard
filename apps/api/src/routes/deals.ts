@@ -1,5 +1,5 @@
 /**
- * DEALS-PR1 — `/api/deals` route.
+ * DEALS-PR1 — `/api/deals` route. 2026-06-25 redeploy.
  *
  * Returns the per-user payload for the Library OVERVIEW deals page:
  *   - topWishlistDeal: highest-discount wishlist deal (hero card)
