@@ -55,7 +55,11 @@ const subs = new Map<string, Set<() => void>>();
 // v6 → v7 (DEALS bundles-all): bundles changed from "library/wishlist-filtered"
 // to "all active bundles." Stale v6 entries carry only the old filtered subset
 // (e.g. 5 of 15) and would hide the new full bundle list until expiry.
-const STORAGE_PREFIX = 'hoard:cache:v7:';
+// v7 → v8 (deals market-filter): GamesPlanet FR/UK/US rows were saved under
+// marketCode='AT' before the sync-time filter landed. Stale v7 entries fetched
+// from the old backend (before 6b2a7aa deployed) still carry those wrong shops.
+// Bumping forces a cold refetch so users see only region-correct stores.
+const STORAGE_PREFIX = 'hoard:cache:v8:';
 
 /**
  * Per-entry size cap when writing to localStorage (UTF-16 chars in the

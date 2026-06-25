@@ -1,4 +1,7 @@
-# touch 2026-06-02 DEALS-PR2.5 — deals route library-scope fix.
+# touch 2026-06-25 deals market-filter + bundles-all.
+# 6b2a7aa (market-restricted storefronts) and f430ada (all-bundles strip)
+# were not picked up by Railway Watch Paths. Touch forces the webhook so
+# both commits deploy and the wrong-shop + 5-bundles bugs are resolved.
 # Previous build (ac1ab02) was manually cancelled mid-flight; empty
 # commit retry was skipped by Watch Paths. Manual railway.toml touch
 # forces the webhook so commit ac1ab02 actually deploys.
