@@ -107,6 +107,7 @@ app.get('/health', async (_req: Request, res: Response): Promise<void> => {
     status: 'ok',
     db: dbStatus,
     uptime: Math.floor((Date.now() - startTime) / 1000),
+    commit: process.env['RAILWAY_GIT_COMMIT_SHA']?.slice(0, 7) ?? 'local',
   });
 });
 
