@@ -11,6 +11,7 @@ import { Btn } from '../primitives/Btn';
 import { Gauge } from '../primitives/Gauge';
 import { AlertsStrip } from './dashboard/AlertsStrip';
 import { NextReleaseCountdown } from './dashboard/NextReleaseCountdown';
+import { NextEventCountdown } from './dashboard/NextEventCountdown';
 import { PeriodToggle } from './dashboard/PeriodToggle';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -93,7 +94,7 @@ export function DashboardMobile() {
 
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
-  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] }, wishlistDealsCount = 0 } = resolvedData;
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] }, wishlistDealsCount = 0, nextEvent = null } = resolvedData;
   // B-IGDB-3 — defensive fallback for the new IGDB-tag triple fields.
   // Old cached payloads (SW / in-memory SWR) from before the partial PR
   // don't carry these. See DashboardDesktop's matching comment.
@@ -249,6 +250,13 @@ export function DashboardMobile() {
         {nextRelease && (
           <div data-testid="card-next-release" style={{ padding: '0 16px 12px' }}>
             <NextReleaseCountdown release={nextRelease} />
+          </div>
+        )}
+
+        {/* EV-PR1 — next IGDB showcase event */}
+        {nextEvent && (
+          <div data-testid="card-next-event" style={{ padding: '0 16px 12px' }}>
+            <NextEventCountdown event={nextEvent} />
           </div>
         )}
 

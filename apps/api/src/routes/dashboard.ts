@@ -10,10 +10,13 @@ import type {
   DashboardPeriodStats,
   DashboardResponse,
   DashboardStats,
+  EventListRow,
+  EventState,
   PlatformStat,
   Platform,
   ReleaseDateCategory,
 } from '@hoard/types';
+import { getEventState } from '../services/events';
 
 const router = Router();
 
@@ -91,6 +94,7 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     aggUserGames,
     wishlistReleases,
     platforms,
+    nextEventRaw,
   ] = await Promise.all([
     prisma.userGame.groupBy({
       by: ['status'],
@@ -158,6 +162,34 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
       take: 5,
     }),
     prisma.platform.findMany({ where: { userId } }),
+    // EV-PR1 — next upcoming or live event for the bento span-3 slot.
+    // "Live" events have startTime in the past but endTime > now (or
+    // startTime within the 4h fallback window). Sort ascending so the
+    // soonest event is always first.
+    prisma.event.findFirst({
+      where: {
+        OR: [
+          { startTime: { gte: new Date() } },
+          {
+            startTime: { gte: new Date(Date.now() - 4 * 3_600_000) },
+            endTime: null,
+          },
+          { endTime: { gte: new Date() } },
+        ],
+      },
+      orderBy: { startTime: 'asc' },
+      select: {
+        slug: true,
+        name: true,
+        startTime: true,
+        endTime: true,
+        liveStreamUrl: true,
+        logoUrl: true,
+        networks: true,
+        gamesResolvedAt: true,
+        _count: { select: { games: true } },
+      },
+    }),
   ]);
 
   // Shelf counts (and totalGames derived from sum)
@@ -400,6 +432,26 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     ? 0
     : await prisma.deal.count({ where: { gameId: { in: wishlistGameIds } } });
 
+  // EV-PR1 — map the raw Prisma event row to EventListRow for the bento
+  // next-event countdown card.
+  let nextEvent: EventListRow | null = null;
+  if (nextEventRaw) {
+    const startIso = nextEventRaw.startTime.toISOString();
+    const endIso = nextEventRaw.endTime?.toISOString() ?? null;
+    nextEvent = {
+      slug: nextEventRaw.slug,
+      name: nextEventRaw.name,
+      startTime: startIso,
+      endTime: endIso,
+      liveStreamUrl: nextEventRaw.liveStreamUrl,
+      logoUrl: nextEventRaw.logoUrl,
+      networks: nextEventRaw.networks as Array<{ name: string; type: string; url: string | null }>,
+      gameCount: nextEventRaw._count.games,
+      gamesResolvedAt: nextEventRaw.gamesResolvedAt?.toISOString() ?? null,
+      state: getEventState({ startTime: startIso, endTime: endIso }) as EventState,
+    };
+  }
+
   const body: DashboardResponse = {
     stats,
     nowPlaying,
@@ -409,6 +461,7 @@ router.get('/dashboard', requireUser, requireActive, async (req: Request, res: R
     platforms: mappedPlatforms,
     activity,
     wishlistDealsCount,
+    nextEvent,
   };
 
   res.json(body);

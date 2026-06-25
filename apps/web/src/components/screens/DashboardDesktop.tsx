@@ -12,6 +12,7 @@ import { Heatmap } from '../primitives/Heatmap';
 import { Gauge } from '../primitives/Gauge';
 import { AlertsStrip } from './dashboard/AlertsStrip';
 import { NextReleaseCountdown } from './dashboard/NextReleaseCountdown';
+import { NextEventCountdown } from './dashboard/NextEventCountdown';
 import { PeriodToggle } from './dashboard/PeriodToggle';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -148,7 +149,7 @@ export function DashboardDesktop() {
 
   // `activity` is required in the new DashboardResponse, but old cached
   // payloads (SW or in-memory) from before F14 may not have it — fall back.
-  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] }, wishlistDealsCount = 0 } = resolvedData;
+  const { stats, nowPlaying, wishlistCountdown, backlogPick, backlogItems, platforms, activity = { weeks: 24, cells: [] }, wishlistDealsCount = 0, nextEvent = null } = resolvedData;
   // B-IGDB-3 — defensive fallback for the new IGDB-tag triple fields.
   // Old cached payloads (Service Worker / in-memory SWR) from before the
   // partial PR don't carry these; without the fallback, the breakdown card
@@ -373,6 +374,11 @@ export function DashboardDesktop() {
             <div data-testid="card-next-release" style={{ gridColumn: 'span 3' }}>
               <NextReleaseCountdown release={nextRelease} />
             </div>
+          )}
+
+          {/* EV-PR1 — next IGDB showcase event (span-3, fills the empty 3-col tail of row 1) */}
+          {nextEvent && (
+            <NextEventCountdown event={nextEvent} />
           )}
 
           {/* Row 2 — three span-4 stat cards: backlog picker · completion · achievements */}

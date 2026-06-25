@@ -476,6 +476,22 @@ export const api = {
       const suffix = qs.toString() ? `?${qs.toString()}` : '';
       return get<UserEventListResponse>(`/api/admin/events${suffix}`);
     },
+
+    // EV-PR1 — trigger a full IGDB showcase/industry event sync.
+    // Backend endpoint at POST /api/admin/events/sync (admin.ts).
+    // Returns { upserted, linkedGames, errors } from syncAllEvents().
+    // Invalidates the public events cache so the /events page reflects
+    // the new data without a stale-while-revalidate delay.
+    syncIgdbEvents: async (): Promise<{ upserted: number; linkedGames: number; errors: number }> => {
+      const res = await fetch(url('/api/admin/events/sync'), { method: 'POST', credentials: 'include' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      cache.invalidate('events');
+      const r = await res.json() as { upserted: number; linkedGames: number; errors: number };
+      return r;
+    },
   },
 
   // F1.2 → F1.3 of docs/FEEDBACK_PLAN.md. The L2 layer of the user-research

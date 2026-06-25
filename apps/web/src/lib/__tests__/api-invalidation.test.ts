@@ -46,9 +46,10 @@ describe('api mutation invalidation', () => {
     cache.set('dashboard', { stats: 'old' });
     cache.set('game:abc', { id: 'abc', stale: true });
 
-    // mock fetch returns the updated game body
+    // mock fetch returns the updated game body (must include game.igdbId for
+    // GD-PR3's V2 cache write-through via `game:igdb:${updated.game.igdbId}`)
     globalThis.fetch = vi.fn(async () =>
-      new Response(JSON.stringify({ id: 'abc', notes: 'fresh' }), { status: 200, headers: { 'content-type': 'application/json' } })
+      new Response(JSON.stringify({ id: 'abc', notes: 'fresh', game: { igdbId: 99 } }), { status: 200, headers: { 'content-type': 'application/json' } })
     ) as unknown as typeof fetch;
 
     await api.patchGame('abc', { notes: 'fresh' });

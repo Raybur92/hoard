@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAdminUsers } from '../../../hooks/useAdminUsers';
 import { useAdminInviteCodes } from '../../../hooks/useAdminInviteCodes';
 import { useAdminFeedback } from '../../../hooks/useAdminFeedback';
 import * as cache from '../../../lib/cache';
+import { api } from '../../../lib/api';
 
 // Admin-IA redesign (2026-05-29): sidebar + outlet layout, replaces the
 // monolithic single-column AdminScreen. Each sub-route renders its own
@@ -75,6 +76,8 @@ export function AdminLayout() {
   const { data: usersData } = useAdminUsers();
   const { data: codesData } = useAdminInviteCodes();
   const { items: feedback, unreadCount } = useAdminFeedback();
+  const [syncingEvents, setSyncingEvents] = useState(false);
+  const [syncEventsResult, setSyncEventsResult] = useState<string | null>(null);
 
   const users = useMemo(() => usersData?.users ?? [], [usersData]);
   const codes = useMemo(() => codesData?.codes ?? [], [codesData]);
@@ -109,6 +112,20 @@ export function AdminLayout() {
   // the new payload lands.
   const refresh = () => cache.invalidate('admin:');
 
+  // EV-PR1 — IGDB showcase/industry event sync trigger.
+  async function handleSyncEvents() {
+    setSyncingEvents(true);
+    setSyncEventsResult(null);
+    try {
+      const result = await api.admin.syncIgdbEvents();
+      setSyncEventsResult(`// ${result.upserted} upserted · ${result.linkedGames} games linked · ${result.errors} errors`);
+    } catch (e) {
+      setSyncEventsResult(`// error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSyncingEvents(false);
+    }
+  }
+
   return (
     <div className="thin-scroll" style={{ flex: 1, overflow: 'auto' }}>
       <div style={{ padding: '32px 40px 48px', display: 'grid', gridTemplateColumns: '200px 1fr', gap: 32, alignItems: 'start' }}>
@@ -125,7 +142,7 @@ export function AdminLayout() {
           <nav aria-label="Admin sections" style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)' }}>
             {items.map((it) => <NavRow key={it.to} item={it} />)}
           </nav>
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <button
               type="button"
               onClick={refresh}
@@ -138,10 +155,39 @@ export function AdminLayout() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.12em',
                 padding: 6,
+                textAlign: 'left',
               }}
             >
               [refresh]
             </button>
+            <button
+              type="button"
+              onClick={() => void handleSyncEvents()}
+              disabled={syncingEvents}
+              className="t-mono t-faint"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: syncingEvents ? 'default' : 'pointer',
+                fontSize: 'var(--text-xs)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                padding: 6,
+                textAlign: 'left',
+                opacity: syncingEvents ? 0.5 : 1,
+              }}
+              aria-label="Sync IGDB showcase and industry events"
+            >
+              {syncingEvents ? '[syncing events…]' : '[sync igdb events]'}
+            </button>
+            {syncEventsResult && (
+              <div
+                className="t-mono t-faint"
+                style={{ fontSize: 'var(--text-2xs)', padding: '4px 6px', lineHeight: 1.5 }}
+              >
+                {syncEventsResult}
+              </div>
+            )}
           </div>
         </aside>
 

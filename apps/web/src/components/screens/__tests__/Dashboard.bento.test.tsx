@@ -127,6 +127,7 @@ const sampleData = (overrides: Partial<DashboardResponse> = {}): DashboardRespon
   ],
   activity: { weeks: 24, cells: new Array(24 * 7).fill(0) },
   wishlistDealsCount: 0,
+  nextEvent: null,
   ...overrides,
 });
 
@@ -689,5 +690,53 @@ describe('DashboardDesktop — B-IGDB-3 breakdown 3-tab strip', () => {
     const perspectiveTab = Array.from(card.querySelectorAll('[role="tab"]'))
       .find((t) => t.textContent?.trim() === 'perspective') as HTMLButtonElement;
     expect(perspectiveTab.disabled).toBe(true);
+  });
+});
+
+/* ── EV-PR1 — nextEvent bento card ── */
+describe('Dashboard — EV-PR1 nextEvent card', () => {
+  it('renders card-next-event when nextEvent data is present', async () => {
+    const futureDate = new Date(Date.now() + 48 * 3_600_000).toISOString();
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sampleData({
+        nextEvent: {
+          slug: 'state-of-play-2026',
+          name: 'State of Play 2026',
+          startTime: futureDate,
+          endTime: null,
+          liveStreamUrl: 'https://youtu.be/abc',
+          logoUrl: null,
+          networks: [{ name: 'PlayStation', type: 'broadcast', url: null }],
+          gameCount: 14,
+          gamesResolvedAt: null,
+          state: 'upcoming' as const,
+        },
+      }),
+    );
+
+    const { findByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    const card = await findByTestId('card-next-event');
+    expect(card).not.toBeNull();
+    expect(card.textContent).toContain('State of Play 2026');
+  });
+
+  it('hides card-next-event when nextEvent is null', async () => {
+    (api.dashboard as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sampleData({ nextEvent: null }),
+    );
+
+    const { findByTestId, queryByTestId } = render(
+      <Providers>
+        <DashboardDesktop />
+      </Providers>,
+    );
+
+    await findByTestId('bento-grid');
+    expect(queryByTestId('card-next-event')).toBeNull();
   });
 });

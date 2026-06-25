@@ -12,6 +12,8 @@ jest.mock('@hoard/db', () => ({
     wishlistRelease: { findMany: jest.fn() },
     // DEALS-PR1 — dashboard tallies wishlistDealsCount via prisma.deal.count
     deal: { count: jest.fn() },
+    // EV-PR1 — dashboard queries next upcoming/live event for the bento card
+    event: { findFirst: jest.fn() },
   },
 }));
 
@@ -32,6 +34,9 @@ import { prisma } from '@hoard/db';
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // EV-PR1 — default to no scheduled events so every test that doesn't
+  // specifically exercise the nextEvent field stays valid.
+  (prisma.event.findFirst as jest.Mock).mockResolvedValue(null);
 });
 
 const makeUserGame = (overrides: Partial<{ id: string; status: string; mainStory: number | null }> = {}) => ({
@@ -144,6 +149,8 @@ function setupDashboard({
   // DEALS-PR1 — wishlistDealsCount via prisma.deal.count; default 0 for tests
   // that don't care about the deals tally.
   (prisma.deal.count as jest.Mock).mockResolvedValue(0);
+  // EV-PR1 — next event; default null (no events scheduled).
+  (prisma.event.findFirst as jest.Mock).mockResolvedValue(null);
 }
 
 describe('GET /api/dashboard', () => {
@@ -566,5 +573,40 @@ describe('GET /api/dashboard — DASH-PR2 period scoping', () => {
     // Period-scoped subset is empty (everything is last year)
     expect(res.body.stats.periodStats.completedCount).toBe(0);
     expect(res.body.stats.periodStats.totalGames).toBe(0);
+  });
+});
+
+describe('GET /api/dashboard — EV-PR1 nextEvent field', () => {
+  it('returns nextEvent: null when no events are scheduled', async () => {
+    setupDashboard({});
+    (prisma.event.findFirst as jest.Mock).mockResolvedValue(null);
+
+    const res = await request(app).get('/api/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.body.nextEvent).toBeNull();
+  });
+
+  it('includes nextEvent when an upcoming event exists in the DB', async () => {
+    setupDashboard({});
+    const futureTime = new Date(Date.now() + 48 * 3_600_000);
+    (prisma.event.findFirst as jest.Mock).mockResolvedValue({
+      slug: 'state-of-play-2026',
+      name: 'State of Play 2026',
+      startTime: futureTime,
+      endTime: null,
+      liveStreamUrl: 'https://youtu.be/abc',
+      logoUrl: null,
+      networks: [{ name: 'PlayStation', type: 'broadcast', url: null }],
+      gamesResolvedAt: null,
+      _count: { games: 12 },
+    });
+
+    const res = await request(app).get('/api/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.body.nextEvent).not.toBeNull();
+    expect(res.body.nextEvent.slug).toBe('state-of-play-2026');
+    expect(res.body.nextEvent.name).toBe('State of Play 2026');
+    expect(res.body.nextEvent.gameCount).toBe(12);
+    expect(res.body.nextEvent.state).toBe('upcoming');
   });
 });

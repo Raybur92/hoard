@@ -549,6 +549,10 @@ export interface DashboardResponse {
   /** DEALS-PR1 — Dashboard alerts-strip callout: number of currently
    *  active deals on the user's wishlist. 0 = no callout rendered. */
   wishlistDealsCount: number;
+  /** EV-PR1 — next upcoming or live IGDB showcase event. Null when no
+   *  events are scheduled in the DB (table empty or all past). Powers
+   *  the span-3 bento card in row 1 of the Dashboard grid. */
+  nextEvent: EventListRow | null;
 }
 
 /** DEALS-PR1 — per-Deal payload returned by `/api/deals`. One row per
