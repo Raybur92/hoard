@@ -100,3 +100,45 @@ export function isShopInScope(name: string): boolean {
 export function isReseller(name: string): boolean {
   return classifyShop(name) === 'reseller';
 }
+
+/**
+ * Shops that are geo-restricted to specific markets.
+ * Key: normalised shop name (lowercase, trimmed).
+ * Value: set of ISO 3166-1 alpha-2 market codes that shop actually serves.
+ *
+ * Shops NOT in this map are considered globally available and are shown in
+ * every market. Only add a shop here when it is KNOWN to be region-locked —
+ * e.g. a storefront with a country-specific URL or payment restriction.
+ *
+ * GamesPlanet regional variants:
+ *   DE → DACH + LU (German-language Central Europe)
+ *   FR → Francophone markets (FR, BE, LU, CH)
+ *   UK → GB + IE (British Isles)
+ *   US → US + CA (North America)
+ *
+ * Nintendo UK / US: ITAD exposes these as distinct shops with regional
+ * pricing; only show each where it is the canonical regional eShop.
+ */
+const MARKET_RESTRICTED_SHOPS = new Map<string, Set<string>>([
+  ['gamesplanet de', new Set(['DE', 'AT', 'CH', 'LU'])],
+  ['gamesplanet fr', new Set(['FR', 'BE', 'CH', 'LU'])],
+  ['gamesplanet uk', new Set(['GB', 'IE'])],
+  ['gamesplanet us', new Set(['US', 'CA'])],
+  ['nintendo uk',    new Set(['GB', 'IE'])],
+  ['nintendo us',    new Set(['US', 'CA'])],
+]);
+
+/**
+ * Returns `true` when a shop is either globally available OR explicitly
+ * serves the given market code.
+ *
+ * Called at sync time so region-locked deals are never persisted for the
+ * wrong market, and at query time as a safety net for any rows that
+ * pre-date this filter.
+ */
+export function isShopRelevantForMarket(name: string, marketCode: string): boolean {
+  const lower = name.trim().toLowerCase();
+  const allowed = MARKET_RESTRICTED_SHOPS.get(lower);
+  if (!allowed) return true; // not restricted — globally available
+  return allowed.has(marketCode);
+}

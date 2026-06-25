@@ -36,7 +36,7 @@ import {
   lookupItadIdsBySteamAppIds,
   type ItadGamePrices,
 } from '../itad';
-import { isReseller, isShopInScope } from './storefronts';
+import { isReseller, isShopInScope, isShopRelevantForMarket } from './storefronts';
 
 /**
  * Cached per-process. ITAD's shop catalog is stable enough that one call
@@ -263,6 +263,7 @@ async function applyPriceData(gameId: string, prices: ItadGamePrices, marketCode
   for (const deal of prices.deals) {
     const shopName = deal.shop.name;
     if (!isShopInScope(shopName)) continue;
+    if (!isShopRelevantForMarket(shopName, marketCode)) continue;
     const shopIdStr = String(deal.shop.id);
 
     const currentPrice = deal.price.amount;

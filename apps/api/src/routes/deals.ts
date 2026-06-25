@@ -23,6 +23,7 @@ import { prisma } from '@hoard/db';
 import { requireUser } from '../middleware/user';
 import { requireActive } from '../middleware/active';
 import { routeAffiliateUrl } from '../services/deals/affiliate';
+import { isShopRelevantForMarket } from '../services/deals/storefronts';
 import type { DealsResponse, DealRow } from '@hoard/types';
 
 const router = Router();
@@ -156,9 +157,16 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
   //   wishlisted → keep (you want it)
   //   neither → keep (broader discovery; you might want it)
   // Wishlist ≠ ownership.
+  //
+  // Also filter region-locked storefronts: any Deal rows that were
+  // persisted before the market-restricted-shop filter was added
+  // (e.g. GamesPlanet UK for an AT user) are silently excluded here.
+  // The sync-time filter handles new rows; this guards against stale DB
+  // rows until the next sync cleans them up.
   const wishlistRows: DealRow[] = [];
   const broaderRows: DealRow[] = [];
   for (const d of deals) {
+    if (!isShopRelevantForMarket(d.shopName, effectiveMarket)) continue;
     const isWishlisted = wishlistGameIds.has(d.gameId);
     const isOwned = ownedGameIds.has(d.gameId);
     if (isOwned && !isWishlisted) continue;

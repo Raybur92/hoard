@@ -1,4 +1,4 @@
-import { classifyShop, isShopInScope, isReseller } from './storefronts';
+import { classifyShop, isShopInScope, isReseller, isShopRelevantForMarket } from './storefronts';
 
 describe('classifyShop', () => {
   it.each([
@@ -67,5 +67,55 @@ describe('isReseller', () => {
     expect(isReseller('Instant Gaming')).toBe(true);
     expect(isReseller('Steam')).toBe(false);
     expect(isReseller('G2A')).toBe(false);
+  });
+});
+
+describe('isShopRelevantForMarket', () => {
+  it('globally-available shops are relevant in any market', () => {
+    expect(isShopRelevantForMarket('Steam', 'AT')).toBe(true);
+    expect(isShopRelevantForMarket('Fanatical', 'AT')).toBe(true);
+    expect(isShopRelevantForMarket('Instant Gaming', 'DE')).toBe(true);
+    expect(isShopRelevantForMarket('Humble Bundle', 'US')).toBe(true);
+  });
+
+  it('GamesPlanet DE is relevant for AT (DACH) but not GB or US', () => {
+    expect(isShopRelevantForMarket('GamesPlanet DE', 'AT')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet DE', 'DE')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet DE', 'CH')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet DE', 'GB')).toBe(false);
+    expect(isShopRelevantForMarket('GamesPlanet DE', 'US')).toBe(false);
+  });
+
+  it('GamesPlanet UK is only relevant for GB/IE', () => {
+    expect(isShopRelevantForMarket('GamesPlanet UK', 'GB')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet UK', 'IE')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet UK', 'AT')).toBe(false);
+    expect(isShopRelevantForMarket('GamesPlanet UK', 'US')).toBe(false);
+  });
+
+  it('GamesPlanet US is only relevant for US/CA', () => {
+    expect(isShopRelevantForMarket('GamesPlanet US', 'US')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet US', 'CA')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet US', 'AT')).toBe(false);
+    expect(isShopRelevantForMarket('GamesPlanet US', 'DE')).toBe(false);
+  });
+
+  it('GamesPlanet FR is only relevant for FR/BE/CH/LU', () => {
+    expect(isShopRelevantForMarket('GamesPlanet FR', 'FR')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet FR', 'BE')).toBe(true);
+    expect(isShopRelevantForMarket('GamesPlanet FR', 'AT')).toBe(false);
+    expect(isShopRelevantForMarket('GamesPlanet FR', 'GB')).toBe(false);
+  });
+
+  it('case-insensitive', () => {
+    expect(isShopRelevantForMarket('gamesplanet uk', 'AT')).toBe(false);
+    expect(isShopRelevantForMarket('GAMESPLANET UK', 'GB')).toBe(true);
+  });
+
+  it('Nintendo UK not shown for AT; Nintendo US not shown for AT', () => {
+    expect(isShopRelevantForMarket('Nintendo UK', 'AT')).toBe(false);
+    expect(isShopRelevantForMarket('Nintendo US', 'AT')).toBe(false);
+    expect(isShopRelevantForMarket('Nintendo UK', 'GB')).toBe(true);
+    expect(isShopRelevantForMarket('Nintendo US', 'US')).toBe(true);
   });
 });
