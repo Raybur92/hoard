@@ -58,8 +58,13 @@ const subs = new Map<string, Set<() => void>>();
 // v7 → v8 (deals market-filter): GamesPlanet FR/UK/US rows were saved under
 // marketCode='AT' before the sync-time filter landed. Stale v7 entries fetched
 // from the old backend (before 6b2a7aa deployed) still carry those wrong shops.
-// Bumping forces a cold refetch so users see only region-correct stores.
-const STORAGE_PREFIX = 'hoard:cache:v8:';
+// v8 → v9 (deals all-bundles): v8 entries were written from the old Railway
+// (pre-f430ada) which returned only library-filtered bundles (5 of 15). Even
+// after Railway deployed the all-bundles fix, the browser HTTP cache
+// (max-age=60) served stale data to SWR background refetches — so v8 localStorage
+// kept getting overwritten with 5 bundles. v9 forces a cold refetch that bypasses
+// the browser HTTP cache (now no-store on the route) and hits Railway directly.
+const STORAGE_PREFIX = 'hoard:cache:v9:';
 
 /**
  * Per-entry size cap when writing to localStorage (UTF-16 chars in the

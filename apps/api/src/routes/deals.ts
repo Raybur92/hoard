@@ -252,7 +252,12 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     lastSyncedAt: latestSync?.toISOString() ?? null,
     bundles: bundleRows,
   };
-  res.set('Cache-Control', 'private, max-age=60');
+  // no-store: the SWR layer in the frontend (30s stale window + localStorage)
+  // owns caching for this route. The old max-age=60 let the browser HTTP cache
+  // serve stale bundle counts after Railway deployed the all-bundles fix — the
+  // SWR background refetch hit the HTTP cache instead of Railway, so users saw
+  // the wrong bundle count for up to 60s past when the fix was live.
+  res.set('Cache-Control', 'no-store');
   res.json(body);
 });
 
