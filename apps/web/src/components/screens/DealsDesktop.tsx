@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { DealRow } from '@hoard/types';
+import type { BundleRow as BundleRowData, DealRow } from '@hoard/types';
+import { FilterPopover } from '../library/FilterPopover';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { TopBar } from '../layout/TopBar';
 import { Cover } from '../primitives/Cover';
@@ -183,54 +184,69 @@ function HeroDealCard({ deal }: { deal: DealRow }) {
   );
 }
 
-function GameGroupRow({ group }: { group: GameGroup }) {
+function GameGroupCard({ group }: { group: GameGroup }) {
   const navigate = useNavigate();
-  const bestPrice = group.stores.length > 0 ? (group.stores[0]?.currentPrice ?? Infinity) : Infinity;
+  const bestStore = group.stores[0];
+
   return (
     <div
       data-testid="deal-row"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '80px 1fr',
-        borderBottom: '1px solid var(--rule)',
-        position: 'relative',
-      }}
+      className="panel"
+      role="button"
+      tabIndex={0}
+      onClick={() => navigate(`/game/${group.gameIgdbId}`)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${group.gameIgdbId}`); }}
+      aria-label={`${group.gameTitle}${bestStore ? ` − ${bestStore.discountPct}% ${formatPrice(bestStore.currentPrice, bestStore.currency)}` : ''}`}
+      style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', cursor: 'pointer', position: 'relative', padding: 0 }}
     >
+      {/* wishlisted: amber top bar */}
       {group.isWishlisted && (
         <div
-          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: 'var(--amber)' }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'var(--amber)', zIndex: 1 }}
           aria-hidden="true"
         />
       )}
-      <div
-        role="button"
-        tabIndex={-1}
-        onClick={() => navigate(`/game/${group.gameIgdbId}`)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${group.gameIgdbId}`); }}
-        aria-hidden="true"
-        style={{ cursor: 'pointer', padding: '10px 8px 10px 12px' }}
-      >
-        <Cover w={60} h={34} src={group.gameHeroImageUrl ?? group.gameCoverUrl} label={group.gameTitle.toUpperCase()} />
-      </div>
-      <div style={{ padding: '10px 14px 10px 4px', display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, minWidth: 0 }}>
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={() => navigate(`/game/${group.gameIgdbId}`)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${group.gameIgdbId}`); }}
-            aria-label={`Open ${group.gameTitle}`}
+
+      {/* 16:9 hero image via padding-bottom intrinsic-ratio trick */}
+      <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', overflow: 'hidden', flexShrink: 0 }}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <Cover w="100%" h="100%" src={group.gameHeroImageUrl ?? group.gameCoverUrl} label={group.gameTitle.toUpperCase()} />
+        </div>
+        {bestStore && (
+          <div
+            aria-hidden="true"
             style={{
-              fontSize: 'var(--text-xs)',
-              color: 'var(--paper)',
-              cursor: 'pointer',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              flex: '1 1 0',
-              minWidth: 0,
+              position: 'absolute',
+              bottom: 8,
+              right: 8,
+              background: 'var(--green)',
+              color: '#07090a',
+              padding: '2px 8px',
+              fontSize: 'var(--text-sm)',
+              fontFamily: 'var(--mono)',
+              fontWeight: 700,
+              lineHeight: 1.5,
+              zIndex: 1,
             }}
           >
+            −{bestStore.discountPct}%
+          </div>
+        )}
+      </div>
+
+      {/* card body */}
+      <div style={{ padding: '9px 11px 11px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {/* title + signal badges */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          <span style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--paper)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: '1 1 0',
+            minWidth: 0,
+          }}>
             {group.gameTitle}
           </span>
           {group.isHistoricalLow && (
@@ -244,8 +260,20 @@ function GameGroupRow({ group }: { group: GameGroup }) {
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-          {group.stores.map((s) => {
+
+        {/* best price */}
+        {bestStore && (
+          <span className="t-mono" style={{ fontSize: 'var(--text-sm)', color: 'var(--green)' }}>
+            {formatPrice(bestStore.currentPrice, bestStore.currency)}
+          </span>
+        )}
+
+        {/* store badges — stop card nav on click so the link opens */}
+        <div
+          style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {group.stores.map((s, i) => {
             const key = shopKey(s.shopName);
             return (
               <a
@@ -253,9 +281,8 @@ function GameGroupRow({ group }: { group: GameGroup }) {
                 href={s.dealUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`sb${key ? ` sb-${key}` : ''}${s.currentPrice === bestPrice ? ' best' : ''}`}
+                className={`sb${key ? ` sb-${key}` : ''}${i === 0 ? ' best' : ''}`}
                 aria-label={`${s.shopName}: −${s.discountPct}% ${formatPrice(s.currentPrice, s.currency)}`}
-                onClick={(e) => e.stopPropagation()}
               >
                 <span className="sb-store">{s.shopName}</span>
                 <span className="sb-disc">−{s.discountPct}%</span>
@@ -269,6 +296,73 @@ function GameGroupRow({ group }: { group: GameGroup }) {
   );
 }
 
+// ─── bundle row ────────────────────────────────────────────────────────────
+
+function BundleRow({ bundle }: { bundle: BundleRowData }) {
+  const key = shopKey(bundle.shopName);
+  const expiryLabel = formatExpiry(bundle.expiresAt);
+  const matched = bundle.matchingTitles.length > 0;
+
+  return (
+    <a
+      href={bundle.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '6px 0',
+        borderBottom: '1px solid var(--rule)',
+        textDecoration: 'none',
+      }}
+    >
+      {matched && (
+        <span
+          aria-hidden="true"
+          style={{ width: 2, alignSelf: 'stretch', flexShrink: 0, background: 'var(--amber)', borderRadius: 1 }}
+        />
+      )}
+      <span
+        className={`sc${key ? ` sc-${key}` : ''}`}
+        style={{ flexShrink: 0, pointerEvents: 'none', fontSize: 'var(--text-3xs)', opacity: 0.85 }}
+      >
+        {bundle.shopName}
+      </span>
+      <span
+        style={{
+          flex: '1 1 0',
+          minWidth: 0,
+          fontSize: 'var(--text-xs)',
+          color: matched ? 'var(--paper)' : 'var(--paper-dim)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontFamily: 'var(--mono)',
+        }}
+      >
+        {bundle.title}
+      </span>
+      <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', flexShrink: 0 }}>
+        {bundle.gameCount} games
+      </span>
+      {matched && (
+        <span className="t-mono" style={{ fontSize: 'var(--text-3xs)', color: 'var(--amber)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          ★ {bundle.matchingTitles.slice(0, 2).join(', ')}{bundle.matchingTitles.length > 2 ? ` +${bundle.matchingTitles.length - 2}` : ''}
+        </span>
+      )}
+      {expiryLabel && (
+        <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', flexShrink: 0 }}>
+          {expiryLabel}
+        </span>
+      )}
+      <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', flexShrink: 0 }}>↗</span>
+    </a>
+  );
+}
+
+// ─── main page ─────────────────────────────────────────────────────────────
+
 export function DealsDesktop() {
   useDocumentTitle('Deals');
   const navigate = useNavigate();
@@ -278,6 +372,10 @@ export function DealsDesktop() {
   const shopFilter = searchParams.get('shop');
   const tab = searchParams.get('tab') ?? 'wishlist';
 
+  // null = auto (open when matches exist), true/false = user override
+  const [bundlesOpenOverride, setBundlesOpenOverride] = useState<boolean | null>(null);
+  const [bundlesShowAll, setBundlesShowAll] = useState(false);
+
   const allDeals: DealRow[] = useMemo(() => {
     if (!data) return [];
     const top = data.topWishlistDeal ? [data.topWishlistDeal] : [];
@@ -285,6 +383,14 @@ export function DealsDesktop() {
   }, [data]);
 
   const shopList = useMemo(() => deriveShopList(allDeals), [allDeals]);
+
+  const bundles: BundleRowData[] = data?.bundles ?? [];
+  const matchedBundles = bundles.filter((b) => b.matchingTitles.length > 0);
+  const unmatchedBundles = bundles.filter((b) => b.matchingTitles.length === 0);
+  const hasBundleMatches = matchedBundles.length > 0;
+
+  // Auto-open when wishlist matches exist; respect explicit user toggle
+  const bundlesOpen = bundlesOpenOverride !== null ? bundlesOpenOverride : hasBundleMatches;
 
   const setShop = (next: string | null): void => {
     const params = new URLSearchParams(searchParams);
@@ -319,7 +425,7 @@ export function DealsDesktop() {
     <>
       <TopBar crumbs={['hoard', 'deals']} />
 
-      {/* toolbar */}
+      {/* toolbar — shop filter lives here as a dropdown, no separate strip */}
       <div style={{ padding: '16px 32px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flexShrink: 0 }}>
         <span className="t-up" style={{ fontSize: 'var(--text-2xs)' }}>deals</span>
         <span className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)' }}>
@@ -328,6 +434,15 @@ export function DealsDesktop() {
             : data ? '· no deals yet' : ''}
         </span>
         <span style={{ flex: 1 }} />
+        {shopList.length >= 2 && (
+          <FilterPopover
+            label="shop"
+            value={shopFilter}
+            options={shopList}
+            onChange={setShop}
+            triggerAriaLabel="Filter deals by shop"
+          />
+        )}
         <span className="t-mono t-faint" style={{ fontSize: 'var(--text-2xs)' }}>market: {user?.marketCode ?? '—'}</span>
         <Btn sm onClick={() => navigate('/settings')}>
           <Icon name="cog" size={10} /> change market
@@ -336,96 +451,6 @@ export function DealsDesktop() {
           <Icon name="refresh" size={10} /> refresh
         </Btn>
       </div>
-
-      {/* bundles strip — pinned above filter + tabs, always visible */}
-      {data && (data.bundles ?? []).length > 0 && !shopFilter && (
-        <div
-          className="thin-scroll"
-          data-testid="deals-bundles-section"
-          role="region"
-          aria-label="Current bundles"
-          style={{
-            padding: '8px 32px',
-            borderBottom: '1px solid var(--rule)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            overflowX: 'auto',
-            flexShrink: 0,
-          }}
-        >
-          <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', flexShrink: 0, marginRight: 4 }}>
-            // bundles · {(data.bundles ?? []).length}
-          </span>
-          {(data.bundles ?? []).map((b) => (
-            <a
-              key={b.id}
-              href={b.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={b.matchingTitles.length > 0 ? `On your wishlist: ${b.matchingTitles.join(', ')}` : undefined}
-              style={{
-                display: 'inline-flex',
-                flexDirection: 'column',
-                gap: 2,
-                padding: '6px 12px',
-                background: b.matchingTitles.length > 0 ? 'var(--ink-2)' : 'var(--ink)',
-                border: b.matchingTitles.length > 0 ? '1px solid var(--amber)' : '1px solid var(--rule)',
-                borderRadius: 2,
-                color: 'var(--paper)',
-                textDecoration: 'none',
-                flexShrink: 0,
-                maxWidth: 220,
-                overflow: 'hidden',
-              }}
-            >
-              <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
-              <span className="t-faint" style={{ fontSize: 'var(--text-3xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {b.shopName} · {b.gameCount} games
-                {b.matchingTitles.length === 1 && (
-                  <span style={{ color: 'var(--amber)' }}> · {b.matchingTitles[0]}</span>
-                )}
-                {b.matchingTitles.length > 1 && (
-                  <span style={{ color: 'var(--amber)' }}> · {b.matchingTitles[0]} +{b.matchingTitles.length - 1}</span>
-                )}
-              </span>
-            </a>
-          ))}
-        </div>
-      )}
-
-      {/* store filter chip strip */}
-      {shopList.length >= 2 && (
-        <div
-          className="thin-scroll"
-          role="group"
-          aria-label="Filter by shop"
-          style={{ padding: '8px 32px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexShrink: 0 }}
-        >
-          <button
-            type="button"
-            onClick={() => setShop(null)}
-            className={`sc sc-all${shopFilter === null ? ' on' : ''}`}
-            aria-pressed={shopFilter === null}
-          >
-            all <span className="sc-count">{allDeals.length}</span>
-          </button>
-          {shopList.map((s) => {
-            const key = shopKey(s.name);
-            return (
-              <button
-                key={s.name}
-                type="button"
-                onClick={() => setShop(s.name)}
-                className={`sc${key ? ` sc-${key}` : ''}${shopFilter === s.name ? ' on' : ''}`}
-                aria-pressed={shopFilter === s.name}
-              >
-                {s.name} <span className="sc-count">{s.count}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {/* tab bar */}
       <div
@@ -455,6 +480,83 @@ export function DealsDesktop() {
           </button>
         ))}
       </div>
+
+      {/* bundles — collapsible section, always visible (not gated on shopFilter) */}
+      {bundles.length > 0 && (
+        <div
+          data-testid="deals-bundles-section"
+          style={{ borderBottom: '1px solid var(--rule)', background: 'var(--ink)', flexShrink: 0 }}
+        >
+          <button
+            type="button"
+            aria-expanded={bundlesOpen}
+            aria-controls="deals-bundles-body"
+            onClick={() => setBundlesOpenOverride(!bundlesOpen)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '8px 32px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+              // bundles · {bundles.length}
+            </span>
+            {hasBundleMatches && (
+              <span className="t-mono" style={{ fontSize: 'var(--text-3xs)', color: 'var(--amber)' }}>
+                ★ {matchedBundles.length} {matchedBundles.length === 1 ? 'match' : 'matches'} wishlist
+              </span>
+            )}
+            <span style={{ flex: 1 }} />
+            <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)' }}>
+              {bundlesOpen ? '▾ hide' : '▸ show'}
+            </span>
+          </button>
+
+          {bundlesOpen && (
+            <div id="deals-bundles-body" style={{ padding: '0 32px 10px' }}>
+              {hasBundleMatches ? (
+                <>
+                  {matchedBundles.map((b) => <BundleRow key={b.id} bundle={b} />)}
+                  {unmatchedBundles.length > 0 && (
+                    bundlesShowAll
+                      ? unmatchedBundles.map((b) => <BundleRow key={b.id} bundle={b} />)
+                      : (
+                        <button
+                          type="button"
+                          className="t-mono t-faint"
+                          onClick={() => setBundlesShowAll(true)}
+                          style={{ fontSize: 'var(--text-3xs)', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', display: 'block' }}
+                        >
+                          show {unmatchedBundles.length} more →
+                        </button>
+                      )
+                  )}
+                </>
+              ) : (
+                <>
+                  {(bundlesShowAll ? bundles : bundles.slice(0, 5)).map((b) => <BundleRow key={b.id} bundle={b} />)}
+                  {!bundlesShowAll && bundles.length > 5 && (
+                    <button
+                      type="button"
+                      className="t-mono t-faint"
+                      onClick={() => setBundlesShowAll(true)}
+                      style={{ fontSize: 'var(--text-3xs)', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', display: 'block' }}
+                    >
+                      show {bundles.length - 5} more →
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* tab content */}
       <div className="thin-scroll" style={{ flex: 1, overflow: 'auto', padding: '24px 32px 40px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -495,9 +597,9 @@ export function DealsDesktop() {
             {wishlistGrouped.length > 0 && (
               <section data-testid="deals-wishlist-section">
                 <Marker>// wishlist deals · {wishlistGrouped.length}</Marker>
-                <div className="panel" style={{ marginTop: 10 }}>
+                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12 }}>
                   {wishlistGrouped.map((g) => (
-                    <GameGroupRow key={String(g.gameIgdbId)} group={g} />
+                    <GameGroupCard key={String(g.gameIgdbId)} group={g} />
                   ))}
                 </div>
               </section>
@@ -531,9 +633,9 @@ export function DealsDesktop() {
             {browseGrouped.length > 0 && (
               <section data-testid="deals-broader-section">
                 <Marker>// also on sale · {browseGrouped.length}</Marker>
-                <div className="panel" style={{ marginTop: 10 }}>
+                <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12 }}>
                   {browseGrouped.map((g) => (
-                    <GameGroupRow key={String(g.gameIgdbId)} group={g} />
+                    <GameGroupCard key={String(g.gameIgdbId)} group={g} />
                   ))}
                 </div>
               </section>

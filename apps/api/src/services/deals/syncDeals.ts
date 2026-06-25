@@ -36,6 +36,7 @@ import {
   lookupItadIdsBySteamAppIds,
   type ItadGamePrices,
 } from '../itad';
+import { getGame } from '../igdb';
 import { isReseller, isShopInScope, isShopRelevantForMarket } from './storefronts';
 
 /**
@@ -458,6 +459,53 @@ export async function getDistinctActiveMarkets(): Promise<string[]> {
 }
 
 /**
+ * Self-healing hero image backfill: for any Game row that has at least
+ * one Deal row but a null heroImageUrl, fetch artwork from IGDB and
+ * update the row. Runs once per syncAllDeals call (before the per-market
+ * pricing loop) so deal cards always show landscape art instead of
+ * falling back to the portrait box cover.
+ *
+ * Throttled at ~3 req/s (IGDB free-tier budget).
+ */
+async function backfillHeroImagesForDeals(): Promise<void> {
+  const IGDB_DELAY_MS = 350;
+
+  const gamesNeedingHero = await prisma.game.findMany({
+    where: { heroImageUrl: null, deals: { some: {} } },
+    select: { id: true, igdbId: true, title: true },
+  });
+
+  if (gamesNeedingHero.length === 0) {
+    console.log('[deals-sync] hero backfill: all deal games already have heroImageUrl');
+    return;
+  }
+
+  console.log(`[deals-sync] hero backfill: ${gamesNeedingHero.length} games need heroImageUrl`);
+  let updated = 0;
+
+  for (const game of gamesNeedingHero) {
+    try {
+      const igdbData = await getGame(game.igdbId);
+      if (igdbData?.heroImageUrl) {
+        await prisma.game.update({
+          where: { id: game.id },
+          data: { heroImageUrl: igdbData.heroImageUrl },
+        });
+        updated++;
+      }
+    } catch (err) {
+      console.error(
+        `[deals-sync] hero backfill failed for "${game.title}":`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    await sleep(IGDB_DELAY_MS);
+  }
+
+  console.log(`[deals-sync] hero backfill: ${updated}/${gamesNeedingHero.length} updated`);
+}
+
+/**
  * The full nightly sync — every game across every user, across every
  * active user market. Used by the cron entry point + admin manual
  * refresh.
@@ -471,6 +519,11 @@ export async function getDistinctActiveMarkets(): Promise<string[]> {
  * the user base grows across many regions, revisit parallelism.
  */
 export async function syncAllDeals(): Promise<SyncDealsResult> {
+  // Ensure every game with a deal row has a landscape heroImageUrl before
+  // we touch prices — deal cards in the UI fall back to portrait box art
+  // when this field is null.
+  await backfillHeroImagesForDeals();
+
   const rows = await prisma.userGame.findMany({
     distinct: ['gameId'],
     select: { gameId: true },

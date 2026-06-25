@@ -1,4 +1,4 @@
-# touch 2026-06-25 deals market-filter + bundles-all.
+# touch 2026-06-25b deals hero-image backfill in syncAllDeals.
 # 6b2a7aa (market-restricted storefronts) and f430ada (all-bundles strip)
 # were not picked up by Railway Watch Paths. Touch forces the webhook so
 # both commits deploy and the wrong-shop + 5-bundles bugs are resolved.
