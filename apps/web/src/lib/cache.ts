@@ -52,7 +52,10 @@ const subs = new Map<string, Set<() => void>>();
 // v5 → v6 (DEALS-PR2): DealsResponse gained a required `bundles: BundleRow[]`
 // field. Stale v5 entries would crash the new bundles section on
 // `data.bundles.length` (undefined).
-const STORAGE_PREFIX = 'hoard:cache:v6:';
+// v6 → v7 (DEALS bundles-all): bundles changed from "library/wishlist-filtered"
+// to "all active bundles." Stale v6 entries carry only the old filtered subset
+// (e.g. 5 of 15) and would hide the new full bundle list until expiry.
+const STORAGE_PREFIX = 'hoard:cache:v7:';
 
 /**
  * Per-entry size cap when writing to localStorage (UTF-16 chars in the

@@ -93,10 +93,14 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
     },
   });
   const wishlistGameIds = new Set<string>();
+  const pureWishlistGameIds = new Set<string>(); // status === 'Wishlist' only — used for bundle matching
   const ownedGameIds = new Set<string>();
   for (const ug of userGames) {
     if (ug.status === 'Wishlist' || (ug.wishlistedPlatforms?.length ?? 0) > 0) {
       wishlistGameIds.add(ug.gameId);
+    }
+    if (ug.status === 'Wishlist') {
+      pureWishlistGameIds.add(ug.gameId);
     }
     if (ug.status !== 'Wishlist') {
       // "owned" in the deals sense means "have a UserGame other than
@@ -181,38 +185,36 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
   // saved preference (null when not set) — distinct from `effectiveMarket`
   // which is the resolved market used for filtering.
 
-  // DEALS-PR2 — bundles relevant to the user. Pull ITAD ids off the
-  // user's library + wishlist games (cached on Game.metadata.itadId
-  // during the DEALS-PR1 sync). Intersect against Bundle.itadGameIds
-  // (GIN-indexed). One Prisma query each: small + cheap. Bundles
-  // stay scoped to the user's radar — a bundle's relevance signal
-  // IS "it contains a game you have/want", unlike standalone deals.
-  const relevantGameIds = new Set<string>([...wishlistGameIds, ...ownedGameIds]);
-  const userGameRows = await prisma.game.findMany({
-    where: { id: { in: [...relevantGameIds] } },
-    select: { id: true, title: true, metadata: true },
-  });
-  const itadIdToTitle = new Map<string, string>();
-  for (const g of userGameRows) {
+  // Bundles — show ALL active bundles, but highlight wishlist matches.
+  // The relevance signal for a bundle is "it contains a game you WANT"
+  // (wishlist), not "a game you already own" — owning a game in a bundle
+  // tells you nothing useful. Build the ITAD id map from wishlist-only
+  // games; bundles with wishlist matches sort first.
+  // Bundle matching uses ONLY pure-Wishlist games (status === 'Wishlist').
+  // Games owned on one platform but cross-platform-wishlisted (wishlistedPlatforms)
+  // are excluded — the user already has the game and the bundle can't help them
+  // get something they don't have. Using the broader wishlistGameIds set here
+  // was causing false-positive amber highlights on bundles.
+  const wishlistGameRows = pureWishlistGameIds.size > 0
+    ? await prisma.game.findMany({
+        where: { id: { in: [...pureWishlistGameIds] } },
+        select: { id: true, title: true, metadata: true },
+      })
+    : [];
+  const wishlistItadIdToTitle = new Map<string, string>();
+  for (const g of wishlistGameRows) {
     const meta = g.metadata as unknown;
     if (typeof meta === 'object' && meta !== null) {
       const m = meta as { itadId?: unknown };
-      if (typeof m.itadId === 'string') itadIdToTitle.set(m.itadId, g.title);
+      if (typeof m.itadId === 'string') wishlistItadIdToTitle.set(m.itadId, g.title);
     }
   }
-  const userItadIds = [...itadIdToTitle.keys()];
-  let bundleRows: typeof body.bundles = [];
-  if (userItadIds.length > 0) {
-    const now = new Date();
-    const bundles = await prisma.bundle.findMany({
-      where: {
-        itadGameIds: { hasSome: userItadIds },
-        // Exclude bundles past their expiry (when ITAD supplied one).
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      },
-      orderBy: { expiresAt: 'asc' },
-    });
-    bundleRows = bundles.map((b) => ({
+  const allActiveBundles = await prisma.bundle.findMany({
+    where: { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+    orderBy: { expiresAt: 'asc' },
+  });
+  const bundleRows = allActiveBundles
+    .map((b) => ({
       id: b.id,
       shopName: b.shopName,
       title: b.title,
@@ -220,10 +222,18 @@ router.get('/deals', requireUser, requireActive, async (req: Request, res: Respo
       expiresAt: b.expiresAt?.toISOString() ?? null,
       gameCount: b.gameCount,
       matchingTitles: b.itadGameIds
-        .map((id) => itadIdToTitle.get(id))
+        .map((id) => wishlistItadIdToTitle.get(id))
         .filter((t): t is string => Boolean(t)),
-    }));
-  }
+    }))
+    // Wishlist-matching bundles first (desc by match count), then soonest-expiry.
+    .sort((a, b) => {
+      if (b.matchingTitles.length !== a.matchingTitles.length)
+        return b.matchingTitles.length - a.matchingTitles.length;
+      if (!a.expiresAt && !b.expiresAt) return 0;
+      if (!a.expiresAt) return 1;
+      if (!b.expiresAt) return -1;
+      return new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
+    });
 
   const latestSync = deals[0]?.fetchedAt ?? null;
   const body: DealsResponse = {

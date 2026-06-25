@@ -11,13 +11,6 @@ import { useDeals } from '../../hooks/useDeals';
 import { useUser } from '../../contexts/UserContext';
 import type { DealRow } from '@hoard/types';
 
-/**
- * DEALS-PR1 — `/deals` mobile shell.
- *
- * Compressed per OQ-DEALS-4: hero collapses to a normal row; per-row
- * card density reduced (storefront chip moved to subline).
- */
-
 function formatPrice(amount: number, currency: string): string {
   try {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
@@ -26,45 +19,72 @@ function formatPrice(amount: number, currency: string): string {
   }
 }
 
-function MobileDealRow({ deal }: { deal: DealRow }) {
-  const navigate = useNavigate();
-  const priceFmt = formatPrice(deal.currentPrice, deal.currency);
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '60px 1fr auto',
-        gap: 10,
-        alignItems: 'center',
-        padding: '10px 16px',
-        borderBottom: '1px solid var(--rule)',
-      }}
-    >
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => navigate(`/game/${deal.gameIgdbId}`)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${deal.gameIgdbId}`); }}
-        aria-label={`Open ${deal.gameTitle}`}
-      >
-        <Cover w={60} h={34} src={deal.gameHeroImageUrl ?? deal.gameCoverUrl} label={deal.gameTitle.toUpperCase()} />
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{deal.gameTitle}</div>
-        <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <span>{deal.shopName}</span>
-          {deal.isHistoricalLow && <span style={{ color: 'var(--green)' }}>// low</span>}
-          {deal.isTrendingDown && <span style={{ color: 'var(--green)' }}>// trending</span>}
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-        <span className="t-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--green)' }}>−{deal.discountPct}%</span>
-        <a href={deal.dealUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--text-xs)', color: 'var(--paper)', textDecoration: 'none' }}>
-          {priceFmt} →
-        </a>
-      </div>
-    </div>
-  );
+function shopKey(shopName: string): string {
+  const n = shopName.toLowerCase();
+  if (n.includes('steam')) return 'st';
+  if (n === 'gog' || n.includes('gog.com') || n.includes('good old')) return 'gog';
+  if (n.includes('humble')) return 'hb';
+  if (n.includes('green man') || n === 'gmg') return 'gmg';
+  if (n.includes('epic')) return 'ep';
+  if (n.includes('playstation') || n.includes('psn')) return 'psn';
+  if (n.includes('nintendo') || n.includes('eshop') || n.includes('e-shop')) return 'ns';
+  if (n.includes('itch')) return 'it';
+  if (n.includes('instant gaming')) return 'ig';
+  if (n.includes('cdkeys') || n === 'cdkey') return 'ck';
+  if (n.includes('kinguin')) return 'kg';
+  return '';
+}
+
+interface DealStore {
+  shopName: string;
+  currentPrice: number;
+  currency: string;
+  discountPct: number;
+  dealUrl: string;
+}
+
+interface GameGroup {
+  gameIgdbId: DealRow['gameIgdbId'];
+  gameTitle: string;
+  gameCoverUrl: string | null;
+  gameHeroImageUrl: string | null;
+  isWishlisted: boolean;
+  isHistoricalLow: boolean;
+  isTrendingDown: boolean;
+  stores: DealStore[];
+}
+
+function groupByGame(deals: DealRow[]): GameGroup[] {
+  const map = new Map<DealRow['gameIgdbId'], GameGroup>();
+  for (const d of deals) {
+    if (!map.has(d.gameIgdbId)) {
+      map.set(d.gameIgdbId, {
+        gameIgdbId: d.gameIgdbId,
+        gameTitle: d.gameTitle,
+        gameCoverUrl: d.gameCoverUrl,
+        gameHeroImageUrl: d.gameHeroImageUrl,
+        isWishlisted: d.isWishlisted,
+        isHistoricalLow: d.isHistoricalLow,
+        isTrendingDown: d.isTrendingDown,
+        stores: [],
+      });
+    }
+    const g = map.get(d.gameIgdbId)!;
+    if (d.isWishlisted) g.isWishlisted = true;
+    if (d.isHistoricalLow) g.isHistoricalLow = true;
+    if (d.isTrendingDown) g.isTrendingDown = true;
+    g.stores.push({
+      shopName: d.shopName,
+      currentPrice: d.currentPrice,
+      currency: d.currency,
+      discountPct: d.discountPct,
+      dealUrl: d.dealUrl,
+    });
+  }
+  for (const g of map.values()) {
+    g.stores.sort((a, b) => a.currentPrice - b.currentPrice);
+  }
+  return Array.from(map.values());
 }
 
 function deriveShopList(deals: DealRow[]): { name: string; count: number }[] {
@@ -80,6 +100,91 @@ function applyShopFilter<T extends { shopName: string }>(rows: T[], shop: string
   return rows.filter((r) => r.shopName === shop);
 }
 
+function MobileGameGroupRow({ group }: { group: GameGroup }) {
+  const navigate = useNavigate();
+  const bestPrice = group.stores.length > 0 ? (group.stores[0]?.currentPrice ?? Infinity) : Infinity;
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '80px 1fr',
+        borderBottom: '1px solid var(--rule)',
+        position: 'relative',
+      }}
+    >
+      {group.isWishlisted && (
+        <div
+          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: 'var(--amber)' }}
+          aria-hidden="true"
+        />
+      )}
+      <div
+        role="button"
+        tabIndex={-1}
+        onClick={() => navigate(`/game/${group.gameIgdbId}`)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${group.gameIgdbId}`); }}
+        aria-hidden="true"
+        style={{ cursor: 'pointer', padding: '10px 8px 10px 12px' }}
+      >
+        <Cover w={60} h={34} src={group.gameHeroImageUrl ?? group.gameCoverUrl} label={group.gameTitle.toUpperCase()} />
+      </div>
+      <div style={{ padding: '10px 14px 10px 4px', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate(`/game/${group.gameIgdbId}`)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/game/${group.gameIgdbId}`); }}
+            aria-label={`Open ${group.gameTitle}`}
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--paper)',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: '1 1 0',
+              minWidth: 0,
+            }}
+          >
+            {group.gameTitle}
+          </span>
+          {group.isHistoricalLow && (
+            <span className="t-mono" style={{ fontSize: 'var(--text-3xs)', color: 'var(--green)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              // low
+            </span>
+          )}
+          {group.isTrendingDown && !group.isHistoricalLow && (
+            <span className="t-mono" style={{ fontSize: 'var(--text-3xs)', color: 'var(--green)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              // ↓
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          {group.stores.map((s) => {
+            const key = shopKey(s.shopName);
+            return (
+              <a
+                key={s.shopName}
+                href={s.dealUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`sb${key ? ` sb-${key}` : ''}${s.currentPrice === bestPrice ? ' best' : ''}`}
+                aria-label={`${s.shopName}: −${s.discountPct}% ${formatPrice(s.currentPrice, s.currency)}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span className="sb-store">{s.shopName}</span>
+                <span className="sb-disc">−{s.discountPct}%</span>
+                <span className="sb-price">{formatPrice(s.currentPrice, s.currency)}</span>
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DealsMobile() {
   useDocumentTitle('Deals');
   const navigate = useNavigate();
@@ -93,73 +198,122 @@ export function DealsMobile() {
     const top = data.topWishlistDeal ? [data.topWishlistDeal] : [];
     return [...top, ...data.wishlistDeals, ...data.broaderFeed];
   }, [data]);
+
   const shopList = useMemo(() => deriveShopList(allDeals), [allDeals]);
 
   const setShop = (next: string | null): void => {
     const params = new URLSearchParams(searchParams);
     if (next) params.set('shop', next);
     else params.delete('shop');
-    setSearchParams(params);
+    setSearchParams(params, { replace: true });
   };
 
-  const topWishlistDeal = data && shopFilter && data.topWishlistDeal?.shopName !== shopFilter
-    ? null
-    : data?.topWishlistDeal ?? null;
-  const wishlistDeals = applyShopFilter(data?.wishlistDeals ?? [], shopFilter);
-  const broaderFeed = applyShopFilter(data?.broaderFeed ?? [], shopFilter);
+  const topWishlistDeal =
+    data && shopFilter && data.topWishlistDeal?.shopName !== shopFilter
+      ? null
+      : (data?.topWishlistDeal ?? null);
+
+  const { wishlistGrouped, browseGrouped } = useMemo(() => ({
+    wishlistGrouped: groupByGame(applyShopFilter(data?.wishlistDeals ?? [], shopFilter)),
+    browseGrouped: groupByGame(applyShopFilter(data?.broaderFeed ?? [], shopFilter)),
+  }), [data, shopFilter]);
 
   return (
     <>
       <MobileHeader
         title="deals"
-        sub={data?.lastSyncedAt
-          ? `// refreshed ${new Date(data.lastSyncedAt).toLocaleDateString()}`
-          : '// no deals yet'}
+        sub={data?.lastSyncedAt ? `// refreshed ${new Date(data.lastSyncedAt).toLocaleDateString()}` : '// no deals yet'}
         right={
           <Btn sm ariaLabel="Refresh deals" onClick={() => refetch()}>
             <Icon name="refresh" size={10} />
           </Btn>
         }
       />
-      {shopList.length >= 2 && (
+
+      {/* bundles strip — pinned at top, always visible */}
+      {data && (data.bundles ?? []).length > 0 && !shopFilter && (
         <div
           className="thin-scroll"
-          role="group"
-          aria-label="Filter by shop"
+          role="region"
+          aria-label="Current bundles"
           style={{
             padding: '8px 12px',
             borderBottom: '1px solid var(--rule)',
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
             overflowX: 'auto',
-            whiteSpace: 'nowrap',
           }}
         >
-          <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', marginRight: 2 }}>shop:</span>
-          <button
-            type="button"
-            onClick={() => setShop(null)}
-            className={shopFilter === null ? 'chip on' : 'chip'}
-            style={{ cursor: 'pointer', flex: '0 0 auto' }}
-            aria-pressed={shopFilter === null}
-          >
-            all
-          </button>
-          {shopList.map((s) => (
-            <button
-              key={s.name}
-              type="button"
-              onClick={() => setShop(s.name)}
-              className={shopFilter === s.name ? 'chip on' : 'chip'}
-              style={{ cursor: 'pointer', flex: '0 0 auto' }}
-              aria-pressed={shopFilter === s.name}
+          <span className="t-mono t-faint" style={{ fontSize: 'var(--text-3xs)', flexShrink: 0, marginRight: 4 }}>
+            // bundles
+          </span>
+          {(data.bundles ?? []).map((b) => (
+            <a
+              key={b.id}
+              href={b.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={b.matchingTitles.length > 0 ? `On your wishlist: ${b.matchingTitles.join(', ')}` : undefined}
+              style={{
+                display: 'inline-flex',
+                flexDirection: 'column',
+                gap: 2,
+                padding: '5px 10px',
+                background: b.matchingTitles.length > 0 ? 'var(--ink-2)' : 'var(--ink)',
+                border: b.matchingTitles.length > 0 ? '1px solid var(--amber)' : '1px solid var(--rule)',
+                borderRadius: 2,
+                color: 'var(--paper)',
+                textDecoration: 'none',
+                flexShrink: 0,
+                maxWidth: 180,
+                overflow: 'hidden',
+              }}
             >
-              {s.name} <span className="t-faint" style={{ marginLeft: 4 }}>{s.count}</span>
-            </button>
+              <span style={{ fontSize: 'var(--text-3xs)', color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
+              <span className="t-faint" style={{ fontSize: 'var(--text-3xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {b.shopName}
+                {b.matchingTitles.length === 1 && <span style={{ color: 'var(--amber)' }}> · {b.matchingTitles[0]}</span>}
+                {b.matchingTitles.length > 1 && <span style={{ color: 'var(--amber)' }}> · {b.matchingTitles[0]} +{b.matchingTitles.length - 1}</span>}
+              </span>
+            </a>
           ))}
         </div>
       )}
+
+      {/* store filter chip strip */}
+      {shopList.length >= 2 && (
+        <div
+          className="thin-scroll"
+          role="group"
+          aria-label="Filter by shop"
+          style={{ padding: '8px 12px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto' }}
+        >
+          <button
+            type="button"
+            onClick={() => setShop(null)}
+            className={`sc sc-all${shopFilter === null ? ' on' : ''}`}
+            aria-pressed={shopFilter === null}
+          >
+            all <span className="sc-count">{allDeals.length}</span>
+          </button>
+          {shopList.map((s) => {
+            const key = shopKey(s.name);
+            return (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => setShop(s.name)}
+                className={`sc${key ? ` sc-${key}` : ''}${shopFilter === s.name ? ' on' : ''}`}
+                aria-pressed={shopFilter === s.name}
+              >
+                {s.name} <span className="sc-count">{s.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <PullableScroll onRefresh={() => { refetch(); }} ariaLabel="Deals">
         {error && !loading && (
           <div style={{ padding: 16 }}>
@@ -167,10 +321,9 @@ export function DealsMobile() {
             <p style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--paper-dim)' }}>{error}</p>
           </div>
         )}
-        {loading && !data && (
-          <div className="skel" style={{ height: 200, margin: 16 }} />
-        )}
-        {data && !topWishlistDeal && wishlistDeals.length === 0 && broaderFeed.length === 0 && (
+        {loading && !data && <div className="skel" style={{ height: 200, margin: 16 }} />}
+
+        {data && !topWishlistDeal && wishlistGrouped.length === 0 && browseGrouped.length === 0 && (
           <div style={{ padding: 20, textAlign: 'center' }}>
             <Marker>{shopFilter ? `// no ${shopFilter} deals` : '// nothing on sale'}</Marker>
             <p style={{ marginTop: 10, fontSize: 'var(--text-xs)', color: 'var(--paper-dim)' }}>
@@ -188,60 +341,48 @@ export function DealsMobile() {
             </div>
           </div>
         )}
+
+        {/* wishlist section — always shown on mobile (no tabs) */}
         {topWishlistDeal && (
           <section>
             <div style={{ padding: '14px 16px 6px' }}>
               <Marker>// top wishlist deal</Marker>
             </div>
-            <MobileDealRow deal={topWishlistDeal} />
+            <MobileGameGroupRow group={{
+              gameIgdbId: topWishlistDeal.gameIgdbId,
+              gameTitle: topWishlistDeal.gameTitle,
+              gameCoverUrl: topWishlistDeal.gameCoverUrl,
+              gameHeroImageUrl: topWishlistDeal.gameHeroImageUrl,
+              isWishlisted: topWishlistDeal.isWishlisted,
+              isHistoricalLow: topWishlistDeal.isHistoricalLow,
+              isTrendingDown: topWishlistDeal.isTrendingDown,
+              stores: [{
+                shopName: topWishlistDeal.shopName,
+                currentPrice: topWishlistDeal.currentPrice,
+                currency: topWishlistDeal.currency,
+                discountPct: topWishlistDeal.discountPct,
+                dealUrl: topWishlistDeal.dealUrl,
+              }],
+            }} />
           </section>
         )}
-        {wishlistDeals.length > 0 && (
+        {wishlistGrouped.length > 0 && (
           <section>
             <div style={{ padding: '14px 16px 6px' }}>
-              <Marker>// wishlist deals · {wishlistDeals.length}</Marker>
+              <Marker>// wishlist deals · {wishlistGrouped.length}</Marker>
             </div>
-            {wishlistDeals.map((d) => <MobileDealRow key={d.id} deal={d} />)}
+            {wishlistGrouped.map((g) => (
+              <MobileGameGroupRow key={String(g.gameIgdbId)} group={g} />
+            ))}
           </section>
         )}
-        {broaderFeed.length > 0 && (
+        {browseGrouped.length > 0 && (
           <section>
             <div style={{ padding: '14px 16px 6px' }}>
-              <Marker>// also on sale · {broaderFeed.length}</Marker>
+              <Marker>// also on sale · {browseGrouped.length}</Marker>
             </div>
-            {broaderFeed.map((d) => <MobileDealRow key={d.id} deal={d} />)}
-          </section>
-        )}
-        {data && (data.bundles ?? []).length > 0 && !shopFilter && (
-          <section>
-            <div style={{ padding: '14px 16px 6px' }}>
-              <Marker>// bundles · {(data.bundles ?? []).length}</Marker>
-            </div>
-            {(data.bundles ?? []).map((b) => (
-              <a
-                key={b.id}
-                href={b.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  padding: '10px 16px',
-                  borderBottom: '1px solid var(--rule)',
-                  color: 'var(--paper)',
-                  textDecoration: 'none',
-                }}
-              >
-                <div style={{ fontSize: 'var(--text-xs)' }}>{b.title}</div>
-                <div className="t-faint" style={{ fontSize: 'var(--text-3xs)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <span>{b.shopName}</span>
-                  <span>· {b.gameCount} games</span>
-                  {b.matchingTitles.length > 0 && (
-                    <span style={{ color: 'var(--amber)' }}>· {b.matchingTitles.length} match</span>
-                  )}
-                </div>
-              </a>
+            {browseGrouped.map((g) => (
+              <MobileGameGroupRow key={String(g.gameIgdbId)} group={g} />
             ))}
           </section>
         )}

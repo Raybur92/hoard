@@ -782,3 +782,92 @@ select:focus-visible {
 .event-row:active {
   background: var(--ink);
 }
+
+/* ---------- deals: store filter chips (.sc) ----------------------------
+   3-px left-border swatch is the visual identity marker for each store.
+   At rest the brand color appears as a subtle tinted left edge + faint bg.
+   Active state brightens via filter so the color is the same system — no
+   second palette to maintain. */
+.sc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--rule);
+  border-left-width: 3px;
+  border-left-color: var(--rule-bright);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  color: var(--paper-dim);
+  transition: color 0.12s, background 0.12s;
+}
+.sc:hover { color: var(--paper); }
+.sc.sc-all { border-left-width: 1px; }
+.sc.sc-all.on,
+.sc.sc-all:hover { color: var(--paper); border-color: var(--paper-dim); }
+.sc-count { font-size: 10px; opacity: 0.6; }
+
+.sc.sc-st  { border-left-color: var(--store-st);  background: var(--store-st-bg);  }
+.sc.sc-gog { border-left-color: var(--store-gog); background: var(--store-gog-bg); }
+.sc.sc-hb  { border-left-color: var(--store-hb);  background: var(--store-hb-bg);  }
+.sc.sc-gmg { border-left-color: var(--store-gmg); background: var(--store-gmg-bg); }
+.sc.sc-ep  { border-left-color: var(--store-ep);  background: var(--store-ep-bg);  }
+.sc.sc-psn { border-left-color: var(--store-psn); background: var(--store-psn-bg); }
+.sc.sc-ns  { border-left-color: var(--store-ns);  background: var(--store-ns-bg);  }
+.sc.sc-it  { border-left-color: var(--store-it);  background: var(--store-it-bg);  }
+.sc.sc-ig  { border-left-color: var(--store-ig);  background: var(--store-ig-bg);  }
+.sc.sc-ck  { border-left-color: var(--store-ck);  background: var(--store-ck-bg);  }
+.sc.sc-kg  { border-left-color: var(--store-kg);  background: var(--store-kg-bg);  }
+
+.sc.sc-st.on  { color: var(--store-st);  filter: brightness(1.3); }
+.sc.sc-gog.on { color: var(--store-gog); filter: brightness(1.3); }
+.sc.sc-hb.on  { color: var(--store-hb);  filter: brightness(1.3); }
+.sc.sc-gmg.on { color: var(--store-gmg); filter: brightness(1.3); }
+.sc.sc-ep.on  { color: var(--store-ep);  filter: brightness(1.3); }
+.sc.sc-psn.on { color: var(--store-psn); filter: brightness(1.3); }
+.sc.sc-ns.on  { color: var(--store-ns);  filter: brightness(1.3); }
+.sc.sc-it.on  { color: var(--store-it);  filter: brightness(1.3); }
+.sc.sc-ig.on  { color: var(--store-ig);  filter: brightness(1.3); }
+.sc.sc-ck.on  { color: var(--store-ck);  filter: brightness(1.3); }
+.sc.sc-kg.on  { color: var(--store-kg);  filter: brightness(1.3); }
+
+/* ---------- deals: inline store badges (.sb) ---------------------------
+   Compact pill used inside game-grouped deal rows. Same 2-px left swatch
+   as .sc — the identity system is consistent at both scales.
+   .best outlines the cheapest offer across all stores for that game. */
+.sb {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border: 1px solid transparent;
+  border-left-width: 2px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--paper-dim);
+  transition: opacity 0.1s;
+}
+.sb:hover { opacity: 0.75; text-decoration: none; }
+.sb.best { outline: 1px solid var(--green); outline-offset: 1px; }
+.sb-store { font-size: 10px; opacity: 0.75; }
+.sb-disc  { font-size: var(--text-2xs); }
+.sb-price { font-size: var(--text-2xs); font-weight: 600; }
+
+.sb.sb-st  { background: var(--store-st-bg);  border-left-color: var(--store-st);  color: var(--store-st);  border-color: rgba(91,159,214,.15); }
+.sb.sb-gog { background: var(--store-gog-bg); border-left-color: var(--store-gog); color: var(--store-gog); border-color: rgba(155,114,212,.15); }
+.sb.sb-hb  { background: var(--store-hb-bg);  border-left-color: var(--store-hb);  color: var(--store-hb);  border-color: rgba(208,97,58,.15); }
+.sb.sb-gmg { background: var(--store-gmg-bg); border-left-color: var(--store-gmg); color: var(--store-gmg); border-color: rgba(94,184,90,.15); }
+.sb.sb-ep  { background: var(--store-ep-bg);  border-left-color: var(--store-ep);  color: var(--store-ep);  border-color: rgba(152,152,162,.12); }
+.sb.sb-psn { background: var(--store-psn-bg); border-left-color: var(--store-psn); color: var(--store-psn); border-color: rgba(74,130,204,.15); }
+.sb.sb-ns  { background: var(--store-ns-bg);  border-left-color: var(--store-ns);  color: var(--store-ns);  border-color: rgba(194,84,84,.15); }
+.sb.sb-it  { background: var(--store-it-bg);  border-left-color: var(--store-it);  color: var(--store-it);  border-color: rgba(212,80,122,.15); }
+.sb.sb-ig  { background: var(--store-ig-bg);  border-left-color: var(--store-ig);  color: var(--store-ig);  border-color: rgba(224,96,64,.15); }
+.sb.sb-ck  { background: var(--store-ck-bg);  border-left-color: var(--store-ck);  color: var(--store-ck);  border-color: rgba(96,176,160,.15); }
+.sb.sb-kg  { background: var(--store-kg-bg);  border-left-color: var(--store-kg);  color: var(--store-kg);  border-color: rgba(160,112,192,.15); }
