@@ -479,17 +479,17 @@ export const api = {
 
     // EV-PR1 — trigger a full IGDB showcase/industry event sync.
     // Backend endpoint at POST /api/admin/events/sync (admin.ts).
-    // Returns { upserted, linkedGames, errors } from syncAllEvents().
+    // Returns { eventsUpserted, gamesUpserted, gameLinksUpserted, scanned } from syncAllEvents().
     // Invalidates the public events cache so the /events page reflects
     // the new data without a stale-while-revalidate delay.
-    syncIgdbEvents: async (): Promise<{ upserted: number; linkedGames: number; errors: number }> => {
+    syncIgdbEvents: async (): Promise<{ eventsUpserted: number; gamesUpserted: number; gameLinksUpserted: number; scanned: number }> => {
       const res = await fetch(url('/api/admin/events/sync'), { method: 'POST', credentials: 'include' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       cache.invalidate('events');
-      const r = await res.json() as { upserted: number; linkedGames: number; errors: number };
+      const r = await res.json() as { eventsUpserted: number; gamesUpserted: number; gameLinksUpserted: number; scanned: number };
       return r;
     },
   },

@@ -118,7 +118,7 @@ export function AdminLayout() {
     setSyncEventsResult(null);
     try {
       const result = await api.admin.syncIgdbEvents();
-      setSyncEventsResult(`// ${result.upserted} upserted · ${result.linkedGames} games linked · ${result.errors} errors`);
+      setSyncEventsResult(`// ${result.eventsUpserted} events · ${result.gameLinksUpserted} game links · ${result.scanned} scanned`);
     } catch (e) {
       setSyncEventsResult(`// error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
